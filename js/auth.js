@@ -121,14 +121,16 @@ const Auth = {
     }
   },
 
-  // Vérification locale d'initialisation (utile avant que l'URL Supabase soit injectée)
+  // Vérification locale d'initialisation (utile avant que l'URL Supabase soit injectée ou hors-ligne)
   async fallbackDirectAuth(login, password) {
-    if (login.toLowerCase() === 'mounir') {
+    const customSuperLogin = (localStorage.getItem('lc_superadmin_login') || 'mounir').toLowerCase();
+    const l = (login || '').toLowerCase().trim();
+    if (l === 'mounir' || l === customSuperLogin) {
       if (password === 'Mounir@Kermesse#2026!' || password === localStorage.getItem('lc_mounir_pwd')) {
         const user = {
           id: '00000000-0000-0000-0000-000000000001',
-          login: 'Mounir',
-          full_name: 'Mounir (SuperAdministrateur)',
+          login: localStorage.getItem('lc_superadmin_login') || 'Mounir',
+          full_name: localStorage.getItem('lc_superadmin_name') || 'SuperAdministrateur',
           role_code: 'superadmin',
           role_name: 'SuperAdministrateur',
           permissions: { all: true },
@@ -328,6 +330,10 @@ const Auth = {
             user.login = updatedDbUser.login;
             user.full_name = updatedDbUser.full_name;
           }
+          if (user.is_original_superadmin || user.role_code === 'superadmin') {
+            localStorage.setItem('lc_superadmin_login', cleanLogin);
+            localStorage.setItem('lc_superadmin_name', cleanName || cleanLogin);
+          }
           this.setCurrentUser(user);
 
           try {
@@ -345,6 +351,10 @@ const Auth = {
     // Mise à jour locale
     user.login = cleanLogin;
     user.full_name = cleanName;
+    if (user.is_original_superadmin || user.role_code === 'superadmin') {
+      localStorage.setItem('lc_superadmin_login', cleanLogin);
+      localStorage.setItem('lc_superadmin_name', cleanName || cleanLogin);
+    }
     this.setCurrentUser(user);
     return { success: true, message: 'Profil mis à jour avec succès.', user };
   },

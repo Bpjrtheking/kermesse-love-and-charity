@@ -1,10 +1,42 @@
 -- ==============================================================================
--- LOVE AND CHARITY (L&C) — CORRECTIF FONCTION UPDATE_USER_PROFILE
+-- LOVE AND CHARITY (L&C) — AUTORISATION DE MODIFICATION DU LOGIN DU SUPERADMIN
 -- Exécutez ce script dans Supabase (SQL Editor -> New Query -> Run)
--- Permet au SuperAdmin et aux utilisateurs de mettre à jour leur identifiant (login)
--- et leur nom sans erreur de cache de schéma.
 -- ==============================================================================
 
+-- 1. Remplacer la fonction du trigger de protection pour autoriser le changement de login
+CREATE OR REPLACE FUNCTION protect_original_superadmin_func()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (OLD.is_original_superadmin = TRUE) THEN
+        -- Interdire formellement la suppression du compte SuperAdmin original
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'Action interdite : Le compte SuperAdministrateur original ne peut jamais être supprimé.';
+        END IF;
+
+        IF TG_OP = 'UPDATE' THEN
+            -- Le login, le nom complet et le mot de passe sont libres d'être modifiés !
+            -- Seules la désactivation et la perte du statut original sont bloquées :
+            IF NEW.is_active = FALSE THEN
+                RAISE EXCEPTION 'Action interdite : Le compte SuperAdministrateur original ne peut pas être désactivé.';
+            END IF;
+
+            IF NEW.is_original_superadmin = FALSE THEN
+                RAISE EXCEPTION 'Action interdite : Le statut de SuperAdministrateur original ne peut pas être révoqué.';
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Réattacher le déclencheur
+DROP TRIGGER IF EXISTS trg_protect_original_superadmin ON app_users;
+CREATE TRIGGER trg_protect_original_superadmin
+BEFORE UPDATE OR DELETE ON app_users
+FOR EACH ROW
+EXECUTE FUNCTION protect_original_superadmin_func();
+
+-- 2. Fonction RPC pour modifier le profil
 CREATE OR REPLACE FUNCTION public.update_user_profile(
     p_user_id UUID,
     p_new_login TEXT,
@@ -21,7 +53,7 @@ BEGIN
     END IF;
 
     IF EXISTS (SELECT 1 FROM app_users WHERE LOWER(login) = LOWER(v_clean_login) AND id <> p_user_id) THEN
-        RETURN jsonb_build_object('success', false, 'message', 'Ce login est déjà utilisé par un autre utilisateur.');
+        RETURN jsonb_build_object('success', false, 'message', 'Ce login est déjà utilisé par un autre compte.');
     END IF;
 
     UPDATE app_users
@@ -57,8 +89,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Attribution des permissions d'exécution pour PostgREST / Supabase
+-- 3. Droits d'exécution pour PostgREST / Supabase
 GRANT EXECUTE ON FUNCTION public.update_user_profile(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
 
--- Recharger immédiatement le cache du schéma PostgREST dans Supabase
+-- 4. Recharger immédiatement le cache du schéma PostgREST
 NOTIFY pgrst, 'reload schema';
