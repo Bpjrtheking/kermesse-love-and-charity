@@ -29,7 +29,7 @@ const CommunicationModule = {
 
         <div class="card-body">
           <!-- KPI Summary Cards -->
-          <div class="stats-grid" id="commStatsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="stats-grid" id="commStatsGrid">
             <div class="stat-card">
               <div class="stat-label">Total Actions Comm</div>
               <div class="stat-value" id="commTotalCount">0</div>
@@ -207,7 +207,7 @@ const CommunicationModule = {
   renderItemsTab(container) {
     container.innerHTML = `
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
-        <div class="search-box" style="flex: 1; min-width: 220px;">
+        <div class="search-box">
           <input type="text" id="commSearch" class="form-control" placeholder="Rechercher un support, responsable, lieu..." oninput="CommunicationModule.filterItems()">
         </div>
         <div class="filters-group" style="display: flex; gap: 0.5rem;">
@@ -334,7 +334,7 @@ const CommunicationModule = {
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+      <div class="signage-grid">
         ${this.stands.length === 0 ? `
           <div class="empty-state" style="grid-column: 1 / -1;">
             <div class="empty-icon">🎪</div>

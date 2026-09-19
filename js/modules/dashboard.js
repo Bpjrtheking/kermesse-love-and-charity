@@ -110,39 +110,39 @@ const DashboardModule = {
           </div>
         </div>
         <div class="card-body">
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('communication')">
-              <span>📢</span> P1 : Communication
+          <div class="poles-shortcut-grid">
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('communication')">
+              <span class="pole-icon">📢</span> <span class="pole-label">P1 : Communication</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('tickets')">
-              <span>🎟️</span> P2 : Billetterie
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('tickets')">
+              <span class="pole-icon">🎟️</span> <span class="pole-label">P2 : Billetterie</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('cash')">
-              <span>💵</span> P2 : Caisses
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('cash')">
+              <span class="pole-icon">💵</span> <span class="pole-label">P2 : Caisses</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('decoration')">
-              <span>🎨</span> P3 : Décoration (10 Zones)
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('decoration')">
+              <span class="pole-icon">🎨</span> <span class="pole-label">P3 : Décoration (10 Zones)</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('stocks')">
-              <span>🍔</span> P4 : Restauration
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('stocks')">
+              <span class="pole-icon">🍔</span> <span class="pole-label">P4 : Restauration</span>
             </button>
-            <button class="btn btn-primary btn-sm" onclick="App.navigateTo('stands')">
-              <span>🎪</span> P5 : Stands &amp; Jeux
+            <button class="btn btn-primary btn-sm pole-shortcut-btn" onclick="App.navigateTo('stands')">
+              <span class="pole-icon">🎪</span> <span class="pole-label">P5 : Stands &amp; Jeux</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('gifts')">
-              <span>🎁</span> P6 : Lots à gagner
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('gifts')">
+              <span class="pole-icon">🎁</span> <span class="pole-label">P6 : Lots à gagner</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('members')">
-              <span>👥</span> P7 : Bénévoles &amp; Planning
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('members')">
+              <span class="pole-icon">👥</span> <span class="pole-label">P7 : Bénévoles &amp; Planning</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('materials')">
-              <span>📦</span> P8 : Logistique
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('materials')">
+              <span class="pole-icon">📦</span> <span class="pole-label">P8 : Logistique</span>
             </button>
-            <button class="btn btn-danger btn-sm" onclick="App.navigateTo('security')">
-              <span>🛡️</span> P9 : Accueil &amp; Sécurité
+            <button class="btn btn-danger btn-sm pole-shortcut-btn" onclick="App.navigateTo('security')">
+              <span class="pole-icon">🛡️</span> <span class="pole-label">P9 : Accueil &amp; Sécurité</span>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('messages')">
-              <span>💬</span> Messages &amp; Alertes
+            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('messages')">
+              <span class="pole-icon">💬</span> <span class="pole-label">Messages &amp; Alertes</span>
             </button>
           </div>
         </div>

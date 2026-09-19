@@ -47,7 +47,7 @@ const DecorationModule = {
 
         <div class="card-body">
           <!-- KPI Summary Cards -->
-          <div class="stats-grid" id="decorStatsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="stats-grid" id="decorStatsGrid">
             <div class="stat-card">
               <div class="stat-label">Zones Validées / Installées</div>
               <div class="stat-value" id="decorZonesDone" style="color: var(--success, #10b981);">0 / 10</div>
@@ -190,7 +190,7 @@ const DecorationModule = {
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+      <div class="decor-zones-cards-grid">
         ${this.zones.map(z => {
           const st = statusLabels[z.status] || { label: z.status, badge: 'badge-gray' };
           const zoneItems = this.items.filter(i => i.zone_code === z.code);
@@ -251,7 +251,7 @@ const DecorationModule = {
   renderItemsTab(container) {
     container.innerHTML = `
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
-        <div class="search-box" style="flex: 1; min-width: 220px;">
+        <div class="search-box">
           <input type="text" id="decorItemSearch" class="form-control" placeholder="Rechercher ballon, tente, guirlande..." oninput="DecorationModule.filterItems()">
         </div>
         <div class="filters-group" style="display: flex; gap: 0.5rem;">
@@ -363,7 +363,7 @@ const DecorationModule = {
             Organisation spatiale pour assurer la fluidité des visiteurs et la sécurité générale.
           </p>
 
-          <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 1rem; text-align: center; font-weight: 600;">
+          <div class="decor-zones-schematic">
             <!-- Colonne Gauche : Accès & Billetterie -->
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="background: #dbeafe; border: 2px dashed #2563eb; padding: 1rem; border-radius: 8px;">
@@ -388,7 +388,7 @@ const DecorationModule = {
                   Alignement des stands numérotés avec repères couleurs & dégagements
                 </div>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="decor-sub-grid">
                 <div style="background: #fed7aa; border: 2px dashed #ea580c; padding: 1rem; border-radius: 8px;">
                   🍔 4. Restauration & Buvette
                   <div style="font-size: 0.75rem; font-weight: normal; color: #9a3412;">Snacks & Gobelets</div>

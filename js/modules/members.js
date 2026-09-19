@@ -39,7 +39,7 @@ const MembersModule = {
 
         <div class="card-body">
           <!-- KPI Summary Cards -->
-          <div class="stats-grid" id="volunteerStatsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="stats-grid" id="volunteerStatsGrid">
             <div class="stat-card">
               <div class="stat-label">Total Bénévoles</div>
               <div class="stat-value" id="volTotalCount">0</div>
@@ -223,7 +223,7 @@ const MembersModule = {
   renderListTab(container) {
     container.innerHTML = `
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
-        <div class="search-box" style="flex: 1; min-width: 220px;">
+        <div class="search-box">
           <input type="text" id="memberSearch" class="form-control" placeholder="Rechercher par nom, rôle ou téléphone..." oninput="MembersModule.filterMembers()">
         </div>
       </div>
@@ -336,7 +336,7 @@ const MembersModule = {
 
     container.innerHTML = `
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
-        <div class="search-box" style="flex: 1; min-width: 220px;">
+        <div class="search-box">
           <input type="text" id="schedSearch" class="form-control" placeholder="Rechercher par bénévole, lieu ou stand..." oninput="MembersModule.filterSchedules()">
         </div>
         <div>
@@ -501,7 +501,7 @@ const MembersModule = {
                   </h4>
                   <span class="badge badge-danger">Double affectation</span>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem; background: #fff1f2; padding: 0.75rem; border-radius: 8px;">
+                <div class="conflict-shifts-grid">
                   <div>
                     <strong>Affectation A :</strong><br>
                     📍 ${c.shift1.location_or_stand} (${c.shift1.role_title})<br>

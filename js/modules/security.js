@@ -39,7 +39,7 @@ const SecurityModule = {
 
         <div class="card-body">
           <!-- KPI Summary Cards -->
-          <div class="stats-grid" id="securityStatsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="stats-grid" id="securityStatsGrid">
             <div class="stat-card">
               <div class="stat-label">Incidents En Cours</div>
               <div class="stat-value" id="secIncidentsOpen" style="color: var(--danger, #ef4444);">0</div>
@@ -192,7 +192,7 @@ const SecurityModule = {
   renderIncidentsTab(container) {
     container.innerHTML = `
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
-        <div class="search-box" style="flex: 1; min-width: 220px;">
+        <div class="search-box">
           <input type="text" id="incSearch" class="form-control" placeholder="Rechercher par incident, lieu..." oninput="SecurityModule.filterIncidents()">
         </div>
         <div>
@@ -302,7 +302,7 @@ const SecurityModule = {
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem;">
+      <div class="emergency-contacts-grid">
         <div class="card" style="border-left: 6px solid #dc2626;">
           <div class="card-body">
             <h4 style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 1.1rem;">📞 Numéros d'Urgence</h4>

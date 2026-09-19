@@ -175,17 +175,19 @@ const TasksModule = {
   renderTasksTab(container) {
     container.innerHTML = `
       <!-- Formulaire d'ajout rapide (1 frappe + Entrée) -->
-      <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
-        <input type="text" id="newTaskInput" class="form-control" placeholder="Ajouter une tâche rapide (ex: Rappeler Fatima, Recharger jetons...)" style="flex: 1; min-width: 240px;" onkeydown="if(event.key==='Enter') TasksModule.quickAddTask()">
-        <select id="newTaskPriority" class="form-control" style="width: auto; min-width: 120px;">
-          <option value="normal">🟡 Normal</option>
-          <option value="urgent">🔴 Urgent</option>
-          <option value="low">🟢 Basse</option>
-        </select>
-        <input type="text" id="newTaskDue" class="form-control" placeholder="Heure (ex: 11h)" style="width: 100px;">
-        <button class="btn btn-primary" onclick="TasksModule.quickAddTask()">
-          <span>➕</span> Ajouter
-        </button>
+      <div class="tasks-quick-add-bar">
+        <input type="text" id="newTaskInput" class="form-control tasks-quick-input" placeholder="Ajouter une tâche rapide (ex: Rappeler Fatima, Recharger jetons...)" onkeydown="if(event.key==='Enter') TasksModule.quickAddTask()">
+        <div class="tasks-quick-options">
+          <select id="newTaskPriority" class="form-control tasks-priority-select">
+            <option value="normal">🟡 Normal</option>
+            <option value="urgent">🔴 Urgent</option>
+            <option value="low">🟢 Basse</option>
+          </select>
+          <input type="text" id="newTaskDue" class="form-control tasks-due-input" placeholder="Heure (ex: 11h)">
+          <button class="btn btn-primary tasks-add-btn" onclick="TasksModule.quickAddTask()">
+            <span>➕</span> Ajouter
+          </button>
+        </div>
       </div>
 
       <!-- Filtres rapides -->
@@ -339,20 +341,20 @@ const TasksModule = {
     const activeNote = this.notes.find(n => n.id === this.activeNoteId) || this.notes[0];
 
     container.innerHTML = `
-      <div style="display: grid; grid-template-columns: 240px 1fr; gap: 1rem;">
-        <!-- Liste latérale des notes -->
-        <div style="border-right: 1px solid var(--gray-200); padding-right: 1rem;">
+      <div class="notes-workspace-grid">
+        <!-- Liste latérale / sélecteur mobile des notes -->
+        <div class="notes-sidebar-col">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-            <span style="font-weight: 700; font-size: 0.85rem; color: var(--gray-700);">Mes Mémos</span>
-            <button class="btn btn-sm btn-primary" onclick="TasksModule.createNewNote()" title="Nouvelle note">➕</button>
+            <span style="font-weight: 700; font-size: 0.85rem; color: var(--gray-700);">Mes Mémos (${this.notes.length})</span>
+            <button class="btn btn-sm btn-primary" onclick="TasksModule.createNewNote()" title="Nouvelle note">➕ Note</button>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 450px; overflow-y: auto;">
+          <div class="notes-list-scroll">
             ${this.notes.map(n => `
-              <div onclick="TasksModule.selectNote('${n.id}')" style="padding: 0.6rem 0.75rem; border-radius: 6px; cursor: pointer; background: ${n.id === this.activeNoteId ? '#eff6ff' : '#fff'}; border: 1px solid ${n.id === this.activeNoteId ? '#3b82f6' : 'var(--gray-200)'};">
-                <div style="font-weight: 700; font-size: 0.85rem; color: var(--gray-900); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
+              <div class="note-card-item ${n.id === this.activeNoteId ? 'active' : ''}" onclick="TasksModule.selectNote('${n.id}')">
+                <div class="note-card-title">
                   ${n.title || 'Note sans titre'}
                 </div>
-                <div style="font-size: 0.72rem; color: var(--gray-500); margin-top: 2px;">
+                <div class="note-card-time">
                   ${new Date(n.updated_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
@@ -361,8 +363,8 @@ const TasksModule = {
         </div>
 
         <!-- Éditeur de la note active avec auto-save -->
-        ${activeNote ? `
-          <div>
+        <div class="notes-editor-col">
+          ${activeNote ? `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
               <input type="text" id="noteTitleInput" class="form-control" style="font-weight: 700; font-size: 1.1rem; flex: 1; margin-right: 0.5rem;" value="${activeNote.title || ''}" placeholder="Titre de la note..." oninput="TasksModule.autoSaveActiveNote()">
               <div style="display: flex; gap: 0.35rem;">
@@ -378,13 +380,13 @@ const TasksModule = {
             <div id="noteSaveStatus" style="font-size: 0.75rem; color: #10b981; margin-top: 0.35rem; font-style: italic;">
               💾 Enregistré automatiquement
             </div>
-          </div>
-        ` : `
-          <div class="empty-state">
-            <div class="empty-title">Aucune note</div>
-            <button class="btn btn-primary" onclick="TasksModule.createNewNote()">Créer une note</button>
-          </div>
-        `}
+          ` : `
+            <div class="empty-state">
+              <div class="empty-title">Aucune note</div>
+              <button class="btn btn-primary" onclick="TasksModule.createNewNote()">Créer une note</button>
+            </div>
+          `}
+        </div>
       </div>
     `;
   },
@@ -456,7 +458,7 @@ const TasksModule = {
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+      <div class="templates-grid">
         <!-- Kit 1 : Matin / Montage -->
         <div class="card" style="border-left: 6px solid #2563eb;">
           <div class="card-body">
