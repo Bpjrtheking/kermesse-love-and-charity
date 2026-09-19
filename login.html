@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Connexion — Love and Charity (L&C) | Gestion de Kermesse</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      padding: 1.5rem;
+    }
+    .login-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-xl);
+      width: 100%;
+      max-width: 440px;
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+    .login-logo {
+      width: 110px;
+      height: 110px;
+      margin: 0 auto 1.25rem auto;
+      object-fit: contain;
+    }
+    .login-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--gray-900);
+      line-height: 1.2;
+    }
+    .login-subtitle {
+      font-size: 0.85rem;
+      color: var(--primary);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 0.35rem;
+      margin-bottom: 2rem;
+    }
+    .login-form {
+      text-align: left;
+    }
+    .login-btn {
+      width: 100%;
+      padding: 0.85rem;
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 1rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-card">
+    <img src="assets/logo.svg" alt="Love and Charity Logo" class="login-logo">
+    <h1 class="login-title">Love and Charity (L&C)</h1>
+    <div class="login-subtitle">Gestion &amp; Contrôle de Kermesse</div>
+
+    <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="loginInput">LOGIN</label>
+        <input type="text" id="loginInput" class="form-control" placeholder="Mounir" required autofocus autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label for="passwordInput">MOT DE PASSE</label>
+        <input type="password" id="passwordInput" class="form-control" placeholder="••••••••••••••••" required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn btn-primary login-btn" id="submitBtn">
+        [ SE CONNECTER ]
+      </button>
+
+      <div id="loginError" style="color: var(--danger); font-size: 0.85rem; font-weight: 600; text-align: center; margin-top: 1rem; display: none;"></div>
+    </form>
+
+    <div style="margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--gray-200); font-size: 0.78rem; color: var(--gray-500); text-align: center;">
+      Plateforme officielle réservée aux membres de l'association <strong>Love and Charity</strong>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/notify.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/audit.js"></script>
+  <script src="js/offline.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      SupabaseClient.init();
+      const user = Auth.getCurrentUser();
+      if (user) {
+        window.location.href = 'index.html';
+      }
+    });
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const loginInput = document.getElementById('loginInput').value.trim();
+      const passwordInput = document.getElementById('passwordInput').value;
+      const btn = document.getElementById('submitBtn');
+      const errBox = document.getElementById('loginError');
+
+      errBox.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Connexion en cours...';
+
+      try {
+        const result = await Auth.login(loginInput, passwordInput);
+        if (result.success) {
+          Notify.success('Connexion réussie !');
+          setTimeout(() => {
+            window.location.href = 'index.html';
+          }, 350);
+        } else {
+          errBox.textContent = result.message || 'Identifiant ou mot de passe incorrect.';
+          errBox.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = '[ SE CONNECTER ]';
+        }
+      } catch (err) {
+        errBox.textContent = 'Erreur: ' + (err.message || 'Impossible de se connecter.');
+        errBox.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '[ SE CONNECTER ]';
+      }
+    }
+  </script>
+</body>
+</html>

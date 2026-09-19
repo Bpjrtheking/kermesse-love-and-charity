@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Love and Charity (L&amp;C) — Gestion et Contrôle de Kermesse</title>
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-brand">
+        <img src="assets/logo.svg" alt="L&C Logo" class="sidebar-logo">
+        <div class="brand-text">
+          <h1>Love &amp; Charity</h1>
+          <span class="brand-badge">Contrôle Kermesse</span>
+        </div>
+        <button class="sidebar-close-btn" onclick="App.toggleSidebar()" title="Fermer le menu" aria-label="Fermer">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- Raccourcis Transversaux -->
+        <div class="nav-group">
+          <ul class="nav-links">
+            <li class="nav-item active" data-module="dashboard" onclick="App.navigateTo('dashboard')">
+              <span class="nav-icon">📊</span>
+              <span>Tableau de Bord</span>
+            </li>
+            <li class="nav-item" data-module="messages" onclick="App.navigateTo('messages')">
+              <span class="nav-icon" style="position: relative; display: inline-flex; align-items: center;">
+                💬
+                <span id="sidebarMessagesIconBadge" class="nav-unread-badge" style="display: none;">0</span>
+              </span>
+              <span>Consignes &amp; Messages</span>
+              <span id="messagesUnreadBadge" class="chip-unread-badge" style="margin-left: auto; display: none;">0</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 1 : Communication & Affichage -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 1 : Communication</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="communication" onclick="App.navigateTo('communication')">
+              <span class="nav-icon">📢</span>
+              <span>Communication &amp; Affichage</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 2 : Billetterie & Finances -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 2 : Billetterie &amp; Caisses</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="tickets" onclick="App.navigateTo('tickets')">
+              <span class="nav-icon">🎟️</span>
+              <span>Tickets &amp; Séries</span>
+            </li>
+            <li class="nav-item" data-module="cash" onclick="App.navigateTo('cash')">
+              <span class="nav-icon">💵</span>
+              <span>Caisses &amp; Écarts</span>
+            </li>
+            <li class="nav-item" data-module="expenses" onclick="App.navigateTo('expenses')">
+              <span class="nav-icon">💸</span>
+              <span>Dépenses Autorisées</span>
+            </li>
+            <li class="nav-item" data-module="closures" onclick="App.navigateTo('closures')">
+              <span class="nav-icon">🔒</span>
+              <span>Clôtures &amp; Bilans</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 3 : Décoration & Organisation -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 3 : Décoration &amp; Espaces</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="decoration" onclick="App.navigateTo('decoration')">
+              <span class="nav-icon">🎨</span>
+              <span>Décoration &amp; 10 Zones</span>
+            </li>
+            <li class="nav-item" data-module="locations" onclick="App.navigateTo('locations')">
+              <span class="nav-icon">📍</span>
+              <span>Emplacements &amp; Repères</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 4 : Restauration & Buvette -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 4 : Restauration &amp; Buvette</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="stocks" onclick="App.navigateTo('stocks')">
+              <span class="nav-icon">🍔</span>
+              <span>Denrées &amp; Boissons</span>
+            </li>
+            <li class="nav-item" data-module="inventory" onclick="App.navigateTo('inventory')">
+              <span class="nav-icon">📊</span>
+              <span>Inventaires &amp; Pertes</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 5 : Stands & Jeux -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 5 : Stands &amp; Jeux</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="stands" onclick="App.navigateTo('stands')">
+              <span class="nav-icon">🎪</span>
+              <span>Stands (Couleur+N°)</span>
+            </li>
+            <li class="nav-item" data-module="games" onclick="App.navigateTo('games')">
+              <span class="nav-icon">🎯</span>
+              <span>Jeux &amp; Tarification</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 6 : Lots à gagner -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 6 : Lots &amp; Cadeaux</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="gifts" onclick="App.navigateTo('gifts')">
+              <span class="nav-icon">🎁</span>
+              <span>Lots (Dons &amp; Achats)</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 7 : Bénévoles & Planning -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 7 : Bénévoles &amp; Planning</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="members" onclick="App.navigateTo('members')">
+              <span class="nav-icon">👥</span>
+              <span>Bénévoles &amp; Planning</span>
+            </li>
+            <li class="nav-item" data-module="teams" onclick="App.navigateTo('teams')">
+              <span class="nav-icon">🏷️</span>
+              <span>Équipes &amp; Couleurs</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 8 : Logistique & Installation -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 8 : Logistique &amp; Prêts</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="materials" onclick="App.navigateTo('materials')">
+              <span class="nav-icon">📦</span>
+              <span>Matériel Lourd</span>
+            </li>
+            <li class="nav-item" data-module="loans" onclick="App.navigateTo('loans')">
+              <span class="nav-icon">🤝</span>
+              <span>Emprunts &amp; Restitutions</span>
+            </li>
+            <li class="nav-item" data-module="movements" onclick="App.navigateTo('movements')">
+              <span class="nav-icon">🔄</span>
+              <span>Mouvements Matériel</span>
+            </li>
+            <li class="nav-item" data-module="returns" onclick="App.navigateTo('returns')">
+              <span class="nav-icon">🚚</span>
+              <span>Plan de Restitution</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pôle 9 : Accueil, Nettoyage & Sécurité -->
+        <div class="nav-group">
+          <div class="nav-group-title">Pôle 9 : Accueil &amp; Sécurité</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="security" onclick="App.navigateTo('security')">
+              <span class="nav-icon">🛡️</span>
+              <span>Sécurité, Nettoyage &amp; Secours</span>
+            </li>
+            <li class="nav-item" data-module="incidents" onclick="App.navigateTo('incidents')">
+              <span class="nav-icon">🚨</span>
+              <span>Registre des Incidents</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Supervision / Direction Générale L&C -->
+        <div class="nav-group">
+          <div class="nav-group-title">Supervision &amp; Direction L&amp;C</div>
+          <ul class="nav-links">
+            <li class="nav-item" data-module="roles" onclick="App.navigateTo('roles')">
+              <span class="nav-icon">👑</span>
+              <span>Rôles &amp; Comptes Admins</span>
+            </li>
+            <li class="nav-item" data-module="history" onclick="App.navigateTo('history')">
+              <span class="nav-icon">📜</span>
+              <span>Journal d'Activité Immuable</span>
+            </li>
+            <li class="nav-item" data-module="reports" onclick="App.navigateTo('reports')">
+              <span class="nav-icon">📑</span>
+              <span>Rapports &amp; Bilans Officiels</span>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span>Love &amp; Charity &copy; 2026</span>
+        <span>v1.0</span>
+      </div>
+    </aside>
+
+    <!-- Mobile Drawer Backdrop Overlay -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="App.toggleSidebar()"></div>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <button class="mobile-toggle" onclick="App.toggleSidebar()">☰</button>
+          <div class="header-title-wrapper">
+            <h2 id="pageTitle">Tableau de Bord</h2>
+            <p id="pageSub">Love and Charity (L&amp;C) — Gestion et Contrôle de Kermesse</p>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Sync Badge (Online/Offline) -->
+          <div id="syncBadge" class="sync-badge online">
+            <span class="sync-dot"></span> En ligne
+          </div>
+
+          <!-- Messages Shortcut avec badge flottant Telegram/WhatsApp -->
+          <button class="btn-header-action" onclick="App.navigateTo('messages')" title="Consignes &amp; Messages" style="position: relative;">
+            <span class="header-icon-wrapper" style="position: relative; display: inline-flex; align-items: center;">
+              <span>💬</span>
+              <span id="headerMessagesBadge" class="nav-unread-badge" style="display: none;">0</span>
+            </span>
+            <span class="header-action-text">Messages</span>
+          </button>
+
+          <!-- User Info (Cliquable pour SuperAdmin pour modifier ses identifiants) -->
+          <div class="user-profile-header" onclick="RolesModule.openEditProfileModal()" style="cursor: pointer;" title="Compte connecté">
+            <div class="user-avatar" id="headerUserAvatar">M</div>
+            <div class="user-info">
+              <span class="user-name" id="headerUserName">Mounir</span>
+              <span class="user-role-badge" id="headerUserRole">SuperAdministrateur</span>
+            </div>
+          </div>
+
+          <!-- Logout Button -->
+          <button class="btn-header-action danger" onclick="Auth.logout()" title="Se déconnecter">
+            <span>🚪</span>
+            <span>Déconnexion</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Content Body -->
+      <main class="content-body" id="mainContent">
+        <!-- Content will be injected dynamically -->
+      </main>
+    </div>
+
+    <!-- Barre de navigation basse pour smartphone (1 pouce) -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+      <button class="bottom-nav-item active" data-bottom-module="dashboard" onclick="App.navigateTo('dashboard')">
+        <span class="bottom-nav-icon">📊</span>
+        <span class="bottom-nav-label">Accueil</span>
+      </button>
+      <button class="bottom-nav-item" data-bottom-module="stands" onclick="App.navigateTo('stands')">
+        <span class="bottom-nav-icon">🎪</span>
+        <span class="bottom-nav-label">Stands</span>
+      </button>
+      <button class="bottom-nav-item" data-bottom-module="tickets" onclick="App.navigateTo('tickets')">
+        <span class="bottom-nav-icon">🎟️</span>
+        <span class="bottom-nav-label">Tickets</span>
+      </button>
+      <button class="bottom-nav-item" data-bottom-module="cash" onclick="App.navigateTo('cash')">
+        <span class="bottom-nav-icon">💵</span>
+        <span class="bottom-nav-label">Caisses</span>
+      </button>
+      <button class="bottom-nav-item" data-bottom-module="messages" onclick="App.navigateTo('messages')">
+        <span class="bottom-nav-icon-wrapper">
+          <span class="bottom-nav-icon">💬</span>
+          <span id="bottomNavMessagesBadge" class="nav-unread-badge" style="display: none;">0</span>
+        </span>
+        <span class="bottom-nav-label">Chat</span>
+      </button>
+      <button class="bottom-nav-item" onclick="App.toggleSidebar()">
+        <span class="bottom-nav-icon">☰</span>
+        <span class="bottom-nav-label">Menu</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Core Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/notify.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/audit.js"></script>
+  <script src="js/offline.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/permissions.js"></script>
+
+  <!-- Module Scripts -->
+  <script src="js/modules/dashboard.js"></script>
+  <script src="js/modules/communication.js"></script>
+  <script src="js/modules/members.js"></script>
+  <script src="js/modules/teams.js"></script>
+  <script src="js/modules/stands.js"></script>
+  <script src="js/modules/roles.js"></script>
+  <script src="js/modules/tickets.js"></script>
+  <script src="js/modules/cash.js"></script>
+  <script src="js/modules/games.js"></script>
+  <script src="js/modules/decoration.js"></script>
+  <script src="js/modules/stocks.js"></script>
+  <script src="js/modules/gifts.js"></script>
+  <script src="js/modules/inventory.js"></script>
+  <script src="js/modules/locations.js"></script>
+  <script src="js/modules/materials.js"></script>
+  <script src="js/modules/loans.js"></script>
+  <script src="js/modules/movements.js"></script>
+  <script src="js/modules/returns.js"></script>
+  <script src="js/modules/expenses.js"></script>
+  <script src="js/modules/closures.js"></script>
+  <script src="js/modules/security.js"></script>
+  <script src="js/modules/incidents.js"></script>
+  <script src="js/modules/history.js"></script>
+  <script src="js/modules/reports.js"></script>
+  <script src="js/modules/messages.js"></script>
+
+  <!-- Application Controller -->
+  <script>
+    const App = {
+      currentModule: 'dashboard',
+
+      modules: {
+        dashboard: { title: 'Tableau de Bord', sub: 'Vue globale et indicateurs transversaux en temps réel', handler: DashboardModule },
+        messages: { title: 'Consignes & Messages', sub: 'Communication interne, directives par stand et alertes', handler: MessagesModule },
+        communication: { title: 'Pôle 1 : Communication & Affichage', sub: 'Affiches, flyers, réseaux sociaux, WhatsApp et signalétique', handler: CommunicationModule },
+        tickets: { title: 'Pôle 2 : Billetterie & Tickets', sub: 'Billetterie, séries numérotées, jetons et préventes', handler: TicketsModule },
+        cash: { title: 'Pôle 2 : Caisses & Écarts', sub: 'Fonds de caisse initiaux, encaissements, clôtures et traçabilité', handler: CashModule },
+        expenses: { title: 'Pôle 2 : Dépenses Autorisées', sub: 'Enregistrement et contrôle des sorties d\'argent sur caisse', handler: ExpensesModule },
+        closures: { title: 'Pôle 2 : Clôtures & Bilans', sub: 'Clôture de fin de journée, calcul des écarts et bilan financier', handler: ClosuresModule },
+        decoration: { title: 'Pôle 3 : Décoration & Organisation', sub: 'Aménagement des 10 zones, barnums, mobilier et circulation', handler: DecorationModule },
+        locations: { title: 'Pôle 3 : Emplacements & Repères', sub: 'Lieux physiques, repères de l\'espace et zones', handler: LocationsModule },
+        stocks: { title: 'Pôle 4 : Restauration & Buvette', sub: 'Denrées, snacks, boissons, emballages, cuisine et caisse buvette', handler: StocksModule },
+        inventory: { title: 'Pôle 4 : Inventaires & Pertes', sub: 'Comptages comparatifs, réapprovisionnements et pertes/périmés', handler: InventoryModule },
+        stands: { title: 'Pôle 5 : Stands (Couleur + N°)', sub: 'Identification par couleur & numéro, fiches complètes et équipes dédiées', handler: StandsModule },
+        games: { title: 'Pôle 5 : Jeux & Attractions', sub: 'Catalogue des activités, règles du jeu et tarification en tickets', handler: GamesModule },
+        gifts: { title: 'Pôle 6 : Lots & Cadeaux', sub: 'Catalogue des lots (achats & dons), 4 catégories, dotations et distributions', handler: GiftsModule },
+        members: { title: 'Pôle 7 : Bénévoles & Planning', sub: 'Fiches bénévoles, contacts WhatsApp et planning avec détection anti-conflits', handler: MembersModule },
+        teams: { title: 'Pôle 7 : Équipes & Couleurs', sub: 'Groupes d\'affectation et codes couleurs d\'identification', handler: TeamsModule },
+        materials: { title: 'Pôle 8 : Matériel Lourd', sub: 'Tentes, tables, sono, électricité et propriétaires', handler: MaterialsModule },
+        loans: { title: 'Pôle 8 : Emprunts & Locations', sub: 'Chaîne de prêt nominative, dates de retour et contacts', handler: LoansModule },
+        movements: { title: 'Pôle 8 : Mouvements Matériel', sub: 'Traçabilité des transferts entre lieux et stands', handler: MovementsModule },
+        returns: { title: 'Pôle 8 : Plan de Restitution', sub: 'Checklists de démontage et restitution par bénévole', handler: ReturnsModule },
+        security: { title: 'Pôle 9 : Accueil, Nettoyage & Sécurité', sub: 'Urgences, alerte enfant perdu, rondes sanitaires et objets trouvés', handler: SecurityModule },
+        incidents: { title: 'Pôle 9 : Registre des Incidents', sub: 'Registre officiel des incidents, chutes, pannes et résolutions', handler: IncidentsModule },
+        roles: { title: 'Supervision : Rôles & Comptes', sub: 'Gestion des 9 administrateurs métier et des SuperAdmins', handler: RolesModule },
+        history: { title: 'Supervision : Journal d\'Activité', sub: 'Traçabilité immuable de toutes les opérations de kermesse', handler: HistoryModule },
+        reports: { title: 'Supervision : Rapports & Synthèses', sub: 'Bilans officiels pour l\'association', handler: ReportsModule }
+      },
+
+      init() {
+        // 1. Contrôle d'authentification
+        if (!Auth.requireAuth()) return;
+
+        // 2. Initialisation des services
+        SupabaseClient.init();
+        OfflineManager.init();
+
+        // 3. Affichage profil utilisateur
+        const user = Auth.getCurrentUser();
+        if (user) {
+          document.getElementById('headerUserName').textContent = user.full_name || user.login;
+          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Administrateur';
+          document.getElementById('headerUserAvatar').textContent = (user.login || 'U').charAt(0).toUpperCase();
+        }
+
+        // 4. Filtrage dynamique du menu selon le rôle
+        Permissions.applyNavFiltering();
+
+        // 5. Surveillance en arrière-plan des consignes et alertes
+        if (typeof MessagesModule !== 'undefined' && MessagesModule.startPolling) {
+          MessagesModule.startPolling();
+        }
+
+        // 6. Routage basé sur l'ancre URL (#stands, #tickets...)
+        const hash = window.location.hash.replace('#', '') || 'dashboard';
+        this.navigateTo(this.modules[hash] ? hash : 'dashboard', false);
+
+        window.addEventListener('hashchange', () => {
+          const newHash = window.location.hash.replace('#', '');
+          if (newHash && this.modules[newHash] && newHash !== this.currentModule) {
+            this.navigateTo(newHash, false);
+          }
+        });
+      },
+
+      navigateTo(moduleName, updateHash = true) {
+        const mod = this.modules[moduleName];
+        if (!mod) return;
+
+        this.currentModule = moduleName;
+        if (updateHash) {
+          window.location.hash = moduleName;
+        }
+
+        // Mettre à jour le titre
+        document.getElementById('pageTitle').textContent = mod.title;
+        document.getElementById('pageSub').textContent = mod.sub;
+
+        // Mettre à jour l'élément actif dans la sidebar
+        document.querySelectorAll('.nav-item').forEach(item => {
+          if (item.dataset.module === moduleName) {
+            item.classList.add('active');
+          } else {
+            item.classList.remove('active');
+          }
+        });
+
+        // Fermer la sidebar et le backdrop sur mobile après sélection
+        document.getElementById('appSidebar').classList.remove('open');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        if (backdrop) backdrop.classList.remove('open');
+
+        // Mettre à jour l'élément actif dans la barre de navigation basse
+        document.querySelectorAll('.bottom-nav-item').forEach(btn => {
+          if (btn.dataset.bottomModule === moduleName) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        // Rendu du module
+        const container = document.getElementById('mainContent');
+        container.innerHTML = '<div style="text-align: center; padding: 2rem;"><p style="color: var(--gray-500);">Chargement...</p></div>';
+        
+        try {
+          mod.handler.render(container);
+        } catch (e) {
+          console.error('[Module Render Error]', e);
+          container.innerHTML = `
+            <div class="alert-banner danger">
+              <div>❌ Erreur lors du chargement du module : ${e.message}</div>
+            </div>
+          `;
+        }
+      },
+
+      toggleSidebar() {
+        const sidebar = document.getElementById('appSidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        const isOpen = sidebar.classList.toggle('open');
+        if (backdrop) {
+          if (isOpen) {
+            backdrop.classList.add('open');
+          } else {
+            backdrop.classList.remove('open');
+          }
+        }
+      }
+    };
+
+    window.App = App;
+    window.addEventListener('DOMContentLoaded', () => App.init());
+  </script>
+</body>
+</html>

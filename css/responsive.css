@@ -1,0 +1,490 @@
+/* ==========================================================================
+   LOVE AND CHARITY (L&C) — KERMESSE MANAGEMENT & CONTROL
+   FEUILLE DE STYLE RESPONSIVE (SMARTPHONE, TABLETTE, DESKTOP)
+   Optimisé pour l'utilisation sur le terrain avec téléphone mobile
+   ========================================================================== */
+
+/* Éléments d'interface mobile (masqués par défaut sur ordinateur) */
+.sidebar-close-btn,
+.sidebar-backdrop,
+.mobile-bottom-nav {
+  display: none;
+}
+
+/* 1. TABLETTES & PETITS ÉCRANS (≤ 1024px) */
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-width: 240px;
+  }
+  
+  .content-body {
+    padding: 1.25rem;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 2. SMARTPHONES & ÉCRANS MOBILES (≤ 768px) */
+@media (max-width: 768px) {
+  /* --- A. NAVIGATION TIROIR MOBILE (SIDEBAR) --- */
+  .sidebar {
+    width: min(290px, 84vw);
+    transform: translateX(-100%);
+    box-shadow: none;
+    z-index: 1200;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .sidebar-brand {
+    padding: 1rem 1.25rem;
+    position: relative;
+  }
+
+  .sidebar-close-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #fff;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 1.1rem;
+    cursor: pointer;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* Backdrop assombrissant lors de l'ouverture du menu mobile */
+  .sidebar-backdrop {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: 1150;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+  }
+
+  .sidebar-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .main-wrapper {
+    margin-left: 0;
+    min-height: 100dvh;
+  }
+
+  /* --- B. EN-TÊTE SUPÉRIEUR (TOP HEADER) --- */
+  .top-header {
+    height: 54px;
+    padding: 0 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 800;
+  }
+
+  .header-left {
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mobile-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    font-size: 1.35rem;
+    border-radius: var(--radius-sm);
+    color: var(--gray-800);
+  }
+
+  .header-title-wrapper {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .header-title-wrapper h2 {
+    font-size: 1rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .header-title-wrapper p {
+    display: none;
+  }
+
+  .header-right {
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  .sync-badge {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.72rem;
+    gap: 0.3rem;
+  }
+
+  .btn-header-action {
+    height: 36px;
+    min-width: 36px;
+    padding: 0 0.5rem;
+    font-size: 1rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .btn-header-action span:not(:first-child),
+  .header-action-text {
+    display: none !important;
+  }
+
+  .user-profile-header {
+    padding: 0.15rem;
+  }
+
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 0.88rem;
+  }
+
+  .user-name, .user-role-badge {
+    display: none;
+  }
+
+  /* --- C. CONTENU PRINCIPAL & CARTES --- */
+  .content-body {
+    padding: 0.75rem;
+    padding-bottom: 80px !important; /* Dégage la barre de navigation basse */
+  }
+
+  .card {
+    padding: 0.85rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 0.85rem;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  .card-title {
+    font-size: 0.98rem;
+  }
+
+  .card-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: flex-start;
+  }
+
+  .card-actions .btn {
+    flex: 1 1 auto;
+    min-width: 110px;
+    justify-content: center;
+    font-size: 0.82rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .stat-card {
+    padding: 0.85rem;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .search-box {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  /* --- D. TABLEAUX RESPONSIVES TOUCH --- */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 0.85rem;
+  }
+
+  .data-table th, .data-table td {
+    padding: 0.55rem 0.65rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .data-table td .btn-icon {
+    min-width: 36px;
+    min-height: 36px;
+    font-size: 1.1rem;
+    margin: 1px;
+  }
+
+  /* --- E. MODALES SMARTPHONE (ACTION SHEET OU BOÎTE COMPACTE) --- */
+  .modal-dialog {
+    max-width: 96%;
+    width: 96%;
+    margin: 0.5rem auto;
+    max-height: 90dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    padding: 0.85rem 1rem;
+  }
+
+  .modal-body {
+    padding: 1rem 0.85rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: calc(90dvh - 120px);
+  }
+
+  .modal-footer {
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .modal-footer .btn {
+    flex: 1;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .form-control {
+    font-size: 16px !important; /* Règle d'or iOS pour empêcher le zoom forcé */
+  }
+
+  /* --- F. BARRE DE NAVIGATION BASSE MOBILE (FIXÉE EN BAS DU TÉLÉPHONE) --- */
+  .mobile-bottom-nav {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--gray-200);
+    z-index: 900;
+    box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.06);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--gray-500);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 2px 0;
+  }
+
+  .bottom-nav-item:active {
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  .bottom-nav-icon-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-nav-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+
+  .bottom-nav-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .bottom-nav-item.active {
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  .bottom-nav-item.active .bottom-nav-icon {
+    transform: scale(1.1);
+  }
+
+  /* --- G. WHATSAPP MOBILE EXPERT LAYOUT --- */
+  .whatsapp-container {
+    height: calc(100dvh - 125px);
+    min-height: calc(100dvh - 125px);
+    border-radius: 0;
+    margin: -0.75rem;
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Vue liste de discussions sur mobile */
+  .whatsapp-container.mobile-show-list .whatsapp-sidebar {
+    width: 100% !important;
+    min-width: 100% !important;
+    display: flex !important;
+  }
+  .whatsapp-container.mobile-show-list .whatsapp-main {
+    display: none !important;
+  }
+
+  /* Vue fil de discussion sur mobile */
+  .whatsapp-container.mobile-show-chat .whatsapp-sidebar {
+    display: none !important;
+  }
+  .whatsapp-container.mobile-show-chat .whatsapp-main {
+    display: flex !important;
+    width: 100% !important;
+  }
+  .whatsapp-container.mobile-show-chat .chat-back-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    font-size: 1.3rem;
+    background: var(--gray-100);
+    border-radius: var(--radius-full);
+    margin-right: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  /* Masquer la barre basse quand le chat est ouvert pour laisser la place au clavier */
+  body:has(.mobile-show-chat) .mobile-bottom-nav {
+    display: none !important;
+  }
+
+  .whatsapp-filter-chips {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 0.3rem 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .whatsapp-filter-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .whatsapp-chip {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.7rem;
+    white-space: nowrap;
+  }
+
+  .chat-bubble {
+    max-width: 88%;
+    padding: 0.55rem 0.85rem;
+  }
+
+  .whatsapp-input-bar {
+    padding: 0.5rem 0.65rem;
+    gap: 0.4rem;
+    position: sticky;
+    bottom: 0;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .whatsapp-input-field {
+    font-size: 16px !important;
+    border-radius: var(--radius-full);
+    padding: 0.55rem 0.85rem;
+  }
+
+  .btn-whatsapp-send {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    font-size: 1.1rem;
+  }
+
+  .btn-urgent-toggle {
+    padding: 0 0.6rem;
+    font-size: 0.72rem;
+    height: 38px;
+  }
+}
+
+/* 3. ULTRA COMPACT SMARTPHONES (≤ 400px : iPhone SE, Petits Androids) */
+@media (max-width: 400px) {
+  .sync-badge span:not(.sync-dot) {
+    display: none;
+  }
+  .sync-badge {
+    padding: 0.35rem;
+  }
+  .header-title-wrapper h2 {
+    max-width: 120px;
+    font-size: 0.92rem;
+  }
+  .bottom-nav-label {
+    font-size: 0.6rem;
+  }
+}
+
+/* 4. OPTIMISATION TOUCH / DOIGT (ÉCRANS TACTILES) */
+@media (pointer: coarse) {
+  .btn, .nav-item, .form-control, .filter-select {
+    min-height: 44px;
+  }
+  
+  .btn-icon {
+    min-width: 38px;
+    min-height: 38px;
+  }
+
+  .bottom-nav-item {
+    min-height: 48px;
+  }
+}
+

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <style>
+      .logo-title { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 30px; font-weight: 900; letter-spacing: 2px; fill: #111827; text-anchor: middle; }
+      .logo-sub { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 15px; font-weight: 500; letter-spacing: 8px; fill: #1f2937; text-anchor: middle; }
+    </style>
+  </defs>
+  <!-- Main Heart Symbol -->
+  <g transform="translate(45, 20)">
+    <!-- Right Swoosh (Black) -->
+    <path d="M 155 35 C 195 -10, 260 25, 260 90 C 260 145, 185 200, 150 235 C 153 220, 160 190, 180 160 C 215 110, 215 65, 175 48 C 165 44, 158 40, 155 35 Z" fill="#111827"/>
+    <!-- Left Top Curve (Black) -->
+    <path d="M 150 35 C 130 10, 85 10, 65 45 C 50 70, 52 105, 68 135 C 64 125, 60 100, 72 70 C 85 40, 120 30, 145 38 Z" fill="#111827"/>
+    <!-- Stylized Red Caring Hand (Left Inner) -->
+    <path d="M 75 80 C 72 85, 70 95, 72 108 C 76 96, 82 90, 85 92 C 88 95, 85 108, 80 125 C 86 112, 95 108, 98 112 C 102 118, 95 135, 90 150 C 95 140, 105 138, 108 142 C 112 148, 104 168, 98 185 C 110 165, 120 162, 124 168 C 128 175, 120 200, 108 215 C 95 230, 82 235, 70 215 C 60 195, 55 160, 60 120 C 65 95, 72 82, 75 80 Z" fill="#dc2626" transform="translate(15, 15) scale(1.1)"/>
+  </g>
+  <!-- Text: LOVE & CHARITY -->
+  <text x="200" y="325" class="logo-title">LOVE &amp; CHARITY</text>
+  <!-- Text: FOUNDATION -->
+  <text x="204" y="365" class="logo-sub">FOUNDATION</text>
+</svg>
