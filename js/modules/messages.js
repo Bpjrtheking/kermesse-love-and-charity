@@ -33,12 +33,12 @@ const MessagesModule = {
     const currentUser = Auth.getCurrentUser();
     const isSuperAdmin = currentUser && (currentUser.is_original_superadmin || currentUser.role_code === 'superadmin');
 
-    // Si écran large, par défaut on montre les deux
-    if (window.innerWidth > 768) {
-      this.mobileView = 'chat';
+    // Sur mobile (<= 992px), on commence TOUJOURS par la liste des discussions (comme WhatsApp)
+    if (window.innerWidth <= 992) {
+      this.mobileView = 'list';
+      document.body.classList.remove('in-chat-view');
     } else {
-      // Sur mobile, on commence par la liste si pas de chat déjà sélectionné
-      if (!this.activeChat) this.mobileView = 'list';
+      this.mobileView = 'chat';
     }
 
     container.innerHTML = `
@@ -692,11 +692,15 @@ const MessagesModule = {
     // Marquer immédiatement la discussion sélectionnée comme lue
     this.markConversationAsRead(this.getConversationKey(this.activeChat), false);
 
-    // Sur mobile : basculer en vue conversation pleine largeur
+    // Sur mobile : basculer en vue conversation pleine largeur (comme WhatsApp)
     this.mobileView = 'chat';
     const container = document.getElementById('whatsappContainer');
     if (container) {
-      container.className = 'whatsapp-container mobile-show-chat';
+      container.classList.remove('mobile-show-list');
+      container.classList.add('mobile-show-chat');
+    }
+    if (window.innerWidth <= 992) {
+      document.body.classList.add('in-chat-view');
     }
 
     // Mettre à jour l'en-tête de chat
@@ -818,8 +822,10 @@ const MessagesModule = {
     this.mobileView = 'list';
     const container = document.getElementById('whatsappContainer');
     if (container) {
-      container.className = 'whatsapp-container mobile-show-list';
+      container.classList.remove('mobile-show-chat');
+      container.classList.add('mobile-show-list');
     }
+    document.body.classList.remove('in-chat-view');
     this.renderChatList();
     this.updateUnreadBadges();
   },

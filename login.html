@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Connexion — Love and Charity (L&C) | Gestion de Kermesse</title>
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/responsive.css">
+  <link rel="stylesheet" href="css/style.css?v=2.2">
+  <link rel="stylesheet" href="css/responsive.css?v=2.2">
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -14,50 +14,136 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
+      min-height: 100dvh;
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      padding: 1.5rem;
+      padding: 1.25rem;
+      margin: 0;
+      box-sizing: border-box;
+      -webkit-text-size-adjust: 100%;
     }
     .login-card {
-      background: var(--white);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-xl);
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.45);
       width: 100%;
-      max-width: 440px;
-      padding: 2.5rem 2rem;
+      max-width: 420px;
+      padding: 2.25rem 1.75rem;
       text-align: center;
+      box-sizing: border-box;
     }
     .login-logo {
-      width: 110px;
-      height: 110px;
-      margin: 0 auto 1.25rem auto;
+      width: 85px;
+      height: 85px;
+      margin: 0 auto 1rem auto;
       object-fit: contain;
+      filter: drop-shadow(0 4px 10px rgba(220, 38, 38, 0.2));
     }
     .login-title {
-      font-size: 1.35rem;
+      font-size: 1.3rem;
       font-weight: 800;
-      color: var(--gray-900);
+      color: #0f172a;
       line-height: 1.2;
+      margin-bottom: 0.25rem;
     }
     .login-subtitle {
-      font-size: 0.85rem;
-      color: var(--primary);
+      font-size: 0.82rem;
+      color: var(--primary, #dc2626);
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-top: 0.35rem;
-      margin-bottom: 2rem;
+      letter-spacing: 0.06em;
+      margin-bottom: 1.75rem;
     }
     .login-form {
       text-align: left;
+    }
+    .login-form .form-group {
+      margin-bottom: 1.15rem;
+    }
+    .login-form label {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .login-form .form-control {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 16px !important; /* Règle anti-zoom iOS Safari */
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      background: #f8fafc;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+    }
+    .login-form .form-control:focus {
+      background: #ffffff;
+      border-color: var(--primary, #dc2626);
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+      outline: none;
+    }
+    .password-input-wrapper {
+      position: relative;
+      width: 100%;
+    }
+    .password-input-wrapper .form-control {
+      padding-right: 46px;
+    }
+    .btn-toggle-pwd {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      font-size: 1.15rem;
+      cursor: pointer;
+      color: #64748b;
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .login-btn {
       width: 100%;
       padding: 0.85rem;
       font-size: 1rem;
       font-weight: 700;
-      margin-top: 1rem;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
+      margin-top: 0.75rem;
+      border-radius: 10px;
+      letter-spacing: 0.02em;
+      background: var(--primary, #dc2626);
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      min-height: 48px;
+    }
+    .login-btn:hover {
+      background: #b91c1c;
+      transform: translateY(-1px);
+    }
+    .login-btn:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .login-footer {
+      margin-top: 1.75rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e2e8f0;
+      font-size: 0.76rem;
+      color: #64748b;
+      line-height: 1.4;
+      text-align: center;
     }
   </style>
 </head>
@@ -65,29 +151,51 @@
 
   <div class="login-card">
     <img src="assets/logo.svg" alt="Love and Charity Logo" class="login-logo">
-    <h1 class="login-title">Love and Charity (L&C)</h1>
+    <h1 class="login-title">Love &amp; Charity</h1>
     <div class="login-subtitle">Gestion &amp; Contrôle de Kermesse</div>
 
     <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
       <div class="form-group">
-        <label for="loginInput">LOGIN</label>
-        <input type="text" id="loginInput" class="form-control" placeholder="Mounir" required autofocus autocomplete="username">
+        <label for="loginInput">
+          <span>👤</span> Identifiant ou Rôle
+        </label>
+        <input 
+          type="text" 
+          id="loginInput" 
+          class="form-control" 
+          placeholder="Entrez votre identifiant (ex: Mounir, admin_finances...)" 
+          required 
+          autofocus 
+          autocomplete="username">
       </div>
 
       <div class="form-group">
-        <label for="passwordInput">MOT DE PASSE</label>
-        <input type="password" id="passwordInput" class="form-control" placeholder="••••••••••••••••" required autocomplete="current-password">
+        <label for="passwordInput">
+          <span>🔒</span> Mot de passe
+        </label>
+        <div class="password-input-wrapper">
+          <input 
+            type="password" 
+            id="passwordInput" 
+            class="form-control" 
+            placeholder="Entrez votre mot de passe" 
+            required 
+            autocomplete="current-password">
+          <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility()" title="Afficher/Masquer le mot de passe">
+            👁️
+          </button>
+        </div>
       </div>
 
-      <button type="submit" class="btn btn-primary login-btn" id="submitBtn">
-        [ SE CONNECTER ]
+      <button type="submit" class="login-btn" id="submitBtn">
+        <span>🔐</span> Se connecter
       </button>
 
-      <div id="loginError" style="color: var(--danger); font-size: 0.85rem; font-weight: 600; text-align: center; margin-top: 1rem; display: none;"></div>
+      <div id="loginError" style="color: var(--danger, #dc2626); font-size: 0.85rem; font-weight: 600; text-align: center; margin-top: 1rem; display: none; background: #fee2e2; padding: 0.6rem 0.75rem; border-radius: 8px;"></div>
     </form>
 
-    <div style="margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--gray-200); font-size: 0.78rem; color: var(--gray-500); text-align: center;">
-      Plateforme officielle réservée aux membres de l'association <strong>Love and Charity</strong>
+    <div class="login-footer">
+      Plateforme officielle réservée aux organisateurs de la <strong>Kermesse Love and Charity</strong>
     </div>
   </div>
 
@@ -110,6 +218,15 @@
       }
     });
 
+    function togglePasswordVisibility() {
+      const pwd = document.getElementById('passwordInput');
+      if (pwd.type === 'password') {
+        pwd.type = 'text';
+      } else {
+        pwd.type = 'password';
+      }
+    }
+
     async function handleLogin(e) {
       e.preventDefault();
       const loginInput = document.getElementById('loginInput').value.trim();
@@ -119,7 +236,7 @@
 
       errBox.style.display = 'none';
       btn.disabled = true;
-      btn.textContent = 'Connexion en cours...';
+      btn.innerHTML = '<span>⏳</span> Connexion en cours...';
 
       try {
         const result = await Auth.login(loginInput, passwordInput);
@@ -132,13 +249,13 @@
           errBox.textContent = result.message || 'Identifiant ou mot de passe incorrect.';
           errBox.style.display = 'block';
           btn.disabled = false;
-          btn.textContent = '[ SE CONNECTER ]';
+          btn.innerHTML = '<span>🔐</span> Se connecter';
         }
       } catch (err) {
         errBox.textContent = 'Erreur: ' + (err.message || 'Impossible de se connecter.');
         errBox.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = '[ SE CONNECTER ]';
+        btn.innerHTML = '<span>🔐</span> Se connecter';
       }
     }
   </script>

@@ -648,17 +648,222 @@ html, body {
     font-size: 0.88rem !important;
   }
 
-  /* N. MESSAGERIE WHATSAPP 100% PLEIN ÉCRAN MOBILE */
+  /* ==========================================================================
+     N. MESSAGERIE 100% STYLE WHATSAPP MOBILE NATIF
+     ========================================================================== */
   .whatsapp-container {
-    height: calc(100dvh - 125px) !important;
-    min-height: calc(100dvh - 125px) !important;
-    margin: -0.75rem -0.65rem !important;
+    height: calc(100dvh - 54px - 60px) !important;
+    max-height: none !important;
+    min-height: unset !important;
     border-radius: 0 !important;
     border: none !important;
+    margin: -0.75rem -0.65rem !important;
+    box-shadow: none !important;
+    display: flex !important;
+    position: relative !important;
+    width: calc(100% + 1.3rem) !important;
+    max-width: calc(100% + 1.3rem) !important;
+    overflow: hidden !important;
   }
 
+  /* ÉTAT 1 : VUE LISTE DES DISCUSSIONS (Accueil WhatsApp) */
+  .whatsapp-container.mobile-show-list .whatsapp-sidebar {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 !important;
+    border-right: none !important;
+    height: 100% !important;
+  }
+
+  .whatsapp-container.mobile-show-list .whatsapp-main {
+    display: none !important;
+  }
+
+  /* ÉTAT 2 : VUE CHAT ACTIF (Plein écran WhatsApp immersif) */
+  .whatsapp-container.mobile-show-chat .whatsapp-sidebar {
+    display: none !important;
+  }
+
+  .whatsapp-container.mobile-show-chat .whatsapp-main {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 !important;
+    height: 100% !important;
+    background-color: #efeae2 !important;
+    background-image: radial-gradient(#d1d7db 1px, transparent 1px) !important;
+    background-size: 20px 20px !important;
+  }
+
+  /* Mode Plein Écran WhatsApp : masquer le header global et la barre basse */
+  body.in-chat-view .top-header,
+  body:has(.mobile-show-chat) .top-header {
+    display: none !important;
+  }
+
+  body.in-chat-view .mobile-bottom-nav,
   body:has(.mobile-show-chat) .mobile-bottom-nav {
     display: none !important;
+  }
+
+  body.in-chat-view .content-body,
+  body:has(.mobile-show-chat) .content-body {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  body.in-chat-view .whatsapp-container,
+  body:has(.mobile-show-chat) .whatsapp-container {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  /* Bouton retour WhatsApp ← */
+  .chat-back-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    font-size: 1.4rem !important;
+    color: #1e293b !important;
+    background: rgba(0, 0, 0, 0.05) !important;
+    border: none !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    margin-right: 0.35rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .chat-back-btn:active {
+    background: rgba(0, 0, 0, 0.12) !important;
+  }
+
+  /* Header du chat en mode WhatsApp plein écran */
+  .whatsapp-chat-header {
+    height: 58px !important;
+    min-height: 58px !important;
+    padding: 0 0.75rem !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+  }
+
+  .chat-header-info {
+    gap: 0.5rem !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .chat-header-title {
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 180px !important;
+  }
+
+  .chat-header-subtitle {
+    font-size: 0.72rem !important;
+    color: #64748b !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 180px !important;
+  }
+
+  /* Zone des messages */
+  .whatsapp-messages-body {
+    padding: 0.75rem 0.65rem !important;
+    gap: 0.5rem !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex: 1 !important;
+    background-color: #efeae2 !important;
+  }
+
+  /* Bulles de messages */
+  .chat-bubble {
+    max-width: 86% !important;
+    padding: 0.55rem 0.85rem !important;
+    font-size: 0.92rem !important;
+    line-height: 1.4 !important;
+  }
+
+  .chat-bubble.bubble-out {
+    background: #d9fdd3 !important;
+    border: 1px solid #c7f5be !important;
+    color: #111b21 !important;
+    border-radius: 12px 12px 2px 12px !important;
+  }
+
+  .chat-bubble.bubble-in {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #111b21 !important;
+    border-radius: 12px 12px 12px 2px !important;
+  }
+
+  /* Barre de saisie WhatsApp en bas */
+  .whatsapp-input-bar {
+    padding: 0.5rem 0.65rem calc(0.5rem + env(safe-area-inset-bottom, 8px)) 0.65rem !important;
+    background: #f0f2f5 !important;
+    border-top: 1px solid #d1d7db !important;
+    gap: 0.4rem !important;
+    align-items: center !important;
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 50 !important;
+  }
+
+  .whatsapp-input-field {
+    border-radius: 24px !important;
+    padding: 0.6rem 0.95rem !important;
+    font-size: 16px !important; /* Anti-zoom iOS */
+    background: #ffffff !important;
+    border: 1px solid #d1d7db !important;
+  }
+
+  .btn-whatsapp-send {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 50% !important;
+    background: #25d366 !important;
+    color: #ffffff !important;
+    font-size: 1.15rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: none !important;
+    box-shadow: 0 2px 6px rgba(37, 211, 102, 0.4) !important;
+    flex-shrink: 0 !important;
+  }
+
+  .btn-urgent-toggle {
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.75rem !important;
+    height: 38px !important;
+    flex-shrink: 0 !important;
   }
 }
 

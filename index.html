@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Love and Charity (L&amp;C) — Gestion et Contrôle de Kermesse</title>
-  <!-- Stylesheets (v=2.1 force refresh mobile) -->
-  <link rel="stylesheet" href="css/style.css?v=2.1">
-  <link rel="stylesheet" href="css/responsive.css?v=2.1">
+  <!-- Stylesheets (v=2.2 force refresh mobile & WhatsApp native) -->
+  <link rel="stylesheet" href="css/style.css?v=2.2">
+  <link rel="stylesheet" href="css/responsive.css?v=2.2">
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -425,6 +425,9 @@
         if (updateHash) {
           window.location.hash = moduleName;
         }
+
+        // Réinitialiser le mode chat plein écran si on change de page
+        document.body.classList.remove('in-chat-view');
 
         // Mettre à jour le titre
         document.getElementById('pageTitle').textContent = mod.title;
