@@ -166,7 +166,7 @@ const MessagesModule = {
       this.stands = stands || [];
 
       // 2. Charger les utilisateurs pour les messages directs et la supervision
-      const { data: users } = await client.from('app_users').select('id, login, full_name, role:roles(name)').eq('is_active', true);
+      const { data: users } = await client.from('app_users').select('id, login, full_name, is_original_superadmin, role:roles(id, code, name)').eq('is_active', true);
       this.allUsers = users || [];
       this.usersMap = new Map();
       (users || []).forEach(u => {
@@ -179,6 +179,38 @@ const MessagesModule = {
     } catch (e) {
       console.warn('[MessagesModule] Erreur chargement metadata:', e);
     }
+  },
+
+  /**
+   * Vérifie si un utilisateur ou login donné a le statut de SuperAdministrateur.
+   * Utilisé pour la règle d'or d'anti-espionnage (aucun espionnage entre SuperAdmins).
+   */
+  isUserSuperAdmin(userOrLogin) {
+    if (!userOrLogin) return false;
+    let u = userOrLogin;
+    if (typeof userOrLogin === 'string') {
+      const login = userOrLogin.toLowerCase().trim();
+      if (login === 'mounir') return true;
+      if (this.usersMap && this.usersMap.has(login)) {
+        u = this.usersMap.get(login);
+      } else {
+        const cur = Auth.getCurrentUser();
+        if (cur && cur.login && cur.login.toLowerCase().trim() === login) {
+          u = cur;
+        } else {
+          return false;
+        }
+      }
+    }
+    if (!u) return false;
+    if (u.is_original_superadmin === true) return true;
+    const login = (u.login || '').toLowerCase().trim();
+    if (login === 'mounir') return true;
+    const roleCode = (u.role?.code || u.role_code || '').toLowerCase().trim();
+    if (roleCode === 'superadmin') return true;
+    const roleName = (u.role?.name || u.role_name || '').toLowerCase().trim();
+    if (roleName.includes('superadmin') || roleName.includes('superadministrateur')) return true;
+    return false;
   },
 
   async loadMessages(silent = false) {
@@ -286,6 +318,11 @@ const MessagesModule = {
         const otherId = (m.sender_id === currentUser?.id) ? m.recipient_id : m.sender_id;
         const otherLogin = (sLogin === myLogin) ? rLogin : sLogin;
         return `direct_${otherId || otherLogin}`;
+      }
+
+      // Règle de protection absolue : AUCUN espionnage impliquant un SuperAdmin
+      if (this.isUserSuperAdmin(sLogin) || this.isUserSuperAdmin(rLogin)) {
+        return 'protected_superadmin_direct';
       }
 
       // Cas 2 : Discussion privée entre deux autres administrateurs (surveillée par SuperAdmin)
@@ -608,7 +645,7 @@ const MessagesModule = {
     });
 
     // 5. 👁️ Supervision Privés (Réservé exclusivement aux SuperAdministrateurs)
-    const isSuperAdmin = currentUser && (currentUser.is_original_superadmin || currentUser.role_code === 'superadmin');
+    const isSuperAdmin = currentUser && (currentUser.is_original_superadmin || currentUser.role_code === 'superadmin' || this.isUserSuperAdmin(currentUser));
     if (isSuperAdmin) {
       const pairMap = new Map();
 
@@ -622,7 +659,14 @@ const MessagesModule = {
         if (!rLogin && m.recipient_login) rLogin = m.recipient_login;
 
         if (sLogin && rLogin && sLogin.toLowerCase() !== rLogin.toLowerCase()) {
-          const isBetweenOthers = (sLogin.toLowerCase() !== currentUser?.login?.toLowerCase() || rLogin.toLowerCase() !== currentUser?.login?.toLowerCase());
+          // RÈGLE ANTI-ESPIONNAGE STRICTE :
+          // Aucun SuperAdministrateur ne peut espionner un autre SuperAdministrateur.
+          // Si l'un des participants est SuperAdmin, la conversation est inviolable et exclue de la supervision.
+          if (this.isUserSuperAdmin(sLogin) || this.isUserSuperAdmin(rLogin)) {
+            return;
+          }
+
+          const isBetweenOthers = (sLogin.toLowerCase() !== currentUser?.login?.toLowerCase() && rLogin.toLowerCase() !== currentUser?.login?.toLowerCase());
           
           if (isBetweenOthers) {
             const pairKey = [sLogin.toLowerCase(), rLogin.toLowerCase()].sort().join('___');
@@ -797,6 +841,12 @@ const MessagesModule = {
       return;
     }
 
+    // Règle d'or : Aucun espionnage impliquant un SuperAdministrateur
+    if (this.isUserSuperAdmin(u1) || this.isUserSuperAdmin(u2)) {
+      Notify.error('Action interdite : Les conversations impliquant un SuperAdministrateur sont protégées et confidentielles.');
+      return;
+    }
+
     const key = [u1.toLowerCase(), u2.toLowerCase()].sort().join('___');
     const u1Obj = this.usersMap ? this.usersMap.get(u1.toLowerCase()) : null;
     const u2Obj = this.usersMap ? this.usersMap.get(u2.toLowerCase()) : null;
@@ -839,10 +889,11 @@ const MessagesModule = {
 
     // 1. Vue Spéciale : Sélecteur d'inspection SuperAdmin
     if (chat.type === 'supervision_selector') {
-      const allAdmins = (this.allUsers || []).filter(u => u.login);
+      // Exclure tous les SuperAdmins de la sélection (aucun espionnage de SuperAdmin)
+      const allAdmins = (this.allUsers || []).filter(u => u.login && !this.isUserSuperAdmin(u));
       container.innerHTML = `
         <div style="max-width: 540px; margin: 2rem auto; background: var(--white); border-radius: var(--radius-lg); padding: 2rem; box-shadow: var(--shadow-md); border: 1px solid #d8b4fe;">
-          <div style="text-align: center; margin-bottom: 1.5rem;">
+          <div style="text-align: center; margin-bottom: 1.25rem;">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔎</div>
             <h3 style="font-size: 1.15rem; font-weight: 800; color: #581c87; margin-bottom: 0.35rem;">
               Surveillance Proactive des Échanges Privés
@@ -850,6 +901,13 @@ const MessagesModule = {
             <p style="font-size: 0.85rem; color: var(--gray-600);">
               En tant que SuperAdministrateur, sélectionnez deux administrateurs pour inspecter l'intégralité de leurs messages privés passés et en direct.
             </p>
+          </div>
+
+          <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.82rem; color: #9d174d; display: flex; align-items: center; gap: 0.65rem;">
+            <span style="font-size: 1.3rem;">🛡️</span>
+            <div>
+              <strong>Protection de la Direction :</strong> Conformément aux règles de confidentialité, les comptes SuperAdministrateurs sont protégés et ne peuvent faire l'objet d'aucune surveillance ni espionnage entre SuperAdmins.
+            </div>
           </div>
 
           <div class="form-group" style="margin-bottom: 1.25rem;">
@@ -880,6 +938,20 @@ const MessagesModule = {
     if (chat.type === 'supervision') {
       const u1 = (chat.user1Login || '').toLowerCase();
       const u2 = (chat.user2Login || '').toLowerCase();
+
+      // Sécurité absolue : Blocage si l'un des deux participants est SuperAdmin
+      if (this.isUserSuperAdmin(u1) || this.isUserSuperAdmin(u2)) {
+        container.innerHTML = `
+          <div style="max-width: 500px; margin: 3rem auto; text-align: center; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; padding: 2rem; color: #9f1239;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🛡️</div>
+            <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 0.5rem; color: #881337;">Échanges Confidentiels Protégés</h3>
+            <p style="font-size: 0.88rem; line-height: 1.5; color: #4c0519;">
+              Cette conversation implique un <strong>SuperAdministrateur</strong>. Conformément aux directives de sécurité et de confidentialité, les conversations impliquant la Direction ne peuvent faire l'objet d'aucun espionnage ni d'aucune surveillance.
+            </p>
+          </div>
+        `;
+        return;
+      }
 
       const filtered = (this.cachedMessages || []).filter(m => {
         if (m.channel_type !== 'direct') return false;
