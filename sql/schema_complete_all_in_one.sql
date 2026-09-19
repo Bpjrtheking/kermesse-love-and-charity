@@ -909,6 +909,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Permissions d'exécution RPC pour PostgREST / Supabase
+GRANT EXECUTE ON FUNCTION authenticate_user(TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION change_user_password(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION update_user_profile(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION admin_create_app_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION admin_reset_user_credentials(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
 -- 6. DONNÉES SYSTÈME ET COMPTE INITIAL MOUNIR
 INSERT INTO roles (code, name, description, is_system, permissions)
 VALUES 
@@ -1251,4 +1258,8 @@ CREATE POLICY "Lecture cleaning_rounds" ON public.cleaning_rounds FOR SELECT USI
 
 DROP POLICY IF EXISTS "Ecriture cleaning_rounds" ON public.cleaning_rounds;
 CREATE POLICY "Ecriture cleaning_rounds" ON public.cleaning_rounds FOR ALL USING (true) WITH CHECK (true);
+
+-- Recharger immédiatement le cache du schéma PostgREST dans Supabase
+NOTIFY pgrst, 'reload schema';
+
 

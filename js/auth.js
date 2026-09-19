@@ -245,28 +245,100 @@ const Auth = {
     }
 
     const client = SupabaseClient.client;
-    if (client && user.id !== '00000000-0000-0000-0000-000000000001') {
-      try {
-        const { data, error } = await client.rpc('update_user_profile', {
-          p_user_id: user.id,
-          p_new_login: cleanLogin,
-          p_new_name: cleanName
-        });
+    let targetUserId = user.id;
 
-        if (error) {
-          return { success: false, message: error.message };
+    if (client) {
+      // 1. Résolution de l'identifiant UUID réel dans Supabase si nécessaire
+      if (targetUserId === '00000000-0000-0000-0000-000000000001' || !targetUserId) {
+        try {
+          const { data: dbUser } = await client
+            .from('app_users')
+            .select('id')
+            .or(`login.ilike.${user.login},is_original_superadmin.eq.true`)
+            .limit(1)
+            .maybeSingle();
+          if (dbUser && dbUser.id) {
+            targetUserId = dbUser.id;
+            user.id = dbUser.id;
+          }
+        } catch (e) {
+          console.warn('[L&C Auth] Target user resolution:', e);
+        }
+      }
+
+      // 2. Tenter la fonction RPC PostgreSQL si disponible
+      if (targetUserId && targetUserId !== '00000000-0000-0000-0000-000000000001') {
+        try {
+          const { data, error } = await client.rpc('update_user_profile', {
+            p_user_id: targetUserId,
+            p_new_login: cleanLogin,
+            p_new_name: cleanName
+          });
+
+          if (!error && data) {
+            if (!data.success) {
+              return { success: false, message: data.message };
+            }
+            if (data.user) {
+              this.setCurrentUser(data.user);
+              return { success: true, message: 'Profil mis à jour avec succès.', user: data.user };
+            }
+          }
+          if (error) {
+            console.warn('[L&C Auth] RPC update_user_profile indisponible, bascule sur la mise à jour directe:', error);
+          }
+        } catch (rpcErr) {
+          console.warn('[L&C Auth] Exception RPC update_user_profile, tentative directe:', rpcErr);
         }
 
-        if (data && !data.success) {
-          return { success: false, message: data.message };
-        }
+        // 3. Fallback direct sur la table app_users (infaillible si la fonction RPC n'est pas encore dans le schema cache)
+        try {
+          // Vérifier si le nouveau login est déjà pris par un autre utilisateur
+          const { data: existingUser } = await client
+            .from('app_users')
+            .select('id')
+            .ilike('login', cleanLogin)
+            .neq('id', targetUserId)
+            .maybeSingle();
 
-        if (data && data.user) {
-          this.setCurrentUser(data.user);
-          return { success: true, message: 'Profil mis à jour avec succès.', user: data.user };
+          if (existingUser) {
+            return { success: false, message: 'Ce login est déjà utilisé par un autre compte.' };
+          }
+
+          // Mettre à jour directement dans app_users
+          const { data: updatedDbUser, error: updateErr } = await client
+            .from('app_users')
+            .update({
+              login: cleanLogin,
+              full_name: cleanName || cleanLogin,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', targetUserId)
+            .select('id, login, full_name, is_original_superadmin, role:roles(id, code, name, permissions)')
+            .maybeSingle();
+
+          if (updateErr) {
+            console.error('[L&C Auth] Erreur directe app_users:', updateErr);
+            return { success: false, message: updateErr.message };
+          }
+
+          user.login = cleanLogin;
+          user.full_name = cleanName || cleanLogin;
+          if (updatedDbUser) {
+            user.login = updatedDbUser.login;
+            user.full_name = updatedDbUser.full_name;
+          }
+          this.setCurrentUser(user);
+
+          try {
+            AuditLogger.log('MODIFICATION_PROFIL', 'user', targetUserId, `Mise à jour du profil : login=${cleanLogin}, nom=${cleanName}`);
+          } catch {}
+
+          return { success: true, message: 'Profil mis à jour avec succès.', user };
+        } catch (directErr) {
+          console.error('[L&C Auth] Exception directe updateProfile:', directErr);
+          return { success: false, message: directErr.message || 'Erreur lors de la mise à jour.' };
         }
-      } catch (err) {
-        return { success: false, message: err.message || 'Erreur lors de la mise à jour.' };
       }
     }
 

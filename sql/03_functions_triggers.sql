@@ -348,3 +348,16 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'message', 'Identifiants mis à jour avec succès.');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ------------------------------------------------------------------------------
+-- 9. PERMISSIONS D'EXÉCUTION DES FONCTIONS RPC POUR SUPABASE & POSTGREST
+-- ------------------------------------------------------------------------------
+GRANT EXECUTE ON FUNCTION authenticate_user(TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION change_user_password(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION update_user_profile(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION admin_create_app_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION admin_reset_user_credentials(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- Rechargement du cache de schéma PostgREST
+NOTIFY pgrst, 'reload schema';
+
