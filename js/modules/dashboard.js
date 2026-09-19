@@ -82,6 +82,26 @@ const DashboardModule = {
         </div>
       </div>
 
+      <!-- Mon Carnet de Bord & Tâches Perso -->
+      <div class="card" style="background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%); border: 1px solid #bfdbfe; margin-bottom: 1.5rem;">
+        <div class="card-body" style="padding: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 44px; height: 44px; border-radius: 10px; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+              📝
+            </div>
+            <div>
+              <h4 style="margin: 0; font-size: 1.05rem; color: #1e3a8a;">Mon Carnet de Bord &amp; Tâches Perso</h4>
+              <p style="margin: 2px 0 0 0; font-size: 0.82rem; color: #3b82f6;">
+                Votre to-do list interactive avec progression et votre bloc-notes à sauvegarde automatique.
+              </p>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="App.navigateTo('tasks')">
+            <span>✏️</span> Ouvrir mon Bloc-Notes &amp; To-Do
+          </button>
+        </div>
+      </div>
+
       <!-- Contenu contextuel et actions rapides vers les 9 Pôles -->
       <div class="card">
         <div class="card-header">

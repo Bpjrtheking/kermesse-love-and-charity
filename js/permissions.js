@@ -71,7 +71,7 @@ const Permissions = {
     }
 
     // Modules universels accessibles à tous les administrateurs
-    if (['dashboard', 'messages'].includes(moduleName)) {
+    if (['dashboard', 'messages', 'tasks'].includes(moduleName)) {
       return true;
     }
 
