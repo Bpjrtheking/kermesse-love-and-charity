@@ -55,6 +55,7 @@ CREATE POLICY "Gestion des emplacements" ON locations FOR ALL USING (true) WITH 
 CREATE POLICY "Lecture des profils utilisateurs" ON app_users FOR SELECT USING (true);
 CREATE POLICY "Mise a jour de son profil ou par admin" ON app_users FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Creation utilisateurs" ON app_users FOR INSERT WITH CHECK (true);
+CREATE POLICY "Suppression utilisateurs" ON app_users FOR DELETE USING (true);
 -- Note: La suppression et dégradation de Mounir sont formellement bloquées par TRIGGER (Script 03).
 
 -- 3. Membres, Stands & Staff

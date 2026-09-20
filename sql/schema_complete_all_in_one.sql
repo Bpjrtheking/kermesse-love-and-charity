@@ -463,6 +463,8 @@ DROP POLICY IF EXISTS "Mise a jour de son profil ou par admin" ON app_users;
 CREATE POLICY "Mise a jour de son profil ou par admin" ON app_users FOR UPDATE USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Creation utilisateurs" ON app_users;
 CREATE POLICY "Creation utilisateurs" ON app_users FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Suppression utilisateurs" ON app_users;
+CREATE POLICY "Suppression utilisateurs" ON app_users FOR DELETE USING (true);
 
 DROP POLICY IF EXISTS "Lecture membres" ON members;
 CREATE POLICY "Lecture membres" ON members FOR SELECT USING (true);
@@ -909,12 +911,45 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+CREATE OR REPLACE FUNCTION admin_delete_app_user(
+    p_target_user_id UUID,
+    p_admin_login TEXT DEFAULT 'SuperAdmin'
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_target RECORD;
+BEGIN
+    SELECT * INTO v_target FROM app_users WHERE id = p_target_user_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Utilisateur introuvable.');
+    END IF;
+
+    IF v_target.is_original_superadmin = TRUE THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Action interdite : Le compte SuperAdministrateur original ne peut jamais être supprimé.');
+    END IF;
+
+    -- Détacher les liaisons orphelines éventuelles
+    DELETE FROM stand_staff WHERE user_id = p_target_user_id;
+    DELETE FROM kermesse_messages WHERE sender_id = p_target_user_id OR recipient_id = p_target_user_id;
+
+    -- Supprimer définitivement l'utilisateur de la table
+    DELETE FROM app_users WHERE id = p_target_user_id;
+
+    INSERT INTO activity_logs (login, action, entity_type, entity_id, details)
+    VALUES (p_admin_login, 'SUPPRESSION_UTILISATEUR', 'user', p_target_user_id, 'Suppression définitive du compte ' || v_target.login);
+
+    RETURN jsonb_build_object('success', true, 'message', 'Compte supprimé avec succès.');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Permissions d'exécution RPC pour PostgREST / Supabase
 GRANT EXECUTE ON FUNCTION authenticate_user(TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION change_user_password(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION update_user_profile(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION admin_create_app_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION admin_reset_user_credentials(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION admin_delete_app_user(UUID, TEXT) TO anon, authenticated, service_role;
 
 -- 6. DONNÉES SYSTÈME ET COMPTE INITIAL MOUNIR
 INSERT INTO roles (code, name, description, is_system, permissions)

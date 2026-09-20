@@ -392,13 +392,48 @@ const RolesModule = {
       async () => {
         const client = SupabaseClient.client;
         if (client) {
-          const { error } = await client.from('app_users').delete().eq('id', id);
-          if (error) {
-            Notify.error('Erreur: ' + error.message);
-            return;
+          // 1. Tenter la fonction RPC sécurisée admin_delete_app_user (qui contourne RLS via SECURITY DEFINER)
+          let deleted = false;
+          try {
+            const { data: rpcRes, error: rpcErr } = await client.rpc('admin_delete_app_user', {
+              p_target_user_id: id,
+              p_admin_login: currentUser?.login || 'SuperAdmin'
+            });
+
+            if (!rpcErr && rpcRes) {
+              if (!rpcRes.success) {
+                Notify.error(rpcRes.message || 'Impossible de supprimer ce compte.');
+                return;
+              }
+              deleted = true;
+            }
+          } catch (rpcEx) {
+            console.warn('[RolesModule] RPC admin_delete_app_user non disponible, tentative directe:', rpcEx);
           }
+
+          // 2. Si la RPC n'a pas été appelée ou a échoué, tenter la suppression directe
+          if (!deleted) {
+            try {
+              // Détacher les assignations de stand si nécessaire
+              await client.from('stand_staff').delete().eq('user_id', id);
+            } catch {}
+
+            const { data: deletedData, error } = await client.from('app_users').delete().eq('id', id).select();
+            if (error) {
+              Notify.error('Erreur de suppression : ' + error.message);
+              return;
+            }
+
+            // Vérifier si la base de données a réellement supprimé la ligne
+            const { data: stillExists } = await client.from('app_users').select('id').eq('id', id).maybeSingle();
+            if (stillExists) {
+              Notify.error("Suppression refusée par la sécurité Supabase. Veuillez exécuter le script SQL 08_fix_user_deletion.sql dans Supabase.");
+              return;
+            }
+          }
+
           AuditLogger.log('SUPPRESSION_UTILISATEUR', 'user', id, `Suppression du compte ${login}`);
-          Notify.success(`Compte ${login} supprimé.`);
+          Notify.success(`Compte ${login} supprimé avec succès.`);
           RolesModule.render(document.getElementById('mainContent'));
         }
       },

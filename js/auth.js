@@ -58,58 +58,86 @@ const Auth = {
         });
 
         if (error) {
-          console.error('[L&C Auth RPC Error]', error);
-          // Si la fonction RPC n'a pas encore été créée dans Supabase, test direct
-          return await this.fallbackDirectAuth(login, password);
-        }
+          console.warn('[L&C Auth RPC Error]', error);
+          // Si la RPC a une erreur, vérifier directement l'état is_active dans app_users
+          try {
+            const { data: dbUser } = await client
+              .from('app_users')
+              .select('id, login, is_active')
+              .ilike('login', login)
+              .maybeSingle();
 
-        if (data && data.success) {
-          const user = data.user;
-          this.setCurrentUser(user);
-          return {
-            success: true,
-            user,
-            mustChangePassword: false
-          };
-        } else {
-          // Si Supabase a refusé, vérifier si le mot de passe correspond au mot de passe local modifié
-          const localPwd = localStorage.getItem('lc_mounir_pwd');
-          if (localPwd && (password === localPwd || password === 'Mounir@Kermesse#2026!')) {
-            try {
-              const { data: dbUser } = await client
-                .from('app_users')
-                .select('id, login, full_name, is_active, is_original_superadmin, role:roles(id, code, name, permissions)')
-                .or(`login.ilike.${login},is_original_superadmin.eq.true`)
-                .limit(1)
-                .maybeSingle();
-
-              if (dbUser) {
-                // Tenter d'aligner le mot de passe dans Supabase
-                await client.rpc('change_user_password', {
-                  p_user_id: dbUser.id,
-                  p_old_password: 'Mounir@Kermesse#2026!',
-                  p_new_password: password
-                });
-
-                const sessionUser = {
-                  id: dbUser.id,
-                  login: dbUser.login,
-                  full_name: dbUser.full_name,
-                  role_code: dbUser.role ? dbUser.role.code : 'superadmin',
-                  role_name: dbUser.role ? dbUser.role.name : 'SuperAdministrateur',
-                  permissions: dbUser.role?.permissions || { all: true },
-                  must_change_password: false,
-                  is_original_superadmin: true
-                };
-                this.setCurrentUser(sessionUser);
-                return { success: true, user: sessionUser, mustChangePassword: false };
-              }
-            } catch (syncErr) {
-              console.warn('[L&C Auth] Resync attempt error:', syncErr);
+            if (dbUser && dbUser.is_active === false) {
+              return { success: false, message: 'Ce compte a été désactivé par l\'administration.' };
             }
+          } catch (directCheckErr) {
+            console.warn('[L&C Auth] Direct status check error:', directCheckErr);
           }
 
           return await this.fallbackDirectAuth(login, password);
+        }
+
+        if (data) {
+          if (data.success) {
+            const user = data.user;
+            this.setCurrentUser(user);
+            return {
+              success: true,
+              user,
+              mustChangePassword: false
+            };
+          } else {
+            // Transmettre immédiatement le message propre de désactivation
+            if (data.message && (data.message.includes('désactivé') || data.message.includes('desactive'))) {
+              return { success: false, message: 'Ce compte a été désactivé par l\'administration.' };
+            }
+
+            // Si c'est le SuperAdmin qui a un mot de passe local à resynchroniser
+            const isSuperAdminLogin = (login.toLowerCase() === 'mounir' || login.toLowerCase() === (localStorage.getItem('lc_superadmin_login') || '').toLowerCase());
+            if (isSuperAdminLogin) {
+              const localPwd = localStorage.getItem('lc_mounir_pwd');
+              if (localPwd && (password === localPwd || password === 'Mounir@Kermesse#2026!')) {
+                try {
+                  const { data: dbUser } = await client
+                    .from('app_users')
+                    .select('id, login, full_name, is_active, is_original_superadmin, role:roles(id, code, name, permissions)')
+                    .or(`login.ilike.${login},is_original_superadmin.eq.true`)
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (dbUser) {
+                    if (dbUser.is_active === false) {
+                      return { success: false, message: 'Ce compte a été désactivé par l\'administration.' };
+                    }
+
+                    await client.rpc('change_user_password', {
+                      p_user_id: dbUser.id,
+                      p_old_password: 'Mounir@Kermesse#2026!',
+                      p_new_password: password
+                    });
+
+                    const sessionUser = {
+                      id: dbUser.id,
+                      login: dbUser.login,
+                      full_name: dbUser.full_name,
+                      role_code: dbUser.role ? dbUser.role.code : 'superadmin',
+                      role_name: dbUser.role ? dbUser.role.name : 'SuperAdministrateur',
+                      permissions: dbUser.role?.permissions || { all: true },
+                      must_change_password: false,
+                      is_original_superadmin: true
+                    };
+                    this.setCurrentUser(sessionUser);
+                    return { success: true, user: sessionUser, mustChangePassword: false };
+                  }
+                } catch (syncErr) {
+                  console.warn('[L&C Auth] Resync attempt error:', syncErr);
+                }
+              }
+            }
+
+            // Message professionnel propre (jamais de jargon SQL ou technique pour les utilisateurs)
+            return { success: false, message: data.message || 'Identifiant ou mot de passe incorrect.' };
+          }
         }
       } catch (err) {
         console.error('[L&C Auth Exception]', err);
@@ -145,7 +173,7 @@ const Auth = {
         };
       }
     }
-    return { success: false, message: 'Identifiant ou mot de passe incorrect. Assurez-vous d\'avoir exécuté les scripts SQL dans Supabase.' };
+    return { success: false, message: 'Identifiant ou mot de passe incorrect.' };
   },
 
   // Changement de mot de passe (réservé exclusivement aux SuperAdministrateurs)
