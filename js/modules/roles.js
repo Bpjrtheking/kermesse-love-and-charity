@@ -238,7 +238,7 @@ const RolesModule = {
     { code: 'admin_communication', name: '📢 Responsable — Communication & Affichage', description: 'Pôle 1 : Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse' },
     { code: 'admin_finances', name: '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', description: 'Pôle 2 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts' },
     { code: 'admin_decoration', name: '🎨 Responsable — Organisation & Décoration', description: 'Pôle 3 : Ambiance festive, matériel déco, aménagement des zones et plan d\'implantation' },
-    { code: 'admin_restauration', name: '🍔 Responsable — Restauration', description: 'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette' },
+    { code: 'admin_restauration', name: '🍔 Responsable — Restauration', description: 'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et réapprovisionnements' },
     { code: 'admin_stands', name: '🎪 Responsable — Stands & Jeux', description: 'Pôle 5 : Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands' },
     { code: 'admin_lots', name: '🎁 Responsable — Lots à gagner', description: 'Pôle 6 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions' },
     { code: 'admin_benevoles', name: '👥 Responsable — Planning & Bénévoles', description: 'Pôle 7 : Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits' },

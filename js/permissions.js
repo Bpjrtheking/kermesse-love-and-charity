@@ -196,7 +196,6 @@ const Permissions = {
         return [
           { module: 'dashboard', icon: '📊', label: 'Accueil' },
           { module: 'communication', icon: '📢', label: 'Affichage' },
-          { module: 'stands', icon: '🎪', label: 'Stands' },
           { module: 'tasks', icon: '📋', label: 'Tâches' },
           { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
         ];
@@ -243,7 +242,6 @@ const Permissions = {
         return [
           { module: 'dashboard', icon: '📊', label: 'Accueil' },
           { module: 'gifts', icon: '🎁', label: 'Lots' },
-          { module: 'stands', icon: '🎪', label: 'Stands' },
           { module: 'tasks', icon: '📋', label: 'Tâches' },
           { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
         ];
@@ -278,9 +276,7 @@ const Permissions = {
       default:
         return [
           { module: 'dashboard', icon: '📊', label: 'Accueil' },
-          { module: 'stands', icon: '🎪', label: 'Stands' },
-          { module: 'tickets', icon: '🎟️', label: 'Tickets' },
-          { module: 'cash', icon: '💵', label: 'Caisses' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
           { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
         ];
     }

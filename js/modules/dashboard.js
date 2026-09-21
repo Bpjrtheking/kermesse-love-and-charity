@@ -228,8 +228,8 @@ const DashboardModule = {
 
     let alertsHtml = '';
 
-    // Alerte: Stands sans responsable
-    if (stands && stands.length > 0) {
+    // 1. Alerte Staffing Stands (uniquement si l'utilisateur a accès au pôle stands)
+    if (stands && stands.length > 0 && typeof Permissions !== 'undefined' && Permissions.canAccessModule('stands')) {
       const unmanaged = stands.filter(s => !s.manager_id && !s.is_closed);
       if (unmanaged.length > 0) {
         alertsHtml += `
@@ -241,8 +241,8 @@ const DashboardModule = {
       }
     }
 
-    // Alerte: Emprunts dépassés
-    if (loans && loans.length > 0) {
+    // 2. Alerte Emprunts Dépassés (uniquement si l'utilisateur a accès à la logistique)
+    if (loans && loans.length > 0 && typeof Permissions !== 'undefined' && Permissions.canAccessModule('returns')) {
       const today = new Date().toISOString().split('T')[0];
       const overdue = loans.filter(l => l.status === 'en_cours' && l.expected_return_date < today);
       if (overdue.length > 0) {
@@ -255,8 +255,8 @@ const DashboardModule = {
       }
     }
 
-    // Alerte: Incidents non résolus
-    if (incidents && incidents.length > 0) {
+    // 3. Alerte Incidents en cours (uniquement si l'utilisateur a accès à la sécurité)
+    if (incidents && incidents.length > 0 && typeof Permissions !== 'undefined' && Permissions.canAccessModule('incidents')) {
       const critical = incidents.filter(i => i.status !== 'resolu');
       if (critical.length > 0) {
         alertsHtml += `

@@ -79,55 +79,55 @@ WHERE code = 'superadmin';
 UPDATE roles SET 
     name = '📢 Responsable — Communication & Affichage', 
     description = 'Pôle 1 : Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse',
-    permissions = '{"communication_manage": true, "history_view": true}'::jsonb
+    permissions = '{"communication_manage": true}'::jsonb
 WHERE code = 'admin_communication';
 
 UPDATE roles SET 
     name = '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', 
     description = 'Pôle 2 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts',
-    permissions = '{"tickets_manage": true, "tickets_sell": true, "cash_manage": true, "closures_manage": true, "finances_view": true, "history_view": true}'::jsonb
+    permissions = '{"tickets_manage": true, "tickets_sell": true, "cash_manage": true, "closures_manage": true, "finances_view": true}'::jsonb
 WHERE code = 'admin_finances';
 
 UPDATE roles SET 
     name = '🎨 Responsable — Organisation & Décoration', 
     description = 'Pôle 3 : Ambiance festive, matériel déco, aménagement des zones et plan d''implantation',
-    permissions = '{"decoration_manage": true, "history_view": true}'::jsonb
+    permissions = '{"decoration_manage": true, "locations_manage": true}'::jsonb
 WHERE code = 'admin_decoration';
 
 UPDATE roles SET 
     name = '🍔 Responsable — Restauration', 
-    description = 'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette',
-    permissions = '{"food_manage": true, "stocks_manage": true, "history_view": true}'::jsonb
+    description = 'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et réapprovisionnements',
+    permissions = '{"food_manage": true, "stocks_manage": true}'::jsonb
 WHERE code = 'admin_restauration';
 
 UPDATE roles SET 
     name = '🎪 Responsable — Stands & Jeux', 
     description = 'Pôle 5 : Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands',
-    permissions = '{"stands_manage": true, "history_view": true}'::jsonb
+    permissions = '{"stands_manage": true, "games_manage": true}'::jsonb
 WHERE code = 'admin_stands';
 
 UPDATE roles SET 
     name = '🎁 Responsable — Lots à gagner', 
     description = 'Pôle 6 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions',
-    permissions = '{"gifts_manage": true, "history_view": true}'::jsonb
+    permissions = '{"gifts_manage": true}'::jsonb
 WHERE code = 'admin_lots';
 
 UPDATE roles SET 
     name = '👥 Responsable — Planning & Bénévoles', 
     description = 'Pôle 7 : Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits',
-    permissions = '{"planning_manage": true, "users_manage": true, "history_view": true}'::jsonb
+    permissions = '{"planning_manage": true, "users_manage": true}'::jsonb
 WHERE code = 'admin_benevoles';
 
 UPDATE roles SET 
     name = '📦 Responsable — Logistique & Installation', 
     description = 'Pôle 8 : Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists',
-    permissions = '{"materials_manage": true, "loans_manage": true, "returns_manage": true, "history_view": true}'::jsonb
+    permissions = '{"materials_manage": true, "loans_manage": true, "returns_manage": true}'::jsonb
 WHERE code = 'admin_logistique';
 
 UPDATE roles SET 
     name = '🛡️ Responsable — Accueil & Sécurité', 
     description = 'Pôle 9 : Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents',
-    permissions = '{"security_manage": true, "incidents_manage": true, "cleaning_manage": true, "history_view": true}'::jsonb
+    permissions = '{"security_manage": true, "incidents_manage": true, "cleaning_manage": true}'::jsonb
 WHERE code = 'admin_securite';
 
 NOTIFY pgrst, 'reload schema';
