@@ -118,27 +118,6 @@ const DashboardModule = {
           </div>
         </div>
       </div>
-
-      <!-- Tableau des Dernières Opérations -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>📜</span> Dernières Opérations Récentes (Traçabilité)
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('history')">
-            Voir tout l'historique
-          </button>
-        </div>
-        <div class="card-body" style="padding: 0;">
-          <div id="recentActivityTable">
-            <div class="empty-state">
-              <div class="empty-icon">📜</div>
-              <div class="empty-title">Aucune opération enregistrée</div>
-              <div class="empty-desc">Toutes les actions (ventes, mouvements de stocks, sorties d'argent, incidents) seront répertoriées ici automatiquement.</div>
-            </div>
-          </div>
-        </div>
-      </div>
     `;
 
     // Chargement dynamique des vraies statistiques
@@ -238,9 +217,6 @@ const DashboardModule = {
       // Alertes Proactives
       this.checkSystemAlerts(stands, loans, incidents);
 
-      // Dernières activités
-      this.loadRecentActivity(client);
-
     } catch (err) {
       console.warn('[Dashboard] Erreur lors de la récupération des données réelles:', err);
     }
@@ -293,45 +269,6 @@ const DashboardModule = {
     }
 
     alertsBox.innerHTML = alertsHtml;
-  },
-
-  async loadRecentActivity(client) {
-    const tableDiv = document.getElementById('recentActivityTable');
-    if (!tableDiv) return;
-
-    try {
-      const { data: logs } = await client.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(6);
-      if (logs && logs.length > 0) {
-        tableDiv.innerHTML = `
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Heure</th>
-                  <th>Utilisateur</th>
-                  <th>Action</th>
-                  <th>Détails</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${logs.map(log => `
-                  <tr>
-                    <td style="color: var(--gray-500); font-family: monospace; font-size: 0.8rem;">
-                      ${new Date(log.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td><strong>${log.login}</strong></td>
-                    <td><span class="badge badge-primary">${log.action}</span></td>
-                    <td>${log.details}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        `;
-      }
-    } catch (e) {
-      console.error(e);
-    }
   },
 
   renderEmptyStateNotice() {
