@@ -539,11 +539,15 @@ const SecurityModule = {
       const client = SupabaseClient.client;
       if (client) {
         try {
+          const curUser = Auth.getCurrentUser();
           await client.from('kermesse_messages').insert([{
-            channel: 'direction',
-            message: alertMsg,
-            sender_id: Auth.getCurrentUser()?.id,
-            sender_name: 'SÉCURITÉ URGENCE'
+            channel_type: 'urgent',
+            content: alertMsg,
+            sender_id: curUser?.id,
+            sender_login: curUser?.login || 'Securite',
+            sender_role: curUser?.role_name || 'Sécurité & Secours',
+            title: 'ALERTE ENFANT PERDU',
+            is_urgent: true
           }]);
         } catch (e) {}
       }

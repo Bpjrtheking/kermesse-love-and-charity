@@ -157,6 +157,19 @@ const MessagesModule = {
   },
 
   async loadMetadata() {
+    if (!this.usersMap) this.usersMap = new Map();
+
+    // Alimenter immédiatement avec le compte connecté et le SuperAdmin
+    const currentUser = Auth.getCurrentUser();
+    if (currentUser) {
+      if (currentUser.id) this.usersMap.set(currentUser.id, currentUser);
+      if (currentUser.login) this.usersMap.set(currentUser.login.toLowerCase(), currentUser);
+    }
+    const superName = localStorage.getItem('lc_superadmin_name') || 'Mounir (SuperAdministrateur)';
+    const superLogin = (localStorage.getItem('lc_superadmin_login') || 'mounir').toLowerCase();
+    this.usersMap.set(superLogin, { login: superLogin, full_name: superName });
+    this.usersMap.set('mounir', { login: 'mounir', full_name: superName });
+
     const client = SupabaseClient.client;
     if (!client) return;
 
@@ -165,20 +178,57 @@ const MessagesModule = {
       const { data: stands } = await client.from('stands').select('id, name, color_name, number').order('name');
       this.stands = stands || [];
 
-      // 2. Charger les utilisateurs pour les messages directs et la supervision
-      const { data: users } = await client.from('app_users').select('id, login, full_name, is_original_superadmin, role:roles(id, code, name)').eq('is_active', true);
+      // 2. Charger TOUS les utilisateurs pour que les noms complets soient résolus dans 100% des cas
+      const { data: users } = await client.from('app_users').select('id, login, full_name, is_original_superadmin, is_active, role:roles(id, code, name)');
       this.allUsers = users || [];
-      this.usersMap = new Map();
-      (users || []).forEach(u => {
+      this.allUsers.forEach(u => {
         if (u.id) this.usersMap.set(u.id, u);
         if (u.login) this.usersMap.set(u.login.toLowerCase(), u);
       });
 
-      const currentUser = Auth.getCurrentUser();
-      this.users = (users || []).filter(u => u.id !== currentUser?.id && u.login !== currentUser?.login);
+      this.users = (this.allUsers).filter(u => u.is_active !== false && u.id !== currentUser?.id && u.login !== currentUser?.login);
     } catch (e) {
       console.warn('[MessagesModule] Erreur chargement metadata:', e);
     }
+  },
+
+  /**
+   * Récupère le nom complet de l'expéditeur au lieu du login
+   * (Règle d'or : Afficher les noms complets comme Mamadou Sy au lieu de Mamadou)
+   */
+  getSenderDisplayName(m) {
+    if (!m) return 'Membre';
+
+    // 1. Si c'est l'utilisateur connecté lui-même
+    const currentUser = Auth.getCurrentUser();
+    if (currentUser) {
+      const isCurrent = (m.sender_id && currentUser.id && m.sender_id === currentUser.id) ||
+                        (m.sender_login && currentUser.login && m.sender_login.toLowerCase() === currentUser.login.toLowerCase());
+      if (isCurrent) {
+        return currentUser.full_name || currentUser.login;
+      }
+    }
+
+    // 2. Recherche par sender_id dans usersMap
+    if (m.sender_id && this.usersMap && this.usersMap.has(m.sender_id)) {
+      const u = this.usersMap.get(m.sender_id);
+      if (u && u.full_name) return u.full_name;
+    }
+
+    // 3. Recherche par sender_login dans usersMap
+    const login = (m.sender_login || '').toLowerCase().trim();
+    if (login && this.usersMap && this.usersMap.has(login)) {
+      const u = this.usersMap.get(login);
+      if (u && u.full_name) return u.full_name;
+    }
+
+    // 4. Cas du SuperAdministrateur originel (Mounir)
+    if (login === 'mounir') {
+      return localStorage.getItem('lc_superadmin_name') || 'Mounir (SuperAdministrateur)';
+    }
+
+    // 5. Fallback gracieux
+    return m.sender_name || m.sender_login || 'Membre';
   },
 
   /**
@@ -577,7 +627,7 @@ const MessagesModule = {
       subtitle: 'Tous les membres et stands',
       avatar: '📢',
       avatarClass: 'broadcast',
-      lastSnippet: lastBroadcast ? `${lastBroadcast.sender_login}: ${lastBroadcast.content}` : 'Discussion d\'équipe',
+      lastSnippet: lastBroadcast ? `${this.getSenderDisplayName(lastBroadcast)}: ${lastBroadcast.content}` : 'Discussion d\'équipe',
       lastTime: lastBroadcast ? this.formatTime(lastBroadcast.created_at) : '',
       urgentCount: 0,
       unreadCount: unreadBroadcast
@@ -612,7 +662,7 @@ const MessagesModule = {
         subtitle: `Stand ${s.color_name || ''}`,
         avatar: '🎪',
         avatarClass: 'stand',
-        lastSnippet: lastStand ? `${lastStand.sender_login}: ${lastStand.content}` : 'Équipe de stand',
+        lastSnippet: lastStand ? `${this.getSenderDisplayName(lastStand)}: ${lastStand.content}` : 'Équipe de stand',
         lastTime: lastStand ? this.formatTime(lastStand.created_at) : '',
         urgentCount: standMsgs.filter(m => m.is_urgent).length,
         unreadCount: unreadStand
@@ -637,7 +687,7 @@ const MessagesModule = {
         subtitle: u.role?.name || 'Administrateur',
         avatar: (u.login || 'U').charAt(0).toUpperCase(),
         avatarClass: 'direct',
-        lastSnippet: lastDirect ? lastDirect.content : 'Démarrer une conversation...',
+        lastSnippet: lastDirect ? (this.isMine(lastDirect) ? `Vous: ${lastDirect.content}` : `${this.getSenderDisplayName(lastDirect)}: ${lastDirect.content}`) : 'Démarrer une conversation...',
         lastTime: lastDirect ? this.formatTime(lastDirect.created_at) : '',
         urgentCount: 0,
         unreadCount: unreadDirect
@@ -698,11 +748,11 @@ const MessagesModule = {
           user2Login: pair.user2Login,
           user1Name: pair.user1Name,
           user2Name: pair.user2Name,
-          title: `👁️ ${pair.user1Login} ↔ ${pair.user2Login}`,
+          title: `👁️ ${pair.user1Name || pair.user1Login} ↔ ${pair.user2Name || pair.user2Login}`,
           subtitle: `Supervision SuperAdmin • ${pair.messages.length} échange(s)`,
           avatar: '👁️',
           avatarClass: 'supervision',
-          lastSnippet: lastMsg ? `${lastMsg.sender_login}: ${lastMsg.content}` : 'Échanges surveillés',
+          lastSnippet: lastMsg ? `${this.getSenderDisplayName(lastMsg)}: ${lastMsg.content}` : 'Échanges surveillés',
           lastTime: lastMsg ? this.formatTime(lastMsg.created_at) : '',
           urgentCount: 0,
           unreadCount: unreadSupervision
@@ -859,7 +909,7 @@ const MessagesModule = {
       user2Login: u2,
       user1Name: u1Obj?.full_name || u1,
       user2Name: u2Obj?.full_name || u2,
-      title: `👁️ ${u1} ↔ ${u2}`,
+      title: `👁️ ${u1Obj?.full_name || u1} ↔ ${u2Obj?.full_name || u2}`,
       subtitle: `Supervision SuperAdmin`,
       avatar: '👁️',
       avatarClass: 'supervision'
@@ -971,14 +1021,14 @@ const MessagesModule = {
           <div class="supervision-banner">
             <div style="font-size: 1.4rem;">👁️</div>
             <div>
-              <strong>Supervision SuperAdmin Active :</strong> Surveillance des messages privés entre <strong>${chat.user1Login}</strong> et <strong>${chat.user2Login}</strong>.<br>
+              <strong>Supervision SuperAdmin Active :</strong> Surveillance des messages privés entre <strong>${chat.user1Name || chat.user1Login}</strong> et <strong>${chat.user2Name || chat.user2Login}</strong>.<br>
               <span style="font-size: 0.76rem; color: #7e22ce;">Aucun échange secret n'a été détecté entre ces deux administrateurs pour le moment. Tout nouveau message apparaîtra ici instantanément.</span>
             </div>
           </div>
           <div style="margin: auto; text-align: center; padding: 2.5rem 1rem; color: var(--gray-400);">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">👁️</div>
             <div style="font-weight: 700; color: var(--gray-700);">Fil privé vierge</div>
-            <div style="font-size: 0.85rem; margin-top: 0.25rem;">Aucune conversation privée n'a encore eu lieu entre ${chat.user1Login} et ${chat.user2Login}.</div>
+            <div style="font-size: 0.85rem; margin-top: 0.25rem;">Aucune conversation privée n'a encore eu lieu entre ${chat.user1Name || chat.user1Login} et ${chat.user2Name || chat.user2Login}.</div>
           </div>
         `;
         return;
@@ -988,7 +1038,7 @@ const MessagesModule = {
         <div class="supervision-banner">
           <div style="font-size: 1.4rem;">👁️</div>
           <div>
-            <strong>Supervision SuperAdmin Active :</strong> Vous observez l'historique complet et transparent des messages privés entre <strong>${chat.user1Login}</strong> et <strong>${chat.user2Login}</strong>.<br>
+            <strong>Supervision SuperAdmin Active :</strong> Vous observez l'historique complet et transparent des messages privés entre <strong>${chat.user1Name || chat.user1Login}</strong> et <strong>${chat.user2Name || chat.user2Login}</strong>.<br>
             <span style="font-size: 0.76rem; color: #7e22ce;">Transparence totale garantie pour éviter tout accord occulte ou coup bas durant la kermesse.</span>
           </div>
         </div>
@@ -1009,7 +1059,7 @@ const MessagesModule = {
         html += `
           <div class="chat-bubble ${isUser1 ? 'bubble-supervision-1' : 'bubble-supervision-2'} ${m.is_urgent ? 'bubble-urgent' : ''}">
             <div class="bubble-sender" style="color: ${isUser1 ? '#15803d' : '#1d4ed8'};">
-              <span>👤 ${m.sender_login}</span>
+              <span>👤 ${this.getSenderDisplayName(m)}</span>
               <span style="font-size: 0.68rem; color: var(--gray-500); font-weight: normal;">(${m.sender_role || 'Admin'})</span>
             </div>
             ${m.title ? `<div style="font-weight: 700; font-size: 0.88rem; margin-bottom: 0.2rem;">${m.title}</div>` : ''}
@@ -1079,7 +1129,7 @@ const MessagesModule = {
         <div class="chat-bubble ${isMe ? 'bubble-out' : 'bubble-in'} ${isUrgent ? 'bubble-urgent' : ''}">
           ${!isMe ? `
             <div class="bubble-sender">
-              <span>${m.sender_login}</span>
+              <span>${this.getSenderDisplayName(m)}</span>
               <span style="font-size: 0.68rem; color: var(--gray-400); font-weight: normal;">(${m.sender_role || 'Membre'})</span>
             </div>
           ` : ''}
