@@ -987,7 +987,7 @@ GRANT EXECUTE ON FUNCTION admin_create_app_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO
 GRANT EXECUTE ON FUNCTION admin_reset_user_credentials(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION admin_delete_app_user(UUID, TEXT) TO anon, authenticated, service_role;
 
--- 6. DONNÉES SYSTÈME ET RÔLES OFFICIELS DES 9 PÔLES + SUPERADMIN
+-- 6. DONNÉES SYSTÈME ET COMPTE INITIAL MOUNIR (9 PÔLES OFFICIELS + SUPERADMIN)
 INSERT INTO roles (code, name, description, is_system, permissions)
 VALUES 
 (
@@ -1002,63 +1002,63 @@ VALUES
     '📢 Responsable — Communication & Affichage', 
     'Pôle 1 : Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse',
     TRUE,
-    '{"communication_manage": true, "stands_view": true, "messages_view": true}'::jsonb
+    '{"communication_manage": true, "history_view": true}'::jsonb
 ),
 (
-    'admin_restauration', 
-    '🍔 Responsable — Restauration', 
-    'Pôle 2 : Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette',
+    'admin_finances', 
+    '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', 
+    'Pôle 2 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts',
     TRUE,
-    '{"food_manage": true, "stocks_manage": true, "cash_manage": true, "messages_view": true}'::jsonb
+    '{"tickets_manage": true, "tickets_sell": true, "cash_manage": true, "closures_manage": true, "finances_view": true, "history_view": true}'::jsonb
 ),
 (
     'admin_decoration', 
     '🎨 Responsable — Organisation & Décoration', 
     'Pôle 3 : Ambiance festive, matériel déco, aménagement des zones et plan d''implantation',
     TRUE,
-    '{"decoration_manage": true, "locations_manage": true, "messages_view": true}'::jsonb
+    '{"decoration_manage": true, "history_view": true}'::jsonb
 ),
 (
-    'admin_lots', 
-    '🎁 Responsable — Lots à gagner', 
-    'Pôle 4 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions',
+    'admin_restauration', 
+    '🍔 Responsable — Restauration', 
+    'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette',
     TRUE,
-    '{"gifts_manage": true, "gifts_allocate": true, "messages_view": true}'::jsonb
+    '{"food_manage": true, "stocks_manage": true, "history_view": true}'::jsonb
 ),
 (
     'admin_stands', 
     '🎪 Responsable — Stands & Jeux', 
     'Pôle 5 : Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands',
     TRUE,
-    '{"stands_manage": true, "games_view": true, "tickets_sell": true, "messages_view": true}'::jsonb
+    '{"stands_manage": true, "history_view": true}'::jsonb
 ),
 (
-    'admin_finances', 
-    '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', 
-    'Pôle 6 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts',
+    'admin_lots', 
+    '🎁 Responsable — Lots à gagner', 
+    'Pôle 6 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions',
     TRUE,
-    '{"tickets_manage": true, "tickets_sell": true, "cash_manage": true, "finances_view": true, "closures_manage": true, "messages_view": true}'::jsonb
+    '{"gifts_manage": true, "history_view": true}'::jsonb
 ),
 (
     'admin_benevoles', 
     '👥 Responsable — Planning & Bénévoles', 
     'Pôle 7 : Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits',
     TRUE,
-    '{"users_manage": true, "planning_manage": true, "messages_view": true}'::jsonb
+    '{"planning_manage": true, "users_manage": true, "history_view": true}'::jsonb
 ),
 (
     'admin_logistique', 
     '📦 Responsable — Logistique & Installation', 
     'Pôle 8 : Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists',
     TRUE,
-    '{"materials_manage": true, "loans_manage": true, "movements_manage": true, "returns_manage": true, "messages_view": true}'::jsonb
+    '{"materials_manage": true, "loans_manage": true, "returns_manage": true, "history_view": true}'::jsonb
 ),
 (
     'admin_securite', 
     '🛡️ Responsable — Accueil & Sécurité', 
     'Pôle 9 : Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents',
     TRUE,
-    '{"security_manage": true, "incidents_manage": true, "cleaning_manage": true, "messages_view": true}'::jsonb
+    '{"security_manage": true, "incidents_manage": true, "cleaning_manage": true, "history_view": true}'::jsonb
 )
 ON CONFLICT (code) DO UPDATE SET 
     name = EXCLUDED.name,

@@ -4,7 +4,7 @@
  */
 
 const Permissions = {
-  // Codes rôles système officiels
+  // Codes rôles système officiels pour les 9 pôles + SuperAdmin
   ROLES: {
     SUPERADMIN: 'superadmin',
     ADMIN_COMMUNICATION: 'admin_communication',
@@ -82,20 +82,21 @@ const Permissions = {
       case 'communication':
         return role === this.ROLES.ADMIN_COMMUNICATION || this.can(this.LIST.COMMUNICATION_MANAGE);
 
-      // Pôle 2 : Billetterie & Caisses
+      // Pôle 2 : Billetterie, Tickets, Caisse & Comptabilité
       case 'tickets':
       case 'cash':
       case 'expenses':
       case 'closures':
-        return role === this.ROLES.ADMIN_FINANCES || this.can(this.LIST.CASH_MANAGE) || this.can(this.LIST.TICKETS_MANAGE);
+        return role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie' || this.can(this.LIST.CASH_MANAGE) || this.can(this.LIST.TICKETS_MANAGE);
 
-      // Pôle 3 : Décoration & Organisation
+      // Pôle 3 : Organisation & Décoration
       case 'decoration':
       case 'locations':
-        return role === this.ROLES.ADMIN_DECORATION || this.can(this.LIST.DECORATION_MANAGE);
+        return role === this.ROLES.ADMIN_DECORATION || role === 'admin_organisation' || this.can(this.LIST.DECORATION_MANAGE);
 
-      // Pôle 4 : Restauration & Buvette
+      // Pôle 4 : Restauration
       case 'stocks':
+      case 'inventory':
         return role === this.ROLES.ADMIN_RESTAURATION || this.can(this.LIST.FOOD_MANAGE) || this.can(this.LIST.STOCKS_MANAGE);
 
       // Pôle 5 : Stands & Jeux
@@ -107,7 +108,7 @@ const Permissions = {
       case 'gifts':
         return role === this.ROLES.ADMIN_LOTS || this.can(this.LIST.GIFTS_MANAGE);
 
-      // Pôle 7 : Bénévoles & Planning
+      // Pôle 7 : Planning & Bénévoles
       case 'members':
       case 'teams':
       case 'planning':
@@ -120,7 +121,7 @@ const Permissions = {
       case 'returns':
         return role === this.ROLES.ADMIN_LOGISTIQUE || this.can(this.LIST.MATERIALS_MANAGE);
 
-      // Pôle 9 : Accueil, Nettoyage & Sécurité
+      // Pôle 9 : Accueil & Sécurité
       case 'security':
       case 'incidents':
         return role === this.ROLES.ADMIN_SECURITE || this.can(this.LIST.SECURITY_MANAGE) || this.can(this.LIST.INCIDENTS_MANAGE);
@@ -134,6 +135,163 @@ const Permissions = {
 
       default:
         return false;
+    }
+  },
+
+  // Configuration de la barre de navigation basse (mobile) selon le rôle de l'utilisateur
+  getBottomNavConfig(roleCode) {
+    switch (roleCode) {
+      case 'superadmin':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'cash', icon: '💵', label: 'Caisses' },
+          { module: 'stands', icon: '🎪', label: 'Stands' },
+          { module: 'roles', icon: '👑', label: 'Rôles' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_communication':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'communication', icon: '📢', label: 'Affichage' },
+          { module: 'stands', icon: '🎪', label: 'Stands' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_finances':
+      case 'admin_billetterie':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'tickets', icon: '🎟️', label: 'Tickets' },
+          { module: 'cash', icon: '💵', label: 'Caisses' },
+          { module: 'closures', icon: '🔒', label: 'Clôtures' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_decoration':
+      case 'admin_organisation':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'decoration', icon: '🎨', label: 'Déco' },
+          { module: 'locations', icon: '📍', label: 'Espaces' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_restauration':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'stocks', icon: '🍔', label: 'Stocks' },
+          { module: 'inventory', icon: '📦', label: 'Inventaire' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_stands':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'stands', icon: '🎪', label: 'Stands' },
+          { module: 'games', icon: '🎯', label: 'Jeux' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_lots':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'gifts', icon: '🎁', label: 'Lots' },
+          { module: 'stands', icon: '🎪', label: 'Stands' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_benevoles':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'members', icon: '👥', label: 'Bénévoles' },
+          { module: 'teams', icon: '🏷️', label: 'Équipes' },
+          { module: 'tasks', icon: '📋', label: 'Planning' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_logistique':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'materials', icon: '📦', label: 'Matériel' },
+          { module: 'loans', icon: '🤝', label: 'Prêts' },
+          { module: 'movements', icon: '🔄', label: 'Flux' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      case 'admin_securite':
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'security', icon: '🛡️', label: 'Sécurité' },
+          { module: 'incidents', icon: '🚨', label: 'Incidents' },
+          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+
+      default:
+        return [
+          { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'stands', icon: '🎪', label: 'Stands' },
+          { module: 'tickets', icon: '🎟️', label: 'Tickets' },
+          { module: 'cash', icon: '💵', label: 'Caisses' },
+          { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
+        ];
+    }
+  },
+
+  // Génère dynamiquement les boutons de la barre basse mobile adaptée au pôle de l'utilisateur
+  renderBottomNav() {
+    const nav = document.getElementById('mobileBottomNav');
+    if (!nav) return;
+
+    const user = Auth.getCurrentUser();
+    const roleCode = user ? (user.is_original_superadmin ? 'superadmin' : (user.role_code || '')) : '';
+    const items = this.getBottomNavConfig(roleCode);
+    const currentMod = (window.App && window.App.currentModule) ? window.App.currentModule : (window.location.hash.replace('#', '') || 'dashboard');
+
+    let html = '';
+    items.forEach(it => {
+      const isActive = it.module === currentMod ? ' active' : '';
+      if (it.isChat) {
+        html += `
+        <button class="bottom-nav-item${isActive}" data-bottom-module="${it.module}" onclick="App.navigateTo('${it.module}')">
+          <span class="bottom-nav-icon-wrapper">
+            <span class="bottom-nav-icon">${it.icon}</span>
+            <span id="bottomNavMessagesBadge" class="nav-unread-badge" style="display: none;">0</span>
+          </span>
+          <span class="bottom-nav-label">${it.label}</span>
+        </button>`;
+      } else {
+        html += `
+        <button class="bottom-nav-item${isActive}" data-bottom-module="${it.module}" onclick="App.navigateTo('${it.module}')">
+          <span class="bottom-nav-icon">${it.icon}</span>
+          <span class="bottom-nav-label">${it.label}</span>
+        </button>`;
+      }
+    });
+
+    // Le bouton Menu est toujours présent à droite pour ouvrir la sidebar complète
+    html += `
+      <button class="bottom-nav-item" onclick="App.toggleSidebar()">
+        <span class="bottom-nav-icon">☰</span>
+        <span class="bottom-nav-label">Menu</span>
+      </button>
+    `;
+
+    nav.innerHTML = html;
+
+    // Actualiser le badge chat s'il y a des messages non lus
+    if (typeof MessagesModule !== 'undefined' && MessagesModule.updateUnreadCount) {
+      try {
+        MessagesModule.updateUnreadCount();
+      } catch (e) {
+        // Ignorer si en cours de chargement
+      }
     }
   },
 
@@ -156,6 +314,9 @@ const Permissions = {
       const visibleLinks = group.querySelectorAll('.nav-item:not([style*="display: none"])');
       group.style.display = visibleLinks.length > 0 ? 'block' : 'none';
     });
+
+    // Adapter également la barre basse mobile au rôle de l'utilisateur
+    this.renderBottomNav();
   }
 };
 

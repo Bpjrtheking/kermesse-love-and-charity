@@ -74,17 +74,23 @@ const RolesModule = {
         `)
         .order('is_original_superadmin', { ascending: false });
 
-      const { data: rawRoles, error: rErr } = await client.from('roles').select('*');
-      let roles = (rawRoles || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
-      if (roles.length === 0) {
-        roles = this.DEFAULT_ROLES;
-      } else {
-        roles.sort((a, b) => this.OFFICIAL_ROLE_CODES.indexOf(a.code) - this.OFFICIAL_ROLE_CODES.indexOf(b.code));
-      }
+      const { data: roles, error: rErr } = await client.from('roles').select('*').order('name', { ascending: true });
 
       if (uErr) throw uErr;
       this.renderUsersTable(users || []);
-      this.renderRolesTable(roles || []);
+
+      // Filtrer et harmoniser selon les 9 pôles officiels
+      const officialMap = new Map(this.DEFAULT_ROLES.map(r => [r.code, r]));
+      let displayRoles = (roles || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
+      if (displayRoles.length === 0) {
+        displayRoles = this.DEFAULT_ROLES;
+      } else {
+        displayRoles = displayRoles.map(r => {
+          const def = officialMap.get(r.code);
+          return def ? { ...r, name: def.name, description: def.description } : r;
+        });
+      }
+      this.renderRolesTable(displayRoles);
     } catch (e) {
       console.error('[RolesModule Error]', e);
       this.renderLocalUsers();
@@ -217,11 +223,11 @@ const RolesModule = {
   OFFICIAL_ROLE_CODES: [
     'superadmin',
     'admin_communication',
-    'admin_restauration',
-    'admin_decoration',
-    'admin_lots',
-    'admin_stands',
     'admin_finances',
+    'admin_decoration',
+    'admin_restauration',
+    'admin_stands',
+    'admin_lots',
     'admin_benevoles',
     'admin_logistique',
     'admin_securite'
@@ -229,15 +235,15 @@ const RolesModule = {
 
   DEFAULT_ROLES: [
     { code: 'superadmin', name: '👑 SuperAdministrateur — Coordination Générale', description: 'Accès global, supervision des 9 pôles, gestion des comptes et finances' },
-    { code: 'admin_communication', name: '📢 Responsable — Communication & Affichage', description: 'Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse' },
-    { code: 'admin_restauration', name: '🍔 Responsable — Restauration', description: 'Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette' },
-    { code: 'admin_decoration', name: '🎨 Responsable — Organisation & Décoration', description: 'Ambiance festive, matériel déco, aménagement des zones et plan d\'implantation' },
-    { code: 'admin_lots', name: '🎁 Responsable — Lots à gagner', description: 'Catalogue des lots (achats & dons), dotations stands et suivi des distributions' },
-    { code: 'admin_stands', name: '🎪 Responsable — Stands & Jeux', description: 'Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands' },
-    { code: 'admin_finances', name: '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', description: 'Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts' },
-    { code: 'admin_benevoles', name: '👥 Responsable — Planning & Bénévoles', description: 'Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits' },
-    { code: 'admin_logistique', name: '📦 Responsable — Logistique & Installation', description: 'Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists' },
-    { code: 'admin_securite', name: '🛡️ Responsable — Accueil & Sécurité', description: 'Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents' }
+    { code: 'admin_communication', name: '📢 Responsable — Communication & Affichage', description: 'Pôle 1 : Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse' },
+    { code: 'admin_finances', name: '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', description: 'Pôle 2 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts' },
+    { code: 'admin_decoration', name: '🎨 Responsable — Organisation & Décoration', description: 'Pôle 3 : Ambiance festive, matériel déco, aménagement des zones et plan d\'implantation' },
+    { code: 'admin_restauration', name: '🍔 Responsable — Restauration', description: 'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette' },
+    { code: 'admin_stands', name: '🎪 Responsable — Stands & Jeux', description: 'Pôle 5 : Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands' },
+    { code: 'admin_lots', name: '🎁 Responsable — Lots à gagner', description: 'Pôle 6 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions' },
+    { code: 'admin_benevoles', name: '👥 Responsable — Planning & Bénévoles', description: 'Pôle 7 : Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits' },
+    { code: 'admin_logistique', name: '📦 Responsable — Logistique & Installation', description: 'Pôle 8 : Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists' },
+    { code: 'admin_securite', name: '🛡️ Responsable — Accueil & Sécurité', description: 'Pôle 9 : Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents' }
   ],
 
   async openCreateUserModal() {
@@ -245,10 +251,17 @@ const RolesModule = {
     let roles = [];
 
     if (client) {
-      const { data } = await client.from('roles').select('id, code, name, description');
+      const { data } = await client.from('roles').select('id, code, name, description').order('name');
       const filtered = (data || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
-      roles = filtered.length > 0 ? filtered : this.DEFAULT_ROLES;
-      roles.sort((a, b) => this.OFFICIAL_ROLE_CODES.indexOf(a.code) - this.OFFICIAL_ROLE_CODES.indexOf(b.code));
+      if (filtered && filtered.length > 0) {
+        const officialMap = new Map(this.DEFAULT_ROLES.map(r => [r.code, r]));
+        roles = filtered.map(r => {
+          const def = officialMap.get(r.code);
+          return def ? { ...r, name: def.name, description: def.description } : r;
+        });
+      } else {
+        roles = this.DEFAULT_ROLES;
+      }
     } else {
       roles = this.DEFAULT_ROLES;
     }
@@ -481,10 +494,17 @@ const RolesModule = {
     const client = SupabaseClient.client;
     let roles = [];
     if (client) {
-      const { data } = await client.from('roles').select('id, code, name');
+      const { data } = await client.from('roles').select('id, code, name').order('name');
       const filtered = (data || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
-      roles = filtered.length > 0 ? filtered : this.DEFAULT_ROLES;
-      roles.sort((a, b) => this.OFFICIAL_ROLE_CODES.indexOf(a.code) - this.OFFICIAL_ROLE_CODES.indexOf(b.code));
+      if (filtered && filtered.length > 0) {
+        const officialMap = new Map(this.DEFAULT_ROLES.map(r => [r.code, r]));
+        roles = filtered.map(r => {
+          const def = officialMap.get(r.code);
+          return def ? { ...r, name: def.name } : r;
+        });
+      } else {
+        roles = this.DEFAULT_ROLES;
+      }
     } else {
       roles = this.DEFAULT_ROLES;
     }
