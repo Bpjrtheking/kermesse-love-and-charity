@@ -54,13 +54,55 @@ const Permissions = {
       return true;
     }
 
-    const perms = user.permissions || {};
-    if (perms.all === true) return true;
+    const role = user.role_code;
 
-    return Boolean(perms[permissionKey]);
+    // Permissions strictes par pôle métier (aucune fuite entre pôles)
+    switch (permissionKey) {
+      case this.LIST.COMMUNICATION_MANAGE:
+        return role === this.ROLES.ADMIN_COMMUNICATION;
+
+      case this.LIST.TICKETS_MANAGE:
+      case this.LIST.TICKETS_SELL:
+      case this.LIST.CASH_MANAGE:
+      case this.LIST.CLOSURES_MANAGE:
+      case this.LIST.FINANCES_VIEW:
+        return role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie';
+
+      case this.LIST.DECORATION_MANAGE:
+        return role === this.ROLES.ADMIN_DECORATION || role === 'admin_organisation';
+
+      case this.LIST.FOOD_MANAGE:
+      case this.LIST.STOCKS_MANAGE:
+        return role === this.ROLES.ADMIN_RESTAURATION;
+
+      case this.LIST.STANDS_MANAGE:
+        return role === this.ROLES.ADMIN_STANDS;
+
+      case this.LIST.GIFTS_MANAGE:
+        return role === this.ROLES.ADMIN_LOTS;
+
+      case this.LIST.PLANNING_MANAGE:
+      case this.LIST.USERS_MANAGE:
+        return role === this.ROLES.ADMIN_BENEVOLES;
+
+      case this.LIST.MATERIALS_MANAGE:
+      case this.LIST.LOANS_MANAGE:
+      case this.LIST.RETURNS_MANAGE:
+        return role === this.ROLES.ADMIN_LOGISTIQUE;
+
+      case this.LIST.SECURITY_MANAGE:
+      case this.LIST.INCIDENTS_MANAGE:
+      case this.LIST.CLEANING_MANAGE:
+        return role === this.ROLES.ADMIN_SECURITE;
+
+      default:
+        const perms = user.permissions || {};
+        if (perms.all === true) return true;
+        return Boolean(perms[permissionKey]);
+    }
   },
 
-  // Vérifie l'accès à un module spécifique
+  // Vérifie l'accès à un module spécifique (strictement cloisonné par pôle)
   canAccessModule(moduleName) {
     const user = Auth.getCurrentUser();
     if (!user) return false;
@@ -80,51 +122,51 @@ const Permissions = {
     switch (moduleName) {
       // Pôle 1 : Communication & Affichage
       case 'communication':
-        return role === this.ROLES.ADMIN_COMMUNICATION || this.can(this.LIST.COMMUNICATION_MANAGE);
+        return role === this.ROLES.ADMIN_COMMUNICATION;
 
       // Pôle 2 : Billetterie, Tickets, Caisse & Comptabilité
       case 'tickets':
       case 'cash':
       case 'expenses':
       case 'closures':
-        return role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie' || this.can(this.LIST.CASH_MANAGE) || this.can(this.LIST.TICKETS_MANAGE);
+        return role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie';
 
       // Pôle 3 : Organisation & Décoration
       case 'decoration':
       case 'locations':
-        return role === this.ROLES.ADMIN_DECORATION || role === 'admin_organisation' || this.can(this.LIST.DECORATION_MANAGE);
+        return role === this.ROLES.ADMIN_DECORATION || role === 'admin_organisation';
 
       // Pôle 4 : Restauration
       case 'stocks':
       case 'inventory':
-        return role === this.ROLES.ADMIN_RESTAURATION || this.can(this.LIST.FOOD_MANAGE) || this.can(this.LIST.STOCKS_MANAGE);
+        return role === this.ROLES.ADMIN_RESTAURATION;
 
       // Pôle 5 : Stands & Jeux
       case 'stands':
       case 'games':
-        return role === this.ROLES.ADMIN_STANDS || role === this.ROLES.ADMIN_COMMUNICATION || this.can(this.LIST.STANDS_MANAGE);
+        return role === this.ROLES.ADMIN_STANDS;
 
       // Pôle 6 : Lots à gagner
       case 'gifts':
-        return role === this.ROLES.ADMIN_LOTS || this.can(this.LIST.GIFTS_MANAGE);
+        return role === this.ROLES.ADMIN_LOTS;
 
       // Pôle 7 : Planning & Bénévoles
       case 'members':
       case 'teams':
       case 'planning':
-        return role === this.ROLES.ADMIN_BENEVOLES || this.can(this.LIST.PLANNING_MANAGE) || this.can(this.LIST.USERS_MANAGE);
+        return role === this.ROLES.ADMIN_BENEVOLES;
 
       // Pôle 8 : Logistique & Installation
       case 'materials':
       case 'loans':
       case 'movements':
       case 'returns':
-        return role === this.ROLES.ADMIN_LOGISTIQUE || this.can(this.LIST.MATERIALS_MANAGE);
+        return role === this.ROLES.ADMIN_LOGISTIQUE;
 
       // Pôle 9 : Accueil & Sécurité
       case 'security':
       case 'incidents':
-        return role === this.ROLES.ADMIN_SECURITE || this.can(this.LIST.SECURITY_MANAGE) || this.can(this.LIST.INCIDENTS_MANAGE);
+        return role === this.ROLES.ADMIN_SECURITE;
 
       // Supervision réservée au SuperAdmin
       case 'roles':

@@ -11,6 +11,7 @@ const DashboardModule = {
   async render(container) {
     const user = Auth.getCurrentUser();
     const isSuperAdmin = user && (user.is_original_superadmin || user.role_code === 'superadmin');
+    const canSeeFinance = isSuperAdmin || (user && (user.role_code === 'admin_finances' || user.role_code === 'admin_billetterie'));
 
     container.innerHTML = `
       <div class="dashboard-header" style="margin-bottom: 2rem;">
@@ -45,6 +46,7 @@ const DashboardModule = {
           </div>
         </div>
 
+        ${canSeeFinance ? `
         <div class="stat-card">
           <div class="stat-icon green">🎟️</div>
           <div class="stat-details">
@@ -62,6 +64,7 @@ const DashboardModule = {
             <div class="stat-sub" id="kpiBalanceSub">Recettes: 0 F | Dépenses: 0 F</div>
           </div>
         </div>
+        ` : ''}
 
         <div class="stat-card">
           <div class="stat-icon blue">📦</div>
@@ -102,48 +105,16 @@ const DashboardModule = {
         </div>
       </div>
 
-      <!-- Contenu contextuel et actions rapides vers les 9 Pôles -->
+      <!-- Contenu contextuel et actions rapides vers les Pôles -->
       <div class="card">
         <div class="card-header">
           <div class="card-title">
-            <span>⚡</span> Accès Direct aux 9 Pôles Opérationnels
+            <span>⚡</span> ${isSuperAdmin ? 'Accès Direct aux 9 Pôles Opérationnels' : 'Raccourcis de Mon Pôle'}
           </div>
         </div>
         <div class="card-body">
           <div class="poles-shortcut-grid">
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('communication')">
-              <span class="pole-icon">📢</span> <span class="pole-label">P1 : Communication</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('tickets')">
-              <span class="pole-icon">🎟️</span> <span class="pole-label">P2 : Billetterie</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('cash')">
-              <span class="pole-icon">💵</span> <span class="pole-label">P2 : Caisses</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('decoration')">
-              <span class="pole-icon">🎨</span> <span class="pole-label">P3 : Décoration (10 Zones)</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('stocks')">
-              <span class="pole-icon">🍔</span> <span class="pole-label">P4 : Restauration</span>
-            </button>
-            <button class="btn btn-primary btn-sm pole-shortcut-btn" onclick="App.navigateTo('stands')">
-              <span class="pole-icon">🎪</span> <span class="pole-label">P5 : Stands &amp; Jeux</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('gifts')">
-              <span class="pole-icon">🎁</span> <span class="pole-label">P6 : Lots à gagner</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('members')">
-              <span class="pole-icon">👥</span> <span class="pole-label">P7 : Bénévoles &amp; Planning</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('materials')">
-              <span class="pole-icon">📦</span> <span class="pole-label">P8 : Logistique</span>
-            </button>
-            <button class="btn btn-danger btn-sm pole-shortcut-btn" onclick="App.navigateTo('security')">
-              <span class="pole-icon">🛡️</span> <span class="pole-label">P9 : Accueil &amp; Sécurité</span>
-            </button>
-            <button class="btn btn-secondary btn-sm pole-shortcut-btn" onclick="App.navigateTo('messages')">
-              <span class="pole-icon">💬</span> <span class="pole-label">Messages &amp; Alertes</span>
-            </button>
+            ${this.renderPoleShortcuts()}
           </div>
         </div>
       </div>
@@ -174,6 +145,31 @@ const DashboardModule = {
     this.loadRealData();
   },
 
+  renderPoleShortcuts() {
+    const shortcuts = [
+      { mod: 'communication', icon: '📢', label: 'P1 : Communication & Affichage', btnClass: 'btn-secondary' },
+      { mod: 'tickets', icon: '🎟️', label: 'P2 : Billetterie', btnClass: 'btn-secondary' },
+      { mod: 'cash', icon: '💵', label: 'P2 : Caisses & Compta', btnClass: 'btn-secondary' },
+      { mod: 'decoration', icon: '🎨', label: 'P3 : Décoration & Organisation', btnClass: 'btn-secondary' },
+      { mod: 'stocks', icon: '🍔', label: 'P4 : Restauration (Stocks)', btnClass: 'btn-secondary' },
+      { mod: 'inventory', icon: '📦', label: 'P4 : Inventaires & Pertes', btnClass: 'btn-secondary' },
+      { mod: 'stands', icon: '🎪', label: 'P5 : Stands & Jeux', btnClass: 'btn-primary' },
+      { mod: 'gifts', icon: '🎁', label: 'P6 : Lots à gagner', btnClass: 'btn-secondary' },
+      { mod: 'members', icon: '👥', label: 'P7 : Planning & Bénévoles', btnClass: 'btn-secondary' },
+      { mod: 'materials', icon: '📦', label: 'P8 : Logistique & Installation', btnClass: 'btn-secondary' },
+      { mod: 'security', icon: '🛡️', label: 'P9 : Accueil & Sécurité', btnClass: 'btn-danger' },
+      { mod: 'messages', icon: '💬', label: 'Messages & Alertes', btnClass: 'btn-secondary' }
+    ];
+
+    const allowed = shortcuts.filter(s => typeof Permissions === 'undefined' || Permissions.canAccessModule(s.mod));
+
+    return allowed.map(s => `
+      <button class="btn ${s.btnClass} btn-sm pole-shortcut-btn" onclick="App.navigateTo('${s.mod}')">
+        <span class="pole-icon">${s.icon}</span> <span class="pole-label">${s.label}</span>
+      </button>
+    `).join('');
+  },
+
   async loadRealData() {
     const client = SupabaseClient.client;
     if (!client) {
@@ -185,14 +181,18 @@ const DashboardModule = {
       // 1. Stands
       const { data: stands } = await client.from('stands').select('id, name, manager_id, is_closed');
       const standCount = stands ? stands.length : 0;
-      document.getElementById('kpiStands').textContent = standCount;
-      document.getElementById('kpiStandsSub').textContent = standCount === 0 ? 'Aucun stand configuré' : `${standCount} stand(s) actif(s)`;
+      if (document.getElementById('kpiStands')) {
+        document.getElementById('kpiStands').textContent = standCount;
+        document.getElementById('kpiStandsSub').textContent = standCount === 0 ? 'Aucun stand configuré' : `${standCount} stand(s) actif(s)`;
+      }
 
       // 2. Membres
       const { data: members } = await client.from('members').select('id');
       const memberCount = members ? members.length : 0;
-      document.getElementById('kpiMembers').textContent = memberCount;
-      document.getElementById('kpiMembersSub').textContent = memberCount === 0 ? 'Aucun membre enregistré' : `${memberCount} bénévole(s)`;
+      if (document.getElementById('kpiMembers')) {
+        document.getElementById('kpiMembers').textContent = memberCount;
+        document.getElementById('kpiMembersSub').textContent = memberCount === 0 ? 'Aucun membre enregistré' : `${memberCount} bénévole(s)`;
+      }
 
       // 3. Tickets et Ventes
       const { data: sales } = await client.from('ticket_sales').select('quantity, total_amount_f');
@@ -204,8 +204,10 @@ const DashboardModule = {
           totalRevenue += s.total_amount_f || 0;
         });
       }
-      document.getElementById('kpiTickets').textContent = totalTickets;
-      document.getElementById('kpiTicketsSub').textContent = `${totalRevenue.toLocaleString()} ${KermesseConfig.currency} encaissés`;
+      if (document.getElementById('kpiTickets')) {
+        document.getElementById('kpiTickets').textContent = totalTickets;
+        document.getElementById('kpiTicketsSub').textContent = `${totalRevenue.toLocaleString()} ${KermesseConfig.currency} encaissés`;
+      }
 
       // 4. Dépenses et Solde
       const { data: expenses } = await client.from('expenses').select('amount_f, status');
@@ -216,8 +218,10 @@ const DashboardModule = {
         });
       }
       const balance = totalRevenue - totalExpenses;
-      document.getElementById('kpiBalance').textContent = `${balance.toLocaleString()} ${KermesseConfig.currency}`;
-      document.getElementById('kpiBalanceSub').textContent = `Recettes: ${totalRevenue.toLocaleString()} F | Dépenses: ${totalExpenses.toLocaleString()} F`;
+      if (document.getElementById('kpiBalance')) {
+        document.getElementById('kpiBalance').textContent = `${balance.toLocaleString()} ${KermesseConfig.currency}`;
+        document.getElementById('kpiBalanceSub').textContent = `Recettes: ${totalRevenue.toLocaleString()} F | Dépenses: ${totalExpenses.toLocaleString()} F`;
+      }
 
       // 5. Emprunts
       const { data: loans } = await client.from('loans').select('id, status, expected_return_date');
