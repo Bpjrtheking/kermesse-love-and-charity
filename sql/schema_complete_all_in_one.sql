@@ -612,6 +612,11 @@ BEGIN
             END IF;
         END IF;
     END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -929,15 +934,46 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', 'Action interdite : Le compte SuperAdministrateur original ne peut jamais être supprimé.');
     END IF;
 
-    -- Détacher les liaisons orphelines éventuelles
-    DELETE FROM stand_staff WHERE user_id = p_target_user_id;
-    DELETE FROM kermesse_messages WHERE sender_id = p_target_user_id OR recipient_id = p_target_user_id;
+    -- Détacher les liaisons éventuelles vers app_users(id) avant suppression
+    BEGIN
+        UPDATE members SET user_id = NULL WHERE user_id = p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+    END;
+
+    BEGIN
+        DELETE FROM kermesse_messages WHERE sender_id = p_target_user_id OR recipient_id = p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+    END;
+
+    BEGIN
+        UPDATE volunteer_schedules SET user_id = NULL WHERE user_id = p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+    END;
+
+    BEGIN
+        UPDATE cash_registers SET opened_by = NULL WHERE opened_by = p_target_user_id;
+        UPDATE cash_registers SET closed_by = NULL WHERE closed_by = p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+    END;
+
+    BEGIN
+        UPDATE ticket_sales SET sold_by = NULL WHERE sold_by = p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+    END;
+
+    BEGIN
+        UPDATE activity_logs SET user_id = NULL WHERE user_id = p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+    END;
 
     -- Supprimer définitivement l'utilisateur de la table
     DELETE FROM app_users WHERE id = p_target_user_id;
 
-    INSERT INTO activity_logs (login, action, entity_type, entity_id, details)
-    VALUES (p_admin_login, 'SUPPRESSION_UTILISATEUR', 'user', p_target_user_id, 'Suppression définitive du compte ' || v_target.login);
+    BEGIN
+        INSERT INTO activity_logs (login, action, entity_type, entity_id, details)
+        VALUES (p_admin_login, 'SUPPRESSION_UTILISATEUR', 'user', p_target_user_id, 'Suppression définitive du compte ' || v_target.login);
+    EXCEPTION WHEN OTHERS THEN
+    END;
 
     RETURN jsonb_build_object('success', true, 'message', 'Compte supprimé avec succès.');
 END;
@@ -951,57 +987,78 @@ GRANT EXECUTE ON FUNCTION admin_create_app_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO
 GRANT EXECUTE ON FUNCTION admin_reset_user_credentials(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION admin_delete_app_user(UUID, TEXT) TO anon, authenticated, service_role;
 
--- 6. DONNÉES SYSTÈME ET COMPTE INITIAL MOUNIR
+-- 6. DONNÉES SYSTÈME ET RÔLES OFFICIELS DES 9 PÔLES + SUPERADMIN
 INSERT INTO roles (code, name, description, is_system, permissions)
 VALUES 
 (
     'superadmin', 
-    'SuperAdministrateur', 
-    'Accès global, gestion complète du système, des utilisateurs, finances et clôtures',
+    '👑 SuperAdministrateur — Coordination Générale', 
+    'Accès global, supervision des 9 pôles, gestion des comptes et finances',
     TRUE,
-    '{"all": true, "users_manage": true, "stands_manage": true, "cash_manage": true, "tickets_manage": true, "stocks_manage": true, "materials_manage": true, "loans_manage": true, "returns_manage": true, "incidents_manage": true, "finances_view": true, "closures_manage": true, "history_view": true, "reports_view": true, "settings_manage": true}'::jsonb
+    '{"all": true}'::jsonb
 ),
 (
-    'admin_tickets', 
-    'Administrateur — Gestion des tickets', 
-    'Vente de tickets, catalogue des billets de jeu et de lots, suivi des jetons',
+    'admin_communication', 
+    '📢 Responsable — Communication & Affichage', 
+    'Pôle 1 : Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse',
     TRUE,
-    '{"tickets_manage": true, "tickets_sell": true, "tokens_manage": true, "cash_view": false, "history_view": true}'::jsonb
+    '{"communication_manage": true, "stands_view": true, "messages_view": true}'::jsonb
 ),
 (
-    'admin_cash', 
-    'Administrateur — Gestion de caisse', 
-    'Ouverture et clôture de caisse, encaissement, remise de jetons, comptage et calcul des écarts',
+    'admin_restauration', 
+    '🍔 Responsable — Restauration', 
+    'Pôle 2 : Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette',
     TRUE,
-    '{"cash_manage": true, "cash_open_close": true, "cash_movements": true, "tickets_sell": true, "tokens_manage": true, "history_view": true}'::jsonb
+    '{"food_manage": true, "stocks_manage": true, "cash_manage": true, "messages_view": true}'::jsonb
 ),
 (
-    'admin_stand', 
-    'Administrateur — Responsable de stand', 
-    'Vue globale sur son stand, son équipe, ses jeux, ses lots, son stock et ses incidents',
+    'admin_decoration', 
+    '🎨 Responsable — Organisation & Décoration', 
+    'Pôle 3 : Ambiance festive, matériel déco, aménagement des zones et plan d''implantation',
     TRUE,
-    '{"stand_view_own": true, "stand_staff_view": true, "games_view": true, "tickets_sell": true, "gifts_distribute": true, "incidents_report": true, "history_view": true}'::jsonb
+    '{"decoration_manage": true, "locations_manage": true, "messages_view": true}'::jsonb
 ),
 (
-    'admin_food', 
-    'Administrateur — Gestion nourriture', 
-    'Suivi des stocks de denrées, entrées, sorties vers les stands, ventes, pertes et écarts',
+    'admin_lots', 
+    '🎁 Responsable — Lots à gagner', 
+    'Pôle 4 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions',
     TRUE,
-    '{"food_manage": true, "food_stock_movements": true, "food_inventory": true, "incidents_report": true, "history_view": true}'::jsonb
+    '{"gifts_manage": true, "gifts_allocate": true, "messages_view": true}'::jsonb
 ),
 (
-    'admin_material', 
-    'Administrateur — Gestion matériel & logistique', 
-    'Inventaire matériel, propriétaires, emprunts, mouvements entre emplacements, plan de restitution',
+    'admin_stands', 
+    '🎪 Responsable — Stands & Jeux', 
+    'Pôle 5 : Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands',
     TRUE,
-    '{"materials_manage": true, "loans_manage": true, "movements_manage": true, "locations_manage": true, "returns_plan_manage": true, "damages_report": true, "history_view": true}'::jsonb
+    '{"stands_manage": true, "games_view": true, "tickets_sell": true, "messages_view": true}'::jsonb
 ),
 (
-    'admin_gifts', 
-    'Administrateur — Gestion des lots & cadeaux', 
-    'Catalogue des cadeaux, dotations vers les stands, distributions, retours et suivi des écarts',
+    'admin_finances', 
+    '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', 
+    'Pôle 6 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts',
     TRUE,
-    '{"gifts_manage": true, "gifts_allocate": true, "gifts_inventory": true, "incidents_report": true, "history_view": true}'::jsonb
+    '{"tickets_manage": true, "tickets_sell": true, "cash_manage": true, "finances_view": true, "closures_manage": true, "messages_view": true}'::jsonb
+),
+(
+    'admin_benevoles', 
+    '👥 Responsable — Planning & Bénévoles', 
+    'Pôle 7 : Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits',
+    TRUE,
+    '{"users_manage": true, "planning_manage": true, "messages_view": true}'::jsonb
+),
+(
+    'admin_logistique', 
+    '📦 Responsable — Logistique & Installation', 
+    'Pôle 8 : Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists',
+    TRUE,
+    '{"materials_manage": true, "loans_manage": true, "movements_manage": true, "returns_manage": true, "messages_view": true}'::jsonb
+),
+(
+    'admin_securite', 
+    '🛡️ Responsable — Accueil & Sécurité', 
+    'Pôle 9 : Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents',
+    TRUE,
+    '{"security_manage": true, "incidents_manage": true, "cleaning_manage": true, "messages_view": true}'::jsonb
 )
 ON CONFLICT (code) DO UPDATE SET 
     name = EXCLUDED.name,

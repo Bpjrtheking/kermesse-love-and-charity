@@ -74,7 +74,13 @@ const RolesModule = {
         `)
         .order('is_original_superadmin', { ascending: false });
 
-      const { data: roles, error: rErr } = await client.from('roles').select('*').order('name', { ascending: true });
+      const { data: rawRoles, error: rErr } = await client.from('roles').select('*');
+      let roles = (rawRoles || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
+      if (roles.length === 0) {
+        roles = this.DEFAULT_ROLES;
+      } else {
+        roles.sort((a, b) => this.OFFICIAL_ROLE_CODES.indexOf(a.code) - this.OFFICIAL_ROLE_CODES.indexOf(b.code));
+      }
 
       if (uErr) throw uErr;
       this.renderUsersTable(users || []);
@@ -208,17 +214,30 @@ const RolesModule = {
     `;
   },
 
+  OFFICIAL_ROLE_CODES: [
+    'superadmin',
+    'admin_communication',
+    'admin_restauration',
+    'admin_decoration',
+    'admin_lots',
+    'admin_stands',
+    'admin_finances',
+    'admin_benevoles',
+    'admin_logistique',
+    'admin_securite'
+  ],
+
   DEFAULT_ROLES: [
     { code: 'superadmin', name: '👑 SuperAdministrateur — Coordination Générale', description: 'Accès global, supervision des 9 pôles, gestion des comptes et finances' },
-    { code: 'admin_communication', name: '📢 Administrateur — Communication & Affichage (Pôle 1)', description: 'Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse' },
-    { code: 'admin_finances', name: '🎟️ Administrateur — Billetterie & Caisses (Pôle 2)', description: 'Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts' },
-    { code: 'admin_decoration', name: '🎨 Administrateur — Décoration & Organisation (Pôle 3)', description: 'Ambiance festive, matériel déco, aménagement des 10 zones et plan d\'implantation' },
-    { code: 'admin_restauration', name: '🍔 Administrateur — Restauration & Buvette (Pôle 4)', description: 'Stocks denrées & boissons, cuisine, emballages, hygiène, ventes buvette et pertes' },
-    { code: 'admin_stands', name: '🎪 Administrateur — Stands & Jeux (Pôle 5)', description: 'Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands' },
-    { code: 'admin_lots', name: '🎁 Administrateur — Lots & Cadeaux (Pôle 6)', description: 'Catalogue des lots (achats & dons), 4 catégories, dotations stands et distributions' },
-    { code: 'admin_benevoles', name: '👥 Administrateur — Bénévoles & Planning (Pôle 7)', description: 'Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits' },
-    { code: 'admin_logistique', name: '📦 Administrateur — Logistique & Installation (Pôle 8)', description: 'Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists' },
-    { code: 'admin_securite', name: '🛡️ Administrateur — Accueil, Nettoyage & Sécurité (Pôle 9)', description: 'Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents' }
+    { code: 'admin_communication', name: '📢 Responsable — Communication & Affichage', description: 'Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse' },
+    { code: 'admin_restauration', name: '🍔 Responsable — Restauration', description: 'Cuisine, boissons, snacks, stocks denrées, hygiène et ventes buvette' },
+    { code: 'admin_decoration', name: '🎨 Responsable — Organisation & Décoration', description: 'Ambiance festive, matériel déco, aménagement des zones et plan d\'implantation' },
+    { code: 'admin_lots', name: '🎁 Responsable — Lots à gagner', description: 'Catalogue des lots (achats & dons), dotations stands et suivi des distributions' },
+    { code: 'admin_stands', name: '🎪 Responsable — Stands & Jeux', description: 'Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands' },
+    { code: 'admin_finances', name: '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', description: 'Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts' },
+    { code: 'admin_benevoles', name: '👥 Responsable — Planning & Bénévoles', description: 'Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits' },
+    { code: 'admin_logistique', name: '📦 Responsable — Logistique & Installation', description: 'Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists' },
+    { code: 'admin_securite', name: '🛡️ Responsable — Accueil & Sécurité', description: 'Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents' }
   ],
 
   async openCreateUserModal() {
@@ -226,8 +245,10 @@ const RolesModule = {
     let roles = [];
 
     if (client) {
-      const { data } = await client.from('roles').select('id, code, name, description').order('name');
-      roles = data && data.length > 0 ? data : this.DEFAULT_ROLES;
+      const { data } = await client.from('roles').select('id, code, name, description');
+      const filtered = (data || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
+      roles = filtered.length > 0 ? filtered : this.DEFAULT_ROLES;
+      roles.sort((a, b) => this.OFFICIAL_ROLE_CODES.indexOf(a.code) - this.OFFICIAL_ROLE_CODES.indexOf(b.code));
     } else {
       roles = this.DEFAULT_ROLES;
     }
@@ -392,15 +413,18 @@ const RolesModule = {
       async () => {
         const client = SupabaseClient.client;
         if (client) {
-          // 1. Tenter la fonction RPC sécurisée admin_delete_app_user (qui contourne RLS via SECURITY DEFINER)
           let deleted = false;
+
+          // 1. Tenter la fonction RPC sécurisée admin_delete_app_user (contourne RLS via SECURITY DEFINER)
           try {
             const { data: rpcRes, error: rpcErr } = await client.rpc('admin_delete_app_user', {
               p_target_user_id: id,
               p_admin_login: currentUser?.login || 'SuperAdmin'
             });
 
-            if (!rpcErr && rpcRes) {
+            if (rpcErr) {
+              console.warn('[RolesModule] RPC admin_delete_app_user non disponible ou erreur:', rpcErr);
+            } else if (rpcRes) {
               if (!rpcRes.success) {
                 Notify.error(rpcRes.message || 'Impossible de supprimer ce compte.');
                 return;
@@ -408,26 +432,30 @@ const RolesModule = {
               deleted = true;
             }
           } catch (rpcEx) {
-            console.warn('[RolesModule] RPC admin_delete_app_user non disponible, tentative directe:', rpcEx);
+            console.warn('[RolesModule] Exception RPC admin_delete_app_user:', rpcEx);
           }
 
-          // 2. Si la RPC n'a pas été appelée ou a échoué, tenter la suppression directe
+          // 2. Si la RPC n'a pas pu être exécutée, tenter la suppression directe
           if (!deleted) {
             try {
-              // Détacher les assignations de stand si nécessaire
-              await client.from('stand_staff').delete().eq('user_id', id);
-            } catch {}
+              // Détacher le compte de la table members
+              await client.from('members').update({ user_id: null }).eq('user_id', id);
+            } catch (e) {
+              console.warn('[RolesModule] Détachement membre ignoré:', e);
+            }
 
-            const { data: deletedData, error } = await client.from('app_users').delete().eq('id', id).select();
-            if (error) {
-              Notify.error('Erreur de suppression : ' + error.message);
+            const { error: delErr } = await client.from('app_users').delete().eq('id', id);
+            if (delErr) {
+              console.error('[RolesModule] Erreur suppression directe:', delErr);
+              Notify.error('Erreur lors de la suppression : ' + (delErr.message || 'Action non autorisée.'));
               return;
             }
 
             // Vérifier si la base de données a réellement supprimé la ligne
             const { data: stillExists } = await client.from('app_users').select('id').eq('id', id).maybeSingle();
             if (stillExists) {
-              Notify.error("Suppression refusée par la sécurité Supabase. Veuillez exécuter le script SQL 08_fix_user_deletion.sql dans Supabase.");
+              console.error('[RolesModule] Le compte existe toujours après DELETE.');
+              Notify.error("Échec de la suppression du compte. Le script SQL 08_fix_user_deletion.sql doit être exécuté dans la console de base de données.");
               return;
             }
           }
@@ -453,8 +481,12 @@ const RolesModule = {
     const client = SupabaseClient.client;
     let roles = [];
     if (client) {
-      const { data } = await client.from('roles').select('id, code, name').order('name');
-      roles = data || [];
+      const { data } = await client.from('roles').select('id, code, name');
+      const filtered = (data || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
+      roles = filtered.length > 0 ? filtered : this.DEFAULT_ROLES;
+      roles.sort((a, b) => this.OFFICIAL_ROLE_CODES.indexOf(a.code) - this.OFFICIAL_ROLE_CODES.indexOf(b.code));
+    } else {
+      roles = this.DEFAULT_ROLES;
     }
 
     const modal = document.createElement('div');
@@ -561,9 +593,7 @@ const RolesModule = {
             }
             const { error: directErr } = await client.from('app_users').update(updatePayload).eq('id', userId);
             if (directErr) throw directErr;
-            if (newPassword) {
-              Notify.warning('Identifiants mis à jour. Pensez à exécuter le script SQL dans Supabase pour le hachage sécurisé du mot de passe.');
-            }
+
           } else if (data && !data.success) {
             Notify.error(data.message);
             saveBtn.disabled = false;
