@@ -391,6 +391,13 @@ Remarques : Caisse scellée et signée.`,
           { id: 'def-3', pole_code: 'admin_finances', title: 'Distribuer les fonds de caisse scellés aux stands', priority: 'urgente', due_time: '09h00', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now },
           { id: 'def-4', pole_code: 'admin_finances', title: 'Vérifier les souches de tickets d\'entrée numérotées', priority: 'normale', due_time: '09h30', is_completed: false, created_by_name: 'Équipe Billetterie', created_by_role: 'Responsable Billetterie', created_at: now }
         ];
+      case 'admin_communication':
+        return [
+          { id: 'def-comm-1', pole_code: 'admin_communication', title: 'Poser les 50 affiches officielles A3 dans les commerces et écoles', priority: 'urgente', due_time: '08h30', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now },
+          { id: 'def-comm-2', pole_code: 'admin_communication', title: 'Fixer la bâche du Grand Plan de la Kermesse à l\'entrée principale', priority: 'urgente', due_time: '09h00', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now },
+          { id: 'def-comm-3', pole_code: 'admin_communication', title: 'Vérifier les panneaux numérotés et codes couleurs des 10 stands', priority: 'normale', due_time: '09h30', is_completed: false, created_by_name: 'Équipe Communication', created_by_role: 'Responsable Communication', created_at: now },
+          { id: 'def-comm-4', pole_code: 'admin_communication', title: 'Diffuser l\'annonce WhatsApp officielle d\'ouverture aux familles', priority: 'normale', due_time: '10h00', is_completed: false, created_by_name: 'Équipe Communication', created_by_role: 'Responsable Communication', created_at: now }
+        ];
       default:
         return [
           { id: 'def-5', pole_code: roleCode || 'all', title: 'Vérifier l\'installation et l\'affichage de notre pôle', priority: 'normale', due_time: '09h00', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now }

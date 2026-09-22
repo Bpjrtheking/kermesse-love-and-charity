@@ -16,42 +16,56 @@ const CommunicationModule = {
   async render(container) {
     container.innerHTML = `
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
           <div class="card-title">
             <span>📢</span> Pôle 1 : Communication & Affichage
           </div>
-          <div class="card-actions">
+          <div class="card-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.openTemplatesModal()">
+              <span>📋</span> Modèles d'Actions Prêts
+            </button>
             <button class="btn btn-primary btn-sm" onclick="CommunicationModule.openCreateModal()">
-              <span>➕</span> Nouveau Support / Tâche
+              <span>➕</span> Nouvelle Action (Illimité)
             </button>
           </div>
         </div>
 
         <div class="card-body">
+          <!-- Bannière informative capacité illimitée -->
+          <div class="alert-banner info" style="margin-bottom: 1.25rem; font-size: 0.86rem; border-left: 5px solid #2563eb;">
+            <div>
+              ♾️ <strong>Pôle Communication & Affichage 100% Illimité :</strong> Planifiez et enregistrez autant d'actions, d'affiches, de flyers, de signalétiques et de campagnes que vous le souhaitez, <strong>sans aucun plafond ni restriction de nombre</strong>. Toutes les actions sont synchronisées en direct.
+            </div>
+          </div>
+
           <!-- KPI Summary Cards -->
           <div class="stats-grid" id="commStatsGrid">
             <div class="stat-card">
               <div class="stat-label">Total Actions Comm</div>
               <div class="stat-value" id="commTotalCount">0</div>
+              <div class="stat-sub" style="color: #2563eb; font-weight: 700;">♾️ Capacité Illimitée</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">À Faire / En cours</div>
               <div class="stat-value" id="commPendingCount" style="color: var(--warning, #f59e0b);">0</div>
+              <div class="stat-sub">Actions à mener</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Terminés / Affichés</div>
               <div class="stat-value" id="commDoneCount" style="color: var(--success, #10b981);">0</div>
+              <div class="stat-sub">Actions validées</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Stands Signalés</div>
               <div class="stat-value" id="commStandsCount">0</div>
+              <div class="stat-sub">Panneaux prêts</div>
             </div>
           </div>
 
           <!-- Tabs Navigation -->
           <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.5rem; overflow-x: auto;">
             <button class="tab-btn active" id="tabCommItems" onclick="CommunicationModule.switchTab('items')">
-              📋 Supports & Tâches
+              📋 Supports & Actions (<span id="tabCommItemsCount">0</span>)
             </button>
             <button class="tab-btn" id="tabCommSignage" onclick="CommunicationModule.switchTab('signage')">
               🪧 Signalétique Stands & Plan
@@ -183,11 +197,13 @@ const CommunicationModule = {
     const elPending = document.getElementById('commPendingCount');
     const elDone = document.getElementById('commDoneCount');
     const elStands = document.getElementById('commStandsCount');
+    const elTabCount = document.getElementById('tabCommItemsCount');
 
     if (elTotal) elTotal.textContent = total;
     if (elPending) elPending.textContent = pending;
     if (elDone) elDone.textContent = done;
     if (elStands) elStands.textContent = standsCount;
+    if (elTabCount) elTabCount.textContent = total;
   },
 
   renderCurrentTab() {
@@ -242,15 +258,31 @@ const CommunicationModule = {
         <div class="empty-state">
           <div class="empty-icon">📢</div>
           <div class="empty-title">Aucune tâche de communication enregistrée</div>
-          <div class="empty-desc">Créez des affiches, flyers, panneaux de signalétique ou campagnes WhatsApp pour organiser la communication de la kermesse.</div>
-          <button class="btn btn-primary" onclick="CommunicationModule.openCreateModal()">
-            <span>➕</span> Créer la première action
-          </button>
+          <div class="empty-desc">Créez des affiches, flyers, panneaux de signalétique ou campagnes WhatsApp pour organiser la communication de la kermesse (nombre d'actions 100% illimité).</div>
+          <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;">
+            <button class="btn btn-secondary" onclick="CommunicationModule.openTemplatesModal()">
+              <span>📋</span> Charger des Packs d'Actions
+            </button>
+            <button class="btn btn-primary" onclick="CommunicationModule.openCreateModal()">
+              <span>➕</span> Créer une Action (Illimité)
+            </button>
+          </div>
         </div>
       `;
     }
 
     return `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem; color: var(--gray-700);">
+        <div>
+          Affichage de <strong>${itemsList.length}</strong> action(s) sur <strong>${this.items.length}</strong> au total &bull; <span class="badge badge-success" style="font-size: 0.72rem; font-weight: 700;">♾️ Capacité Illimitée (∞)</span>
+        </div>
+        <div style="display: flex; gap: 0.4rem;">
+          <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.openTemplatesModal()" title="Ajouter des packs pré-remplis">
+            📋 Packs Prêts
+          </button>
+        </div>
+      </div>
+
       <table class="data-table">
         <thead>
           <tr>
@@ -260,7 +292,7 @@ const CommunicationModule = {
             <th>Emplacement / Cible</th>
             <th>Date Prévue</th>
             <th>Statut</th>
-            <th style="text-align: right;">Actions</th>
+            <th style="text-align: right; white-space: nowrap;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -291,9 +323,12 @@ const CommunicationModule = {
                 <td>${item.display_location || '-'}</td>
                 <td>${item.target_date || '-'}</td>
                 <td><span class="badge ${badgeClass}">${labelStatus}</span></td>
-                <td style="text-align: right;">
-                  <button class="btn-icon" onclick="CommunicationModule.toggleStatus('${item.id}')" title="Changer le statut">
+                <td style="text-align: right; white-space: nowrap;">
+                  <button class="btn-icon" onclick="CommunicationModule.toggleStatus('${item.id}')" title="${item.status === 'termine' ? 'Marquer comme en cours' : 'Marquer comme terminé'}">
                     ${item.status === 'termine' ? '↩️' : '✅'}
+                  </button>
+                  <button class="btn-icon" onclick="CommunicationModule.duplicateItem('${item.id}')" title="Dupliquer cette action">
+                    📋
                   </button>
                   <button class="btn-icon danger" onclick="CommunicationModule.deleteItem('${item.id}')" title="Supprimer">
                     🗑️
@@ -630,6 +665,205 @@ const CommunicationModule = {
 
     localStorage.setItem('kermesse_communication_items', JSON.stringify(this.items));
     Notify.info('Support supprimé.');
+    this.updateStats();
+    this.renderCurrentTab();
+  },
+
+  async duplicateItem(id) {
+    const item = this.items.find(i => i.id === id);
+    if (!item) return;
+
+    const clone = {
+      ...item,
+      id: 'comm-' + Date.now(),
+      title: `${item.title} (Copie)`,
+      status: 'a_faire',
+      created_at: new Date().toISOString()
+    };
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        const { data, error } = await client.from('communication_items').insert([{
+          title: clone.title,
+          type: clone.type,
+          responsible_name: clone.responsible_name,
+          status: clone.status,
+          target_date: clone.target_date,
+          display_location: clone.display_location,
+          materials_needed: clone.materials_needed
+        }]).select();
+
+        if (!error && data && data[0]) {
+          clone.id = data[0].id;
+        }
+      } catch (e) {
+        console.warn('[CommunicationModule] Duplicate error, using local fallback:', e);
+      }
+    }
+
+    this.items.unshift(clone);
+    localStorage.setItem('kermesse_communication_items', JSON.stringify(this.items));
+    Notify.success('Action dupliquée avec succès.');
+    this.updateStats();
+    this.renderCurrentTab();
+  },
+
+  getPacksList() {
+    return [
+      {
+        id: 'pack-affichage',
+        icon: '🖼️',
+        title: 'Pack Affichage & Flyers (4 actions)',
+        desc: 'Campagne de visibilité extérieure incontournable pour attirer les familles.',
+        items: [
+          { title: 'Impression & collage de 50 affiches officielles A3', type: 'affiche', responsible_name: 'Équipe Comm', status: 'a_faire', target_date: '2026-09-20', display_location: 'Commerces du quartier, écoles, églises partenaires', materials_needed: '50 affiches A3 couleur + scotch résistant' },
+          { title: 'Distribution de 1000 flyers de présentation & tombola', type: 'flyer', responsible_name: 'Équipe Comm', status: 'a_faire', target_date: '2026-09-21', display_location: 'Sorties des classes & accueil kermesse', materials_needed: '1000 flyers A5 quadri' },
+          { title: 'Pose de 2 banderoles extérieures aux entrées', type: 'affiche', responsible_name: 'Équipe Comm', status: 'a_faire', target_date: '2026-09-21', display_location: 'Grille d\'entrée principale & rue passante', materials_needed: '2 banderoles 3x1m + colliers de serrage' },
+          { title: 'Fléchage directionnel piéton et parkings', type: 'signaletique_panneau', responsible_name: 'Équipe Comm', status: 'a_faire', target_date: '2026-09-22', display_location: 'Carrefours proches et entrée du site', materials_needed: '10 flèches cartonnées rigides + piquets' }
+        ]
+      },
+      {
+        id: 'pack-signaletique',
+        icon: '🪧',
+        title: 'Pack Signalétique Terrain & Plan (4 actions)',
+        desc: 'Pour orienter parfaitement les visiteurs et identifier les 10 stands dès l\'arrivée.',
+        items: [
+          { title: 'Grand Plan officiel de la Kermesse (Bâche 2x1m)', type: 'plan_kermesse', responsible_name: 'Direction & Comm', status: 'en_cours', target_date: '2026-09-22', display_location: 'Portique d\'accueil & Stand Billetterie', materials_needed: 'Bâche imprimée 2x1m avec repères des 10 zones' },
+          { title: 'Pose des panneaux d\'identification des 10 stands (Couleur + N°)', type: 'signaletique_panneau', responsible_name: 'Équipe Comm', status: 'a_faire', target_date: '2026-09-22', display_location: 'Sur le fronton de chaque stand', materials_needed: '10 panneaux A3 rigides plastifiés' },
+          { title: 'Panneaux indicateurs Caisse, Restauration & Toilettes', type: 'signaletique_panneau', responsible_name: 'Équipe Comm', status: 'a_faire', target_date: '2026-09-22', display_location: 'Allée centrale & Buvette', materials_needed: 'Panneaux directionnels suspendus' },
+          { title: 'Affichage des consignes de sécurité & Poste de Secours', type: 'affiche', responsible_name: 'Équipe Comm & Sécurité', status: 'a_faire', target_date: '2026-09-22', display_location: 'Tente Secours & Accueil', materials_needed: 'Affiches plastifiées + numéros d\'urgence' }
+        ]
+      },
+      {
+        id: 'pack-digital',
+        icon: '📱',
+        title: 'Pack Digital, WhatsApp & Réseaux (3 actions)',
+        desc: 'Mobilisation des réseaux et des canaux de messagerie en amont et en direct.',
+        items: [
+          { title: 'Diffusion de l\'invitation officielle sur les groupes WhatsApp parents', type: 'whatsapp', responsible_name: 'Responsable Comm', status: 'a_faire', target_date: '2026-09-19', display_location: 'Groupes WhatsApp écoles & paroisse', materials_needed: 'Visuel numérique + texte d\'invitation prêt' },
+          { title: 'Campagne de compte à rebours sur les réseaux sociaux (J-7 à J-1)', type: 'reseaux_sociaux', responsible_name: 'Équipe Comm', status: 'en_cours', target_date: '2026-09-21', display_location: 'Page Facebook & Instagram L&C', materials_needed: 'Visuels stories & posts dédiés' },
+          { title: 'Message de rappel Jour J avec programme et horaires', type: 'whatsapp', responsible_name: 'Responsable Comm', status: 'a_faire', target_date: '2026-09-22', display_location: 'Canal WhatsApp général & diffusion directe', materials_needed: 'Message court et engageant' }
+        ]
+      },
+      {
+        id: 'pack-micro',
+        icon: '📣',
+        title: 'Pack Annonces Micro & Animations Sono (3 actions)',
+        desc: 'Interventions au micro pour dynamiser les jeux, les ventes et la tombola.',
+        items: [
+          { title: 'Discours d\'ouverture officielle au micro à 10h00', type: 'annonce', responsible_name: 'Direction & Animateur', status: 'a_faire', target_date: '2026-09-22', display_location: 'Podium central & sono', materials_needed: 'Fiche mémo discours + micro HF sans fil' },
+          { title: 'Annonces promotionnelles de midi (Burgers, Grillades & Crêpes)', type: 'annonce', responsible_name: 'Animateur Micro', status: 'a_faire', target_date: '2026-09-22', display_location: 'Podium sono', materials_needed: 'Fiche menus restauration & prix' },
+          { title: 'Appel solennel pour le grand tirage de la Tombola à 16h30', type: 'annonce', responsible_name: 'SuperAdmin & Animateur', status: 'a_faire', target_date: '2026-09-22', display_location: 'Podium / Espace Tombola', materials_needed: 'Micro + urne des tickets vendus' }
+        ]
+      }
+    ];
+  },
+
+  openTemplatesModal() {
+    const packs = this.getPacksList();
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 720px;">
+        <div class="modal-header">
+          <h3>📋 Packs d'Actions Prêts à l'Emploi (Pôle Communication)</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="alert-banner info" style="margin-bottom: 1.25rem;">
+            <div>
+              ♾️ <strong>Capacité 100% Illimitée :</strong> Cliquez sur <strong>« Injecter ce pack »</strong> pour ajouter instantanément les actions types de communication dans votre tableau sans avoir à tout ressaisir à la main !
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 1rem;">
+            ${packs.map((p, idx) => `
+              <div class="card" style="border: 1px solid var(--gray-200); padding: 1rem; border-radius: 10px; background: #ffffff;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                  <div>
+                    <h4 style="margin: 0; font-size: 1.05rem; color: #1e3a8a;">${p.icon} ${p.title}</h4>
+                    <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: var(--gray-600);">${p.desc}</p>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="CommunicationModule.injectPack(${idx}); document.querySelector('.modal-backdrop.open')?.remove();">
+                    📥 Injecter ce pack (${p.items.length} actions)
+                  </button>
+                </div>
+                <ul style="font-size: 0.82rem; color: var(--gray-700); margin: 0.5rem 0 0 0; padding-left: 1.25rem; line-height: 1.5;">
+                  ${p.items.map(it => `<li><strong>${it.title}</strong> (${it.display_location || 'Lieu prévu'})</li>`).join('')}
+                </ul>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+          <button class="btn btn-success btn-sm" onclick="CommunicationModule.injectAllPacks(); document.querySelector('.modal-backdrop.open')?.remove();">
+            ⚡ Injecter Tous les Packs (14 actions d'un coup)
+          </button>
+          <button class="btn btn-secondary close-btn">Fermer</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  },
+
+  async injectPack(idx) {
+    const packs = this.getPacksList();
+    const pack = packs[idx];
+    if (!pack) return;
+
+    await this.insertMultipleItems(pack.items);
+    Notify.success(`${pack.items.length} action(s) injectée(s) dans le Pôle Communication.`);
+  },
+
+  async injectAllPacks() {
+    const packs = this.getPacksList();
+    const all = [];
+    packs.forEach(p => all.push(...p.items));
+    await this.insertMultipleItems(all);
+    Notify.success(`${all.length} actions injectées avec succès.`);
+  },
+
+  async insertMultipleItems(itemsToInsert) {
+    const client = SupabaseClient.client;
+    const now = new Date().toISOString();
+
+    const prepared = itemsToInsert.map((it, i) => ({
+      ...it,
+      id: 'comm-' + (Date.now() + i),
+      created_at: now
+    }));
+
+    if (client) {
+      try {
+        const payload = prepared.map(it => ({
+          title: it.title,
+          type: it.type,
+          responsible_name: it.responsible_name,
+          status: it.status,
+          target_date: it.target_date,
+          display_location: it.display_location,
+          materials_needed: it.materials_needed
+        }));
+        const { data, error } = await client.from('communication_items').insert(payload).select();
+        if (!error && data) {
+          data.forEach((d, idx) => {
+            if (prepared[idx]) prepared[idx].id = d.id;
+          });
+        }
+      } catch (e) {
+        console.warn('[CommunicationModule] Multi-insert fallback local:', e);
+      }
+    }
+
+    this.items.unshift(...prepared);
+    localStorage.setItem('kermesse_communication_items', JSON.stringify(this.items));
     this.updateStats();
     this.renderCurrentTab();
   }
