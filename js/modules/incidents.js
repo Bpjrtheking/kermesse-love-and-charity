@@ -71,7 +71,7 @@ const IncidentsModule = {
         .from('incidents')
         .select(`
           id, incident_number, type, title, description, severity, status, persons_involved, resolution_notes, created_at,
-          reporter:app_users!incidents_reported_by_fkey(login),
+          reporter:app_users!incidents_reported_by_fkey(login, full_name),
           location:locations(name),
           stand:stands(name),
           assigned:members(first_name, last_name)
@@ -136,7 +136,7 @@ const IncidentsModule = {
                 </td>
                 <td>${i.stand ? i.stand.name : (i.location ? i.location.name : '-')}</td>
                 <td>${sevBadge}</td>
-                <td>${i.reporter ? i.reporter.login : 'Anonyme'}</td>
+                <td><strong>${i.reporter ? (i.reporter.full_name || i.reporter.login) : 'Anonyme'}</strong></td>
                 <td>${statBadge}</td>
                 <td style="text-align: right;">
                   ${i.status !== 'resolu' ? `
@@ -298,7 +298,7 @@ const IncidentsModule = {
           return;
         }
 
-        AuditLogger.log('DECLARATION_INCIDENT', 'incident', null, `Déclaration de l'incident ${num} (${title}) par ${user?.login}`);
+        AuditLogger.log('DECLARATION_INCIDENT', 'incident', null, `Déclaration de l'incident ${num} (${title}) par ${user?.full_name || user?.login}`);
         Notify.success(`Incident ${num} consigné au registre.`);
         close();
         IncidentsModule.render(document.getElementById('mainContent'));
@@ -316,13 +316,15 @@ const IncidentsModule = {
       async () => {
         const client = SupabaseClient.client;
         if (client) {
+          const user = Auth.getCurrentUser();
+          const resolverName = user?.full_name || user?.login || 'Administrateur';
           await client.from('incidents').update({
             status: 'resolu',
-            resolution_notes: notes,
+            resolution_notes: `${notes} (Résolu par ${resolverName})`,
             resolved_at: new Date().toISOString()
           }).eq('id', incId);
 
-          AuditLogger.log('RESOLUTION_INCIDENT', 'incident', incId, `Résolution de l'incident ${incNum}: ${notes}`);
+          AuditLogger.log('RESOLUTION_INCIDENT', 'incident', incId, `Résolution de l'incident ${incNum} par ${resolverName}: ${notes}`);
           Notify.success(`Incident ${incNum} marqué comme résolu.`);
           IncidentsModule.render(document.getElementById('mainContent'));
         }

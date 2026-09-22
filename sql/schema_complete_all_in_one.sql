@@ -1276,6 +1276,42 @@ CREATE POLICY "Lecture cleaning_rounds" ON public.cleaning_rounds FOR SELECT USI
 DROP POLICY IF EXISTS "Ecriture cleaning_rounds" ON public.cleaning_rounds;
 CREATE POLICY "Ecriture cleaning_rounds" ON public.cleaning_rounds FOR ALL USING (true) WITH CHECK (true);
 
+-- ------------------------------------------------------------------------------
+-- 10. TÂCHES COLLABORATIVES PAR PÔLE & TRAÇABILITÉ NOMINATIVE
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.pole_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pole_code TEXT NOT NULL,
+    title TEXT NOT NULL,
+    priority TEXT NOT NULL DEFAULT 'normale',
+    due_time TEXT,
+    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_by_id UUID REFERENCES public.app_users(id) ON DELETE SET NULL,
+    created_by_name TEXT NOT NULL,
+    created_by_role TEXT,
+    completed_by_id UUID REFERENCES public.app_users(id) ON DELETE SET NULL,
+    completed_by_name TEXT,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pole_tasks_pole ON public.pole_tasks(pole_code);
+CREATE INDEX IF NOT EXISTS idx_pole_tasks_created ON public.pole_tasks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pole_tasks_completed ON public.pole_tasks(is_completed);
+
+ALTER TABLE public.pole_tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Lecture tâches pôle" ON public.pole_tasks;
+CREATE POLICY "Lecture tâches pôle" ON public.pole_tasks FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Création tâches pôle" ON public.pole_tasks;
+CREATE POLICY "Création tâches pôle" ON public.pole_tasks FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Mise à jour tâches pôle" ON public.pole_tasks;
+CREATE POLICY "Mise à jour tâches pôle" ON public.pole_tasks FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Suppression tâches pôle" ON public.pole_tasks;
+CREATE POLICY "Suppression tâches pôle" ON public.pole_tasks FOR DELETE USING (true);
+
+GRANT ALL ON public.pole_tasks TO anon, authenticated, service_role;
+
 -- Recharger immédiatement le cache du schéma PostgREST dans Supabase
 NOTIFY pgrst, 'reload schema';
 

@@ -1,19 +1,34 @@
 /**
  * LOVE AND CHARITY (L&C) — GESTION ET CONTRÔLE DE KERMESSE
- * MODULE : MES TÂCHES & BLOC-NOTES (TO-DO & MÉMOS PERSONNELS)
+ * MODULE : TÂCHES COLLABORATIVES PAR PÔLE & BLOC-NOTES PERSONNEL
  * 
- * Permet à chaque administrateur d'avoir son carnet de bord tout-en-un :
- * - Liste de tâches personnalisées avec cases à cocher et barre de progression
- * - Bloc-notes libre avec sauvegarde automatique instantanée
- * - Checklists types kermesse prêtes à l'emploi (Matin, Journée, Clôture)
+ * Collaboration multi-administrateurs & traçabilité nominative (« Qui a fait quoi ») :
+ * - Les administrateurs d'un même pôle partagent les tâches en direct.
+ * - Le SuperAdministrateur peut assigner des tâches à n'importe quel pôle.
+ * - Chaque tâche indique qui l'a créée et qui l'a cochée/terminée (avec nom complet & date).
+ * - Maintien d'un bloc-notes personnel et confidentiel sur l'appareil.
  */
 
 const TasksModule = {
   currentTab: 'tasks', // 'tasks', 'notes', 'templates'
+  selectedPoleFilter: 'all', // Pour le SuperAdmin ('all', 'admin_restauration', etc.)
   activeNoteId: null,
 
   tasks: [],
   notes: [],
+  pollingInterval: null,
+
+  POLES: [
+    { code: 'admin_communication', name: 'Pôle 1 : Communication & Affichage', icon: '📢' },
+    { code: 'admin_finances', name: 'Pôle 2 : Billetterie, Caisses & Compta', icon: '🎟️' },
+    { code: 'admin_decoration', name: 'Pôle 3 : Organisation & Décoration', icon: '🎨' },
+    { code: 'admin_restauration', name: 'Pôle 4 : Restauration', icon: '🍔' },
+    { code: 'admin_stands', name: 'Pôle 5 : Stands & Jeux', icon: '🎪' },
+    { code: 'admin_lots', name: 'Pôle 6 : Lots à gagner', icon: '🎁' },
+    { code: 'admin_benevoles', name: 'Pôle 7 : Planning & Bénévoles', icon: '👥' },
+    { code: 'admin_logistique', name: 'Pôle 8 : Logistique & Installation', icon: '📦' },
+    { code: 'admin_securite', name: 'Pôle 9 : Accueil, Nettoyage & Sécurité', icon: '🛡️' }
+  ],
 
   getUserKey(suffix) {
     const user = Auth.getCurrentUser();
@@ -21,14 +36,25 @@ const TasksModule = {
     return `lc_${suffix}_${login}`;
   },
 
+  getPoleName(poleCode) {
+    if (poleCode === 'all') return 'Tous les pôles (Général)';
+    const p = this.POLES.find(it => it.code === poleCode);
+    return p ? `${p.icon} ${p.name}` : (poleCode || 'Pôle');
+  },
+
   async render(container) {
     const user = Auth.getCurrentUser();
+    const isSuperAdmin = user && (user.is_original_superadmin || user.role_code === 'superadmin');
+
+    const poleLabel = isSuperAdmin
+      ? 'Vue Globale & Multi-Pôles'
+      : (this.getPoleName(user.role_code) || 'Mon Pôle');
 
     container.innerHTML = `
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
           <div class="card-title">
-            <span>📝</span> Mes Tâches &amp; Bloc-Notes Personnel
+            <span>📋</span> ${isSuperAdmin ? 'Tâches Collaboratives de la Kermesse' : `Tâches d'Équipe — ${poleLabel}`}
           </div>
           <div class="card-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn btn-secondary btn-sm" onclick="TasksModule.openTemplatesModal()">
@@ -41,11 +67,18 @@ const TasksModule = {
         </div>
 
         <div class="card-body">
+          <!-- Bannière informative d'équipe -->
+          <div class="alert-banner info" style="margin-bottom: 1.25rem;">
+            <div>
+              👥 <strong>Synchronisation d'équipe :</strong> Les tâches ci-dessous sont <strong>partagées en temps réel</strong> entre tous les administrateurs de ce pôle et le SuperAdmin. Chaque coche ou ajout indique nominativement qui a fait l'action.
+            </div>
+          </div>
+
           <!-- Jauge de Progression Dynamique -->
           <div id="tasksProgressCard" style="background: var(--gray-50, #f8fafc); border: 1px solid var(--gray-200); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
               <span style="font-weight: 700; color: var(--gray-800); font-size: 0.95rem;">
-                Progression de mes tâches : <span id="tasksPercentText">0%</span>
+                Progression des tâches d'équipe : <span id="tasksPercentText">0%</span>
               </span>
               <span class="badge badge-primary" id="tasksRatioBadge">0 / 0 terminées</span>
             </div>
@@ -57,25 +90,26 @@ const TasksModule = {
           <!-- Onglets Navigation -->
           <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.5rem; overflow-x: auto;">
             <button class="tab-btn active" id="tabTasksList" onclick="TasksModule.switchTab('tasks')">
-              ✅ Ma To-Do List (<span id="tabTasksCount">0</span>)
+              👥 Tâches d'Équipe (<span id="tabTasksCount">0</span>)
             </button>
             <button class="tab-btn" id="tabTasksNotes" onclick="TasksModule.switchTab('notes')">
-              📒 Mon Bloc-Notes Libre (<span id="tabNotesCount">0</span>)
+              📒 Mon Bloc-Notes Personnel (<span id="tabNotesCount">0</span>)
             </button>
             <button class="tab-btn" id="tabTasksTemplates" onclick="TasksModule.switchTab('templates')">
-              📋 Modèles de Checklists Kermesse
+              📋 Modèles de Checklists
             </button>
           </div>
 
           <!-- Conteneur Dynamique -->
           <div id="tasksTabContent">
-            <div style="text-align: center; padding: 2rem; color: var(--gray-500);">Chargement de vos notes...</div>
+            <div style="text-align: center; padding: 2rem; color: var(--gray-500);">Chargement des tâches de l'équipe...</div>
           </div>
         </div>
       </div>
     `;
 
     await this.loadData();
+    this.startPolling();
   },
 
   switchTab(tab) {
@@ -89,25 +123,57 @@ const TasksModule = {
     this.renderCurrentTab();
   },
 
-  async loadData() {
-    const taskKey = this.getUserKey('tasks');
-    const noteKey = this.getUserKey('notes');
+  async loadData(silent = false) {
+    const user = Auth.getCurrentUser();
+    if (!user) return;
 
-    // Charger les tâches
-    const savedTasks = localStorage.getItem(taskKey);
-    if (savedTasks) {
-      try { this.tasks = JSON.parse(savedTasks); } catch (e) { this.tasks = []; }
-    } else {
-      // Exemples initiaux pour guider l'admin
-      this.tasks = [
-        { id: 'tsk-1', text: 'Vérifier la caisse et le fond initial avec le caissier', is_done: false, priority: 'urgent', due_time: '09h30', created_at: new Date().toISOString() },
-        { id: 'tsk-2', text: 'Faire le tour des 10 zones pour s\'assurer de la signalétique', is_done: true, priority: 'normal', due_time: '10h00', created_at: new Date().toISOString() },
-        { id: 'tsk-3', text: 'Vérifier la disponibilité de la trousse de secours et DAE', is_done: false, priority: 'urgent', due_time: '10h15', created_at: new Date().toISOString() }
-      ];
-      this.saveTasks();
+    const isSuperAdmin = Boolean(user.is_original_superadmin || user.role_code === 'superadmin');
+    const client = SupabaseClient.client;
+
+    let loadedTasks = [];
+
+    // 1. Chargement depuis Supabase si connecté
+    if (client && navigator.onLine) {
+      try {
+        let query = client.from('pole_tasks').select('*').order('created_at', { ascending: false });
+
+        // Si admin de pôle : seulement son pôle et les tâches 'all'
+        if (!isSuperAdmin) {
+          query = query.or(`pole_code.eq.${user.role_code},pole_code.eq.all`);
+        }
+
+        const { data, error } = await query;
+        if (!error && data) {
+          loadedTasks = data;
+          localStorage.setItem('lc_cached_pole_tasks', JSON.stringify(data));
+        }
+      } catch (err) {
+        console.warn('[TasksModule] Erreur Supabase:', err);
+      }
     }
 
-    // Charger les notes
+    // 2. Fallback cache local ou localStorage
+    if (loadedTasks.length === 0) {
+      try {
+        const cached = localStorage.getItem('lc_cached_pole_tasks');
+        if (cached) {
+          const allCached = JSON.parse(cached);
+          loadedTasks = isSuperAdmin ? allCached : allCached.filter(t => t.pole_code === user.role_code || t.pole_code === 'all');
+        }
+      } catch (e) {
+        loadedTasks = [];
+      }
+    }
+
+    // Si aucune tâche en base, charger quelques exemples initiaux pour le pôle
+    if (loadedTasks.length === 0 && !isSuperAdmin) {
+      loadedTasks = this.getDefaultInitialTasksForPole(user.role_code);
+    }
+
+    this.tasks = loadedTasks;
+
+    // Charger les notes personnelles privées (stockées en local sur l'appareil)
+    const noteKey = this.getUserKey('notes');
     const savedNotes = localStorage.getItem(noteKey);
     if (savedNotes) {
       try { this.notes = JSON.parse(savedNotes); } catch (e) { this.notes = []; }
@@ -115,8 +181,8 @@ const TasksModule = {
       this.notes = [
         {
           id: 'note-1',
-          title: '📌 Contacts & Urgences Kermesse',
-          content: "• Référent Sono : 77 123 45 67\n• Référent Électricité / Groupe : 77 987 65 43\n• Code cadenas réserve stockage : 4826\n• Heure briefing bénévoles : 09h15 précises",
+          title: '📌 Mes Mémos & Numéros Clés',
+          content: "• Mon espace privé personnel (visible uniquement sur mon appareil).\n• Ne pas hésiter à noter ici les mémos rapides ou consignes orales.",
           updated_at: new Date().toISOString()
         }
       ];
@@ -128,12 +194,32 @@ const TasksModule = {
     }
 
     this.updateProgress();
-    this.renderCurrentTab();
+    if (!silent) {
+      this.renderCurrentTab();
+    } else if (this.currentTab === 'tasks') {
+      const container = document.getElementById('tasksListContainer');
+      if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
+    }
   },
 
-  saveTasks() {
-    localStorage.setItem(this.getUserKey('tasks'), JSON.stringify(this.tasks));
-    this.updateProgress();
+  getDefaultInitialTasksForPole(roleCode) {
+    const now = new Date().toISOString();
+    switch (roleCode) {
+      case 'admin_restauration':
+        return [
+          { id: 'def-1', pole_code: 'admin_restauration', title: 'Vérifier la température des frigos et glacières', priority: 'urgente', due_time: '08h45', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now },
+          { id: 'def-2', pole_code: 'admin_restauration', title: 'Faire l\'inventaire initial des canettes et boissons fraîches', priority: 'normale', due_time: '09h30', is_completed: false, created_by_name: 'Équipe Restauration', created_by_role: 'Responsable Restauration', created_at: now }
+        ];
+      case 'admin_finances':
+        return [
+          { id: 'def-3', pole_code: 'admin_finances', title: 'Distribuer les fonds de caisse scellés aux stands', priority: 'urgente', due_time: '09h00', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now },
+          { id: 'def-4', pole_code: 'admin_finances', title: 'Vérifier les souches de tickets d\'entrée numérotées', priority: 'normale', due_time: '09h30', is_completed: false, created_by_name: 'Équipe Billetterie', created_by_role: 'Responsable Billetterie', created_at: now }
+        ];
+      default:
+        return [
+          { id: 'def-5', pole_code: roleCode || 'all', title: 'Vérifier l\'installation et l\'affichage de notre pôle', priority: 'normale', due_time: '09h00', is_completed: false, created_by_name: 'Direction Générale', created_by_role: 'SuperAdministrateur', created_at: now }
+        ];
+    }
   },
 
   saveNotes() {
@@ -143,8 +229,9 @@ const TasksModule = {
   },
 
   updateProgress() {
-    const total = this.tasks.length;
-    const done = this.tasks.filter(t => t.is_done).length;
+    const list = this.getFilteredTasks();
+    const total = list.length;
+    const done = list.filter(t => t.is_completed).length;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
     const elPercent = document.getElementById('tasksPercentText');
@@ -156,6 +243,22 @@ const TasksModule = {
     if (elRatio) elRatio.textContent = `${done} / ${total} terminées`;
     if (elBar) elBar.style.width = `${percent}%`;
     if (elTabCount) elTabCount.textContent = total - done;
+  },
+
+  getFilteredTasks() {
+    const user = Auth.getCurrentUser();
+    if (!user) return [];
+    const isSuperAdmin = Boolean(user.is_original_superadmin || user.role_code === 'superadmin');
+
+    if (!isSuperAdmin) {
+      return this.tasks.filter(t => t.pole_code === user.role_code || t.pole_code === 'all');
+    }
+
+    // Vue SuperAdmin : filtre par pôle sélectionné
+    if (this.selectedPoleFilter === 'all') {
+      return this.tasks;
+    }
+    return this.tasks.filter(t => t.pole_code === this.selectedPoleFilter || t.pole_code === 'all');
   },
 
   renderCurrentTab() {
@@ -171,19 +274,43 @@ const TasksModule = {
     }
   },
 
-  // 1. ONGLET TO-DO LIST
+  // 1. ONGLET TO-DO LIST PARTAGÉE DU PÔLE
   renderTasksTab(container) {
+    const user = Auth.getCurrentUser();
+    const isSuperAdmin = user && (user.is_original_superadmin || user.role_code === 'superadmin');
+
     container.innerHTML = `
-      <!-- Formulaire d'ajout rapide (1 frappe + Entrée) -->
-      <div class="tasks-quick-add-bar">
-        <input type="text" id="newTaskInput" class="form-control tasks-quick-input" placeholder="Ajouter une tâche rapide (ex: Rappeler Fatima, Recharger jetons...)" onkeydown="if(event.key==='Enter') TasksModule.quickAddTask()">
-        <div class="tasks-quick-options">
-          <select id="newTaskPriority" class="form-control tasks-priority-select">
-            <option value="normal">🟡 Normal</option>
-            <option value="urgent">🔴 Urgent</option>
-            <option value="low">🟢 Basse</option>
+      <!-- Sélecteur de pôle (SuperAdmin uniquement) -->
+      ${isSuperAdmin ? `
+        <div style="background: #fdf4ff; border: 1px solid #f0abfc; border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.2rem;">👑</span>
+            <span style="font-weight: 700; color: #86198f; font-size: 0.9rem;">Afficher les tâches d'un pôle spécifique :</span>
+          </div>
+          <select id="superAdminPoleFilter" class="form-control" style="max-width: 320px; font-weight: 600;" onchange="TasksModule.changePoleFilter(this.value)">
+            <option value="all" ${this.selectedPoleFilter === 'all' ? 'selected' : ''}>🌟 Tous les Pôles (Vue d'ensemble)</option>
+            ${this.POLES.map(p => `<option value="${p.code}" ${this.selectedPoleFilter === p.code ? 'selected' : ''}>${p.icon} ${p.name}</option>`).join('')}
           </select>
-          <input type="text" id="newTaskDue" class="form-control tasks-due-input" placeholder="Heure (ex: 11h)">
+        </div>
+      ` : ''}
+
+      <!-- Formulaire d'ajout collaboratif -->
+      <div class="tasks-quick-add-bar">
+        <input type="text" id="newTaskInput" class="form-control tasks-quick-input" placeholder="Ajouter une tâche d'équipe (ex: Contrôler stock glaçons, Réapprovisionner jetons...)" onkeydown="if(event.key==='Enter') TasksModule.quickAddTask()">
+        <div class="tasks-quick-options">
+          ${isSuperAdmin ? `
+            <select id="newTaskPoleTarget" class="form-control" style="font-weight: 600; min-width: 160px;" title="Attribuer à quel pôle ?">
+              ${this.POLES.map(p => `<option value="${p.code}" ${this.selectedPoleFilter === p.code ? 'selected' : ''}>${p.icon} ${p.name.split(':')[0]}</option>`).join('')}
+              <option value="all">🌐 Tous les Pôles</option>
+            </select>
+          ` : ''}
+
+          <select id="newTaskPriority" class="form-control tasks-priority-select">
+            <option value="normale">🟡 Normal</option>
+            <option value="urgente">🔴 Urgent</option>
+            <option value="basse">🟢 Basse</option>
+          </select>
+          <input type="text" id="newTaskDue" class="form-control tasks-due-input" placeholder="Heure (ex: 11h30)">
           <button class="btn btn-primary tasks-add-btn" onclick="TasksModule.quickAddTask()">
             <span>➕</span> Ajouter
           </button>
@@ -203,10 +330,17 @@ const TasksModule = {
       </div>
 
       <!-- Liste des tâches -->
-      <div id="tasksListContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
-        ${this.generateTasksHtml(this.tasks)}
+      <div id="tasksListContainer" style="display: flex; flex-direction: column; gap: 0.65rem;">
+        ${this.generateTasksHtml(this.getFilteredTasks())}
       </div>
     `;
+  },
+
+  changePoleFilter(val) {
+    this.selectedPoleFilter = val;
+    this.updateProgress();
+    const container = document.getElementById('tasksListContainer');
+    if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
   },
 
   generateTasksHtml(list) {
@@ -214,42 +348,96 @@ const TasksModule = {
       return `
         <div class="empty-state">
           <div class="empty-icon">🎉</div>
-          <div class="empty-title">Aucune tâche en attente !</div>
-          <div class="empty-desc">Ajoutez une tâche ci-dessus ou chargez une checklist type de kermesse.</div>
+          <div class="empty-title">Aucune tâche en attente pour ce pôle !</div>
+          <div class="empty-desc">Ajoutez une consigne ou une tâche ci-dessus pour la partager avec l'équipe.</div>
         </div>
       `;
     }
 
     const prioLabels = {
-      'urgent': '<span class="badge badge-danger" style="font-size: 0.75rem;">🔴 Urgent</span>',
-      'normal': '<span class="badge badge-warning" style="font-size: 0.75rem;">🟡 Normal</span>',
-      'low': '<span class="badge badge-gray" style="font-size: 0.75rem;">🟢 Basse</span>'
+      'urgente': '<span class="badge badge-danger" style="font-size: 0.72rem;">🔴 Urgent</span>',
+      'urgent': '<span class="badge badge-danger" style="font-size: 0.72rem;">🔴 Urgent</span>',
+      'normale': '<span class="badge badge-warning" style="font-size: 0.72rem;">🟡 Normal</span>',
+      'normal': '<span class="badge badge-warning" style="font-size: 0.72rem;">🟡 Normal</span>',
+      'basse': '<span class="badge badge-gray" style="font-size: 0.72rem;">🟢 Basse</span>',
+      'low': '<span class="badge badge-gray" style="font-size: 0.72rem;">🟢 Basse</span>'
     };
 
-    return list.map(t => `
-      <div class="card task-item-row" style="margin: 0; padding: 0.75rem 1rem; border: 1px solid var(--gray-200); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; background: ${t.is_done ? '#f8fafc' : '#fff'}; opacity: ${t.is_done ? '0.7' : '1'};">
-        <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
-          <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;" ${t.is_done ? 'checked' : ''} onchange="TasksModule.toggleTask('${t.id}')">
-          <div style="flex: 1;">
-            <span style="font-size: 0.95rem; font-weight: ${t.is_done ? 'normal' : '600'}; color: ${t.is_done ? 'var(--gray-500)' : 'var(--gray-900)'}; text-decoration: ${t.is_done ? 'line-through' : 'none'};">
-              ${t.text}
-            </span>
-            ${t.due_time ? `<span style="font-size: 0.78rem; color: #dc2626; margin-left: 0.5rem; font-weight: 700;">⏰ ${t.due_time}</span>` : ''}
+    return list.map(t => {
+      const isDone = Boolean(t.is_completed || t.is_done);
+      const isDirectiveSuperAdmin = Boolean(
+        (t.created_by_role && t.created_by_role.toLowerCase().includes('superadmin')) ||
+        (t.created_by_name && (t.created_by_name.toLowerCase().includes('superadmin') || t.created_by_name.toLowerCase().includes('mounir')))
+      );
+
+      const poleTag = (t.pole_code && t.pole_code !== 'all') ? this.getPoleName(t.pole_code).split(':')[0] : 'Général';
+
+      const formatTimeText = (dateStr) => {
+        if (!dateStr) return '';
+        try {
+          const d = new Date(dateStr);
+          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch {
+          return '';
+        }
+      };
+
+      return `
+        <div class="card task-item-row" style="margin: 0; padding: 0.85rem 1rem; border: 1px solid ${isDirectiveSuperAdmin ? '#f59e0b' : 'var(--gray-200)'}; border-left: 5px solid ${isDirectiveSuperAdmin ? '#d97706' : (isDone ? '#10b981' : '#3b82f6')}; border-radius: 8px; background: ${isDone ? '#f8fafc' : '#fff'}; opacity: ${isDone ? '0.75' : '1'};">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem;">
+            <div style="display: flex; align-items: flex-start; gap: 0.75rem; flex: 1;">
+              <input type="checkbox" style="width: 22px; height: 22px; cursor: pointer; margin-top: 2px;" ${isDone ? 'checked' : ''} onchange="TasksModule.toggleTask('${t.id}')">
+              
+              <div style="flex: 1;">
+                <!-- Titre & Badges -->
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
+                  <span style="font-size: 0.98rem; font-weight: ${isDone ? 'normal' : '700'}; color: ${isDone ? 'var(--gray-500)' : 'var(--gray-900)'}; text-decoration: ${isDone ? 'line-through' : 'none'};">
+                    ${t.title || t.text}
+                  </span>
+                  
+                  ${isDirectiveSuperAdmin ? `
+                    <span class="badge" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 0.7rem; font-weight: 700;">
+                      👑 Directive Direction
+                    </span>
+                  ` : ''}
+
+                  <span class="badge badge-gray" style="font-size: 0.68rem;">
+                    ${poleTag}
+                  </span>
+
+                  ${t.due_time ? `<span style="font-size: 0.75rem; color: #dc2626; font-weight: 700;">⏰ ${t.due_time}</span>` : ''}
+                </div>
+
+                <!-- Métadonnées : Qui a créé et qui a fait -->
+                <div style="font-size: 0.78rem; color: var(--gray-500); display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.35rem;">
+                  <span>👤 Ajouté par : <strong>${t.created_by_name || 'Équipe'}</strong></span>
+
+                  ${isDone && t.completed_by_name ? `
+                    <span style="color: #059669; font-weight: 600; background: #ecfdf5; padding: 2px 6px; border-radius: 4px;">
+                      ✅ Fait par : <strong>${t.completed_by_name}</strong> ${t.completed_at ? 'à ' + formatTimeText(t.completed_at) : ''}
+                    </span>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions & Priorité -->
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              ${prioLabels[t.priority] || ''}
+              <button class="btn-icon danger" onclick="TasksModule.deleteTask('${t.id}')" title="Supprimer la tâche">✕</button>
+            </div>
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          ${prioLabels[t.priority] || ''}
-          <button class="btn-icon danger" onclick="TasksModule.deleteTask('${t.id}')" title="Supprimer">✕</button>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   },
 
-  quickAddTask() {
+  async quickAddTask() {
     const input = document.getElementById('newTaskInput');
     if (!input) return;
+
     const text = input.value.trim();
-    const priority = document.getElementById('newTaskPriority')?.value || 'normal';
+    const priority = document.getElementById('newTaskPriority')?.value || 'normale';
     const dueTime = document.getElementById('newTaskDue')?.value.trim();
 
     if (!text) {
@@ -257,23 +445,63 @@ const TasksModule = {
       return;
     }
 
-    const newTask = {
-      id: 'tsk-' + Date.now(),
-      text,
-      is_done: false,
+    const user = Auth.getCurrentUser();
+    if (!user) {
+      Notify.error('Session expirée, veuillez vous reconnecter.');
+      return;
+    }
+
+    const isSuperAdmin = Boolean(user.is_original_superadmin || user.role_code === 'superadmin');
+    const targetPole = isSuperAdmin
+      ? (document.getElementById('newTaskPoleTarget')?.value || this.selectedPoleFilter || 'all')
+      : (user.role_code || 'all');
+
+    const creatorName = user.full_name || user.login || 'SuperAdmin';
+    const creatorRole = isSuperAdmin ? 'SuperAdministrateur' : (user.role_name || user.role_code || 'Administrateur');
+
+    const payload = {
+      pole_code: targetPole,
+      title: text,
       priority,
       due_time: dueTime || null,
-      created_at: new Date().toISOString()
+      is_completed: false,
+      created_by_id: user.id !== '00000000-0000-0000-0000-000000000001' ? user.id : null,
+      created_by_name: creatorName,
+      created_by_role: creatorRole
     };
 
-    this.tasks.unshift(newTask);
-    this.saveTasks();
+    // 1. Ajout optimiste immédiat
+    const tempTask = {
+      ...payload,
+      id: 'local-' + Date.now(),
+      created_at: new Date().toISOString()
+    };
+    this.tasks.unshift(tempTask);
     input.value = '';
-    input.focus();
 
     const container = document.getElementById('tasksListContainer');
-    if (container) container.innerHTML = this.generateTasksHtml(this.tasks);
-    Notify.success('Tâche ajoutée.');
+    if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
+    this.updateProgress();
+
+    // 2. Persistance Supabase / Offline
+    const client = SupabaseClient.client;
+    if (client && navigator.onLine) {
+      try {
+        const { data, error } = await client.from('pole_tasks').insert([payload]).select().single();
+        if (!error && data) {
+          tempTask.id = data.id;
+          Notify.success(`Tâche enregistrée pour ${this.getPoleName(targetPole)}`);
+          await this.loadData(true);
+          return;
+        }
+      } catch (err) {
+        console.warn('[TasksModule] Sauvegarde locale après exception Supabase:', err);
+      }
+    }
+
+    // Fallback local
+    localStorage.setItem('lc_cached_pole_tasks', JSON.stringify(this.tasks));
+    Notify.success('Tâche ajoutée localement.');
   },
 
   focusAddTask() {
@@ -284,38 +512,96 @@ const TasksModule = {
     }, 100);
   },
 
-  toggleTask(id) {
+  async toggleTask(id) {
     const task = this.tasks.find(t => t.id === id);
     if (!task) return;
-    task.is_done = !task.is_done;
-    this.saveTasks();
+
+    const user = Auth.getCurrentUser();
+    const isNowDone = !(task.is_completed || task.is_done);
+    task.is_completed = isNowDone;
+    task.is_done = isNowDone;
+
+    if (isNowDone) {
+      task.completed_by_name = user ? (user.full_name || user.login) : 'Admin';
+      task.completed_at = new Date().toISOString();
+    } else {
+      task.completed_by_name = null;
+      task.completed_at = null;
+    }
 
     const container = document.getElementById('tasksListContainer');
-    if (container) container.innerHTML = this.generateTasksHtml(this.tasks);
+    if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
+    this.updateProgress();
 
-    if (task.is_done) {
-      Notify.success('Tâche terminée ! Bravo ✅');
+    if (isNowDone) {
+      Notify.success(`Tâche validée par ${task.completed_by_name} ! ✅`);
     }
+
+    // Synchronisation en base de données Supabase
+    const client = SupabaseClient.client;
+    if (client && navigator.onLine && !id.startsWith('local-') && !id.startsWith('def-')) {
+      try {
+        await client.from('pole_tasks').update({
+          is_completed: isNowDone,
+          completed_by_name: task.completed_by_name,
+          completed_at: task.completed_at,
+          completed_by_id: user?.id || null,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+      } catch (err) {
+        console.warn('[TasksModule] Erreur update Supabase:', err);
+      }
+    }
+
+    localStorage.setItem('lc_cached_pole_tasks', JSON.stringify(this.tasks));
   },
 
-  deleteTask(id) {
+  async deleteTask(id) {
     this.tasks = this.tasks.filter(t => t.id !== id);
-    this.saveTasks();
     const container = document.getElementById('tasksListContainer');
-    if (container) container.innerHTML = this.generateTasksHtml(this.tasks);
+    if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
+    this.updateProgress();
+
+    const client = SupabaseClient.client;
+    if (client && navigator.onLine && !id.startsWith('local-') && !id.startsWith('def-')) {
+      try {
+        await client.from('pole_tasks').delete().eq('id', id);
+      } catch (e) {}
+    }
+
+    localStorage.setItem('lc_cached_pole_tasks', JSON.stringify(this.tasks));
+    Notify.info('Tâche supprimée.');
   },
 
   clearDoneTasks() {
-    const count = this.tasks.filter(t => t.is_done).length;
-    if (count === 0) {
+    const doneTasks = this.tasks.filter(t => t.is_completed || t.is_done);
+    if (doneTasks.length === 0) {
       Notify.info('Aucune tâche terminée à nettoyer.');
       return;
     }
-    this.tasks = this.tasks.filter(t => !t.is_done);
-    this.saveTasks();
-    const container = document.getElementById('tasksListContainer');
-    if (container) container.innerHTML = this.generateTasksHtml(this.tasks);
-    Notify.info(`${count} tâche(s) archivée(s).`);
+
+    Notify.confirm(
+      'Archiver les tâches terminées ?',
+      `Confirmez-vous le retrait de ${doneTasks.length} tâche(s) terminée(s) de la liste d'équipe ?`,
+      async () => {
+        const client = SupabaseClient.client;
+        const doneIds = doneTasks.map(t => t.id).filter(id => !id.startsWith('local-') && !id.startsWith('def-'));
+
+        this.tasks = this.tasks.filter(t => !t.is_completed && !t.is_done);
+        const container = document.getElementById('tasksListContainer');
+        if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
+        this.updateProgress();
+
+        if (client && navigator.onLine && doneIds.length > 0) {
+          try {
+            await client.from('pole_tasks').delete().in('id', doneIds);
+          } catch (e) {}
+        }
+
+        localStorage.setItem('lc_cached_pole_tasks', JSON.stringify(this.tasks));
+        Notify.success(`${doneTasks.length} tâche(s) archivée(s).`);
+      }
+    );
   },
 
   filterTasks(filter) {
@@ -327,22 +613,28 @@ const TasksModule = {
     );
     if (activeBtn) activeBtn.classList.add('active');
 
-    let filtered = this.tasks;
-    if (filter === 'pending') filtered = this.tasks.filter(t => !t.is_done);
-    if (filter === 'urgent') filtered = this.tasks.filter(t => t.priority === 'urgent' && !t.is_done);
-    if (filter === 'done') filtered = this.tasks.filter(t => t.is_done);
+    let filtered = this.getFilteredTasks();
+    if (filter === 'pending') filtered = filtered.filter(t => !t.is_completed && !t.is_done);
+    if (filter === 'urgent') filtered = filtered.filter(t => (t.priority === 'urgente' || t.priority === 'urgent') && !t.is_completed && !t.is_done);
+    if (filter === 'done') filtered = filtered.filter(t => t.is_completed || t.is_done);
 
     const container = document.getElementById('tasksListContainer');
     if (container) container.innerHTML = this.generateTasksHtml(filtered);
   },
 
-  // 2. ONGLET BLOC-NOTES LIBRE (AUTO-SAVE)
+  // 2. ONGLET BLOC-NOTES LIBRE PERSONNEL (AUTO-SAVE SUR L'APPAREIL)
   renderNotesTab(container) {
     const activeNote = this.notes.find(n => n.id === this.activeNoteId) || this.notes[0];
 
     container.innerHTML = `
+      <div class="alert-banner info" style="margin-bottom: 1rem; font-size: 0.82rem;">
+        <div>
+          🔒 <strong>Espace Privé & Confidentiel :</strong> Ce bloc-notes est personnel à votre session et votre téléphone. Vous pouvez y inscrire vos réflexions, chiffres personnels ou numéros sans les partager au pôle.
+        </div>
+      </div>
+
       <div class="notes-workspace-grid">
-        <!-- Liste latérale / sélecteur mobile des notes -->
+        <!-- Liste latérale des notes -->
         <div class="notes-sidebar-col">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <span style="font-weight: 700; font-size: 0.85rem; color: var(--gray-700);">Mes Mémos (${this.notes.length})</span>
@@ -376,9 +668,9 @@ const TasksModule = {
                 </button>
               </div>
             </div>
-            <textarea id="noteContentInput" class="form-control" rows="12" style="font-family: inherit; font-size: 0.92rem; line-height: 1.6; resize: vertical;" placeholder="Écrivez vos notes, idées, numéros, consignes ici... Sauvegarde automatique en direct !" oninput="TasksModule.autoSaveActiveNote()">${activeNote.content || ''}</textarea>
+            <textarea id="noteContentInput" class="form-control" rows="12" style="font-family: inherit; font-size: 0.92rem; line-height: 1.6; resize: vertical;" placeholder="Écrivez vos notes libres ici... Sauvegarde automatique immédiate !" oninput="TasksModule.autoSaveActiveNote()">${activeNote.content || ''}</textarea>
             <div id="noteSaveStatus" style="font-size: 0.75rem; color: #10b981; margin-top: 0.35rem; font-style: italic;">
-              💾 Enregistré automatiquement
+              💾 Enregistré automatiquement sur cet appareil
             </div>
           ` : `
             <div class="empty-state">
@@ -434,7 +726,7 @@ const TasksModule = {
   },
 
   deleteNote(id) {
-    if (!confirm('Supprimer cette note ?')) return;
+    if (!confirm('Supprimer cette note personnelle ?')) return;
     this.notes = this.notes.filter(n => n.id !== id);
     this.activeNoteId = this.notes.length > 0 ? this.notes[0].id : null;
     this.saveNotes();
@@ -449,21 +741,21 @@ const TasksModule = {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   },
 
-  // 3. ONGLET MODÈLES DE CHECKLISTS KERMESSE PRÊTES À L'EMPLOI
+  // 3. MODÈLES DE CHECKLISTS
   renderTemplatesTab(container) {
     container.innerHTML = `
       <div class="alert-banner info" style="margin-bottom: 1.5rem;">
         <div>
-          📋 <strong>Kits de Checklists Recommandés :</strong> Cliquez sur <strong>« Injecter dans ma To-Do »</strong> pour charger instantanément les tâches incontournables de la journée sans rien oublier !
+          📋 <strong>Kits de Checklists Recommandés :</strong> Cliquez sur <strong>« Injecter dans la To-Do d'Équipe »</strong> pour charger instantanément les tâches incontournables de la kermesse avec attribution automatique !
         </div>
       </div>
 
       <div class="templates-grid">
-        <!-- Kit 1 : Matin / Montage -->
+        <!-- Kit 1 : Matin -->
         <div class="card" style="border-left: 6px solid #2563eb;">
           <div class="card-body">
-            <h4 style="color: #1e40af; margin-bottom: 0.5rem;">🌅 1. Kit Matin (Montage & Installation)</h4>
-            <p style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 0.75rem;">Indispensable dès 08h00 pour ouvrir à l'heure.</p>
+            <h4 style="color: #1e40af; margin-bottom: 0.5rem;">🌅 1. Kit Matin (Montage & Ouverture)</h4>
+            <p style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 0.75rem;">Indispensable dès 08h00 pour ouvrir les stands à l'heure.</p>
             <ul style="font-size: 0.82rem; color: var(--gray-700); padding-left: 1.25rem; line-height: 1.5; margin-bottom: 1rem;">
               <li>Vérifier l'électricité et tester la sonorisation</li>
               <li>Poser les affiches et panneaux numérotés des stands</li>
@@ -472,30 +764,30 @@ const TasksModule = {
               <li>Tester le défibrillateur (DAE) et la trousse secours</li>
             </ul>
             <button class="btn btn-primary btn-sm" onclick="TasksModule.injectTemplate('morning')" style="width: 100%;">
-              📥 Injecter le Kit Matin dans ma To-Do
+              📥 Injecter le Kit Matin dans notre To-Do
             </button>
           </div>
         </div>
 
-        <!-- Kit 2 : Journée / Exploitation -->
+        <!-- Kit 2 : Journée -->
         <div class="card" style="border-left: 6px solid #10b981;">
           <div class="card-body">
-            <h4 style="color: #065f46; margin-bottom: 0.5rem;">☀️ 2. Kit Jour J (En Pleine Action)</h4>
+            <h4 style="color: #065f46; margin-bottom: 0.5rem;">☀️ 2. Kit Jour J (Exploitation en Pleine Action)</h4>
             <p style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 0.75rem;">À checker en continu entre 11h et 16h.</p>
             <ul style="font-size: 0.82rem; color: var(--gray-700); padding-left: 1.25rem; line-height: 1.5; margin-bottom: 1rem;">
               <li>Vérifier les stocks de denrées & buvette à midi</li>
               <li>Organiser la rotation et le repas des bénévoles</li>
-              <li>Effectuer la première ronde sanitaire & poubelles</li>
+              <li>Effectuer la première ronde sanitaire & vidage poubelles</li>
               <li>Faire un premier point caisse et ramassage espèces</li>
-              <li>Vérifier que les stands ont assez de lots de secours</li>
+              <li>Vérifier les réserves de lots des stands les plus fréquentés</li>
             </ul>
             <button class="btn btn-success btn-sm" onclick="TasksModule.injectTemplate('day')" style="width: 100%;">
-              📥 Injecter le Kit Jour J dans ma To-Do
+              📥 Injecter le Kit Jour J dans notre To-Do
             </button>
           </div>
         </div>
 
-        <!-- Kit 3 : Soir / Clôture & Démontage -->
+        <!-- Kit 3 : Soir -->
         <div class="card" style="border-left: 6px solid #f59e0b;">
           <div class="card-body">
             <h4 style="color: #92400e; margin-bottom: 0.5rem;">🌙 3. Kit Soir (Clôture & Démontage)</h4>
@@ -505,10 +797,10 @@ const TasksModule = {
               <li>Rapatrier tous les lots restants au stock central</li>
               <li>Démonter et plier les barnums et tables</li>
               <li>Vérifier et rendre le matériel prêté (sono, câbles...)</li>
-              <li>Nettoyage final complet de la cour / site</li>
+              <li>Nettoyage final complet du site et évacuation des déchets</li>
             </ul>
             <button class="btn btn-secondary btn-sm" onclick="TasksModule.injectTemplate('evening')" style="width: 100%;">
-              📥 Injecter le Kit Soir dans ma To-Do
+              📥 Injecter le Kit Soir dans notre To-Do
             </button>
           </div>
         </div>
@@ -520,46 +812,79 @@ const TasksModule = {
     this.switchTab('templates');
   },
 
-  injectTemplate(type) {
+  async injectTemplate(type) {
+    const user = Auth.getCurrentUser();
+    const isSuperAdmin = user && (user.is_original_superadmin || user.role_code === 'superadmin');
+    const targetPole = isSuperAdmin ? (this.selectedPoleFilter || 'all') : (user?.role_code || 'all');
+    const creatorName = user?.full_name || user?.login || 'Admin';
+    const creatorRole = isSuperAdmin ? 'SuperAdministrateur' : (user?.role_name || 'Admin');
+
     const kits = {
       morning: [
-        { text: 'Vérifier l\'électricité et tester la sono', priority: 'urgent', due_time: '08h30' },
-        { text: 'Installer les barnums et panneaux de stands numérotés', priority: 'normal', due_time: '09h00' },
-        { text: 'Distribuer les fonds de caisse initiaux', priority: 'urgent', due_time: '09h30' },
-        { text: 'Briefing bénévoles et pointage des présences', priority: 'urgent', due_time: '09h45' },
-        { text: 'Vérifier trousse de premiers secours et DAE', priority: 'normal', due_time: '09h55' }
+        { text: 'Tester l\'électricité et le micro de la sono', priority: 'urgente', due_time: '08h30' },
+        { text: 'Installer les panneaux numérotés et couleurs de stands', priority: 'normale', due_time: '09h00' },
+        { text: 'Distribuer les fonds de caisse scellés', priority: 'urgente', due_time: '09h30' },
+        { text: 'Briefing bénévoles et contrôle des présences', priority: 'urgente', due_time: '09h45' },
+        { text: 'Vérifier trousse de secours et accès DAE', priority: 'normale', due_time: '09h55' }
       ],
       day: [
-        { text: 'Point stock denrées buvette & réapprovisionnement', priority: 'normal', due_time: '12h00' },
-        { text: 'Organiser la relève pour le repas des bénévoles', priority: 'urgent', due_time: '12h30' },
-        { text: 'Vérification propreté sanitaires et vidage poubelles', priority: 'normal', due_time: '13h30' },
-        { text: 'Contrôler les réserves de lots des stands les plus actifs', priority: 'urgent', due_time: '14h30' },
-        { text: 'Annoncer au micro le tirage de la tombola', priority: 'normal', due_time: '16h00' }
+        { text: 'Contrôle stocks buvette & denrées fraîches', priority: 'normale', due_time: '12h00' },
+        { text: 'Organiser les pauses repas des bénévoles par stand', priority: 'urgente', due_time: '12h30' },
+        { text: 'Ronde propreté sanitaire et réappro savon/papier', priority: 'normale', due_time: '13h30' },
+        { text: 'Réapprovisionner les stands qui manquent de lots', priority: 'urgente', due_time: '14h30' },
+        { text: 'Annoncer au micro le tirage de la tombola', priority: 'normale', due_time: '16h00' }
       ],
       evening: [
-        { text: 'Clôturer les caisses et valider les écarts', priority: 'urgent', due_time: '17h30' },
-        { text: 'Rapatrier les lots invendus au stock central', priority: 'normal', due_time: '18h00' },
-        { text: 'Démontage barnums, tables et pliage des chaises', priority: 'normal', due_time: '18h30' },
-        { text: 'Contrôle et restitution du matériel lourd prêté', priority: 'urgent', due_time: '19h00' },
-        { text: 'Nettoyage complet du site et évacuation des poubelles', priority: 'normal', due_time: '19h30' }
+        { text: 'Clôturer les caisses et valider les écarts', priority: 'urgente', due_time: '17h30' },
+        { text: 'Rapatrier les lots non distribués au stock central', priority: 'normale', due_time: '18h00' },
+        { text: 'Démontage barnums, pliage des chaises et tables', priority: 'normale', due_time: '18h30' },
+        { text: 'Contrôler la chaîne de prêt et restituer le matériel', priority: 'urgente', due_time: '19h00' },
+        { text: 'Ronde finale propreté du site et évacuation poubelles', priority: 'normale', due_time: '19h30' }
       ]
     };
 
     const items = kits[type] || [];
-    items.forEach(it => {
-      this.tasks.push({
-        id: 'tsk-' + Math.random().toString(36).substr(2, 9),
-        text: it.text,
-        is_done: false,
-        priority: it.priority,
-        due_time: it.due_time,
-        created_at: new Date().toISOString()
-      });
+    const client = SupabaseClient.client;
+    const toInsert = items.map(it => ({
+      pole_code: targetPole,
+      title: it.text,
+      priority: it.priority,
+      due_time: it.due_time,
+      is_completed: false,
+      created_by_name: creatorName,
+      created_by_role: creatorRole
+    }));
+
+    if (client && navigator.onLine) {
+      try {
+        await client.from('pole_tasks').insert(toInsert);
+        Notify.success(`${items.length} tâches injectées et partagées avec l'équipe !`);
+        await this.loadData(true);
+        this.switchTab('tasks');
+        return;
+      } catch (e) {
+        console.warn('[TasksModule] Exception injection Supabase:', e);
+      }
+    }
+
+    toInsert.forEach(it => {
+      this.tasks.push({ ...it, id: 'local-' + Math.random().toString(36).substr(2, 9), created_at: new Date().toISOString() });
     });
 
-    this.saveTasks();
-    Notify.success(`${items.length} tâches injectées dans votre To-Do list !`);
+    localStorage.setItem('lc_cached_pole_tasks', JSON.stringify(this.tasks));
+    Notify.success(`${items.length} tâches injectées dans votre liste d'équipe !`);
     this.switchTab('tasks');
+  },
+
+  startPolling() {
+    if (this.pollingInterval) clearInterval(this.pollingInterval);
+
+    // Rafraîchissement automatique discret toutes les 8 secondes pour synchroniser les coches des collègues
+    this.pollingInterval = setInterval(() => {
+      if (typeof App !== 'undefined' && App.currentModule === 'tasks') {
+        this.loadData(true);
+      }
+    }, 8000);
   }
 };
 

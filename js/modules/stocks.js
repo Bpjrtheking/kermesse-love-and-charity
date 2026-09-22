@@ -86,7 +86,7 @@ const StocksModule = {
           id, type, quantity, reason, created_at,
           product:food_products(name, unit),
           stand:stands(name),
-          user:app_users(login)
+          user:app_users(login, full_name)
         `)
         .order('created_at', { ascending: false })
         .limit(15);
@@ -198,7 +198,7 @@ const StocksModule = {
                 <td><strong>${m.quantity} ${m.product ? m.product.unit : ''}</strong></td>
                 <td>${m.stand ? m.stand.name : '<span style="color: var(--gray-400);">Stock Central</span>'}</td>
                 <td>${m.reason || '-'}</td>
-                <td>${m.user ? m.user.login : '-'}</td>
+                <td><strong>${m.user ? (m.user.full_name || m.user.login) : '-'}</strong></td>
               </tr>
             `;
           }).join('')}
@@ -424,14 +424,14 @@ const StocksModule = {
             incident_number: 'INC-STOCK-' + Math.floor(1000 + Math.random() * 9000),
             type: 'disparition_nourriture',
             title: `Perte/Casse de stock : ${qty} unité(s)`,
-            description: `Déclaration de ${type} par ${user?.login} sur produit ID ${prodId}. Motif : ${reason}`,
+            description: `Déclaration de ${type} par ${user?.full_name || user?.login} sur produit ID ${prodId}. Motif : ${reason}`,
             severity: 'faible',
             status: 'ouvert',
             reported_by: user ? user.id : null
           }]);
         }
 
-        AuditLogger.log('MOUVEMENT_STOCK', 'stock', prodId, `${type} de ${qty} unité(s). Motif: ${reason} par ${user?.login}`);
+        AuditLogger.log('MOUVEMENT_STOCK', 'stock', prodId, `${type} de ${qty} unité(s). Motif: ${reason} par ${user?.full_name || user?.login}`);
         Notify.success('Mouvement de stock enregistré.');
         close();
         StocksModule.render(document.getElementById('mainContent'));

@@ -8,7 +8,7 @@
 const AuditLogger = {
   async log(action, entityType, entityId, details, oldValues = null, newValues = null) {
     const user = Auth.getCurrentUser();
-    const login = user ? user.login : 'Système';
+    const login = user ? (user.full_name ? `${user.full_name} (${user.login})` : user.login) : 'Système';
     const userId = user ? user.id : null;
 
     const logEntry = {
