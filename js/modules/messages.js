@@ -28,6 +28,8 @@ const MessagesModule = {
   users: [],
   pollingInterval: null,
   lastSeenId: null,
+  selectedSupervisionUser1: '',
+  selectedSupervisionUser2: '',
 
   async render(container) {
     const currentUser = Auth.getCurrentUser();
@@ -878,8 +880,8 @@ const MessagesModule = {
   },
 
   launchCustomSupervision() {
-    const u1 = document.getElementById('supervisionUser1')?.value;
-    const u2 = document.getElementById('supervisionUser2')?.value;
+    const u1 = document.getElementById('supervisionUser1')?.value || this.selectedSupervisionUser1;
+    const u2 = document.getElementById('supervisionUser2')?.value || this.selectedSupervisionUser2;
 
     if (!u1 || !u2) {
       Notify.warning('Veuillez sélectionner les deux administrateurs à surveiller.');
@@ -939,6 +941,14 @@ const MessagesModule = {
 
     // 1. Vue Spéciale : Sélecteur d'inspection SuperAdmin
     if (chat.type === 'supervision_selector') {
+      // Si le formulaire est déjà affiché dans le DOM, ne JAMAIS le reconstruire pour ne pas réinitialiser la saisie
+      if (document.getElementById('supervisionUser1') && document.getElementById('supervisionUser2')) {
+        return;
+      }
+
+      const sel1 = this.selectedSupervisionUser1 || '';
+      const sel2 = this.selectedSupervisionUser2 || '';
+
       // Exclure tous les SuperAdmins de la sélection (aucun espionnage de SuperAdmin)
       const allAdmins = (this.allUsers || []).filter(u => u.login && !this.isUserSuperAdmin(u));
       container.innerHTML = `
@@ -962,17 +972,17 @@ const MessagesModule = {
 
           <div class="form-group" style="margin-bottom: 1.25rem;">
             <label style="font-weight: 700; font-size: 0.85rem; color: var(--gray-700);">Premier Administrateur *</label>
-            <select id="supervisionUser1" class="form-control" style="font-size: 0.92rem;">
+            <select id="supervisionUser1" class="form-control" style="font-size: 0.92rem;" onchange="MessagesModule.selectedSupervisionUser1 = this.value">
               <option value="">-- Choisir un administrateur --</option>
-              ${allAdmins.map(u => `<option value="${u.login}">${u.full_name || u.login} (@${u.login})</option>`).join('')}
+              ${allAdmins.map(u => `<option value="${u.login}" ${u.login === sel1 ? 'selected' : ''}>${u.full_name || u.login} (@${u.login})</option>`).join('')}
             </select>
           </div>
 
           <div class="form-group" style="margin-bottom: 1.5rem;">
             <label style="font-weight: 700; font-size: 0.85rem; color: var(--gray-700);">Second Administrateur à surveiller *</label>
-            <select id="supervisionUser2" class="form-control" style="font-size: 0.92rem;">
+            <select id="supervisionUser2" class="form-control" style="font-size: 0.92rem;" onchange="MessagesModule.selectedSupervisionUser2 = this.value">
               <option value="">-- Choisir un administrateur --</option>
-              ${allAdmins.map(u => `<option value="${u.login}">${u.full_name || u.login} (@${u.login})</option>`).join('')}
+              ${allAdmins.map(u => `<option value="${u.login}" ${u.login === sel2 ? 'selected' : ''}>${u.full_name || u.login} (@${u.login})</option>`).join('')}
             </select>
           </div>
 
@@ -1354,9 +1364,15 @@ const MessagesModule = {
             this.markConversationAsRead(currentKey, false);
           }
           this.renderChatList();
-          this.renderActiveMessages();
-          if (hasNew && isViewingChat) {
-            this.scrollToBottom();
+
+          // IMPORTANT : Ne JAMAIS réinitialiser le DOM si l'utilisateur est sur le sélecteur d'inspection de binôme
+          if (this.activeChat.type !== 'supervision_selector') {
+            if (hasNew) {
+              this.renderActiveMessages();
+              if (isViewingChat) {
+                this.scrollToBottom();
+              }
+            }
           }
         }
 
