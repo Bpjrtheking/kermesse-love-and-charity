@@ -1312,7 +1312,41 @@ CREATE POLICY "Suppression tâches pôle" ON public.pole_tasks FOR DELETE USING 
 
 GRANT ALL ON public.pole_tasks TO anon, authenticated, service_role;
 
+-- ------------------------------------------------------------------------------
+-- 32. TABLE DES BLOCS-NOTES & SUPERVISION DIRECTION (100% ILLIMITÉ)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.admin_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE,
+    user_login TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    user_role TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT 'Note sans titre',
+    category TEXT NOT NULL DEFAULT 'memo',
+    content TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_notes_user ON public.admin_notes(user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_notes_login ON public.admin_notes(user_login);
+CREATE INDEX IF NOT EXISTS idx_admin_notes_role ON public.admin_notes(user_role);
+CREATE INDEX IF NOT EXISTS idx_admin_notes_updated ON public.admin_notes(updated_at DESC);
+
+ALTER TABLE public.admin_notes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Lecture notes" ON public.admin_notes;
+CREATE POLICY "Lecture notes" ON public.admin_notes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Insertion notes" ON public.admin_notes;
+CREATE POLICY "Insertion notes" ON public.admin_notes FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Modification notes" ON public.admin_notes;
+CREATE POLICY "Modification notes" ON public.admin_notes FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Suppression notes" ON public.admin_notes;
+CREATE POLICY "Suppression notes" ON public.admin_notes FOR DELETE USING (true);
+
+GRANT ALL ON public.admin_notes TO anon, authenticated, service_role;
+
 -- Recharger immédiatement le cache du schéma PostgREST dans Supabase
 NOTIFY pgrst, 'reload schema';
+
 
 

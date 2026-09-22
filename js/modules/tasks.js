@@ -17,6 +17,13 @@ const TasksModule = {
   noteSearchQuery: '',
   isFullscreen: false,
 
+  notesViewMode: 'personal', // 'personal' ou 'supervision' (réservé au SuperAdmin)
+  supervisionPoleFilter: 'all',
+  supervisionAdminFilter: 'all',
+  supervisionSearchQuery: '',
+  supervisionNotes: [],
+  activeSupervisionNoteId: null,
+
   tasks: [],
   notes: [],
   pollingInterval: null,
@@ -175,28 +182,8 @@ const TasksModule = {
 
     this.tasks = loadedTasks;
 
-    // Charger les notes personnelles privées (stockées en local sur l'appareil)
-    const noteKey = this.getUserKey('notes');
-    const savedNotes = localStorage.getItem(noteKey);
-    if (savedNotes) {
-      try {
-        this.notes = JSON.parse(savedNotes);
-        // Si l'utilisateur n'avait que l'ancien mémo test sommaire de 2 lignes, migrer vers les mémos riches
-        if (this.notes.length === 1 && this.notes[0].content && this.notes[0].content.includes('Mon espace privé personnel (visible uniquement sur mon appareil)')) {
-          this.notes = this.getDefaultNotes();
-          this.saveNotes();
-        }
-      } catch (e) {
-        this.notes = this.getDefaultNotes();
-      }
-    } else {
-      this.notes = this.getDefaultNotes();
-      this.saveNotes();
-    }
-
-    if (this.notes.length > 0 && !this.activeNoteId) {
-      this.activeNoteId = this.notes[0].id;
-    }
+    // Charger les notes (personnelles + supervision pour SuperAdmin)
+    await this.loadNotes();
 
     this.updateProgress();
     if (!silent) {
@@ -204,6 +191,126 @@ const TasksModule = {
     } else if (this.currentTab === 'tasks') {
       const container = document.getElementById('tasksListContainer');
       if (container) container.innerHTML = this.generateTasksHtml(this.getFilteredTasks());
+    }
+  },
+
+  async loadNotes() {
+    const user = Auth.getCurrentUser();
+    if (!user) return;
+    const isSuperAdmin = Boolean(user.is_original_superadmin || user.role_code === 'superadmin');
+    const client = SupabaseClient.client;
+    const noteKey = this.getUserKey('notes');
+
+    // 1. Charger mes notes personnelles depuis Supabase (avec fallback local)
+    let loadedNotes = [];
+    if (client && navigator.onLine) {
+      try {
+        const { data, error } = await client
+          .from('admin_notes')
+          .select('*')
+          .eq('user_login', (user.login || '').toLowerCase())
+          .order('updated_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          loadedNotes = data;
+          localStorage.setItem(noteKey, JSON.stringify(data));
+        }
+      } catch (err) {
+        console.warn('[TasksModule] Erreur chargement notes Supabase:', err);
+      }
+    }
+
+    if (loadedNotes.length === 0) {
+      const savedNotes = localStorage.getItem(noteKey);
+      if (savedNotes) {
+        try {
+          loadedNotes = JSON.parse(savedNotes);
+          if (loadedNotes.length === 1 && loadedNotes[0].content && loadedNotes[0].content.includes('Mon espace privé personnel (visible uniquement sur mon appareil)')) {
+            loadedNotes = this.getDefaultNotes();
+            localStorage.setItem(noteKey, JSON.stringify(loadedNotes));
+          }
+        } catch (e) {
+          loadedNotes = this.getDefaultNotes();
+        }
+      } else {
+        loadedNotes = this.getDefaultNotes();
+        localStorage.setItem(noteKey, JSON.stringify(loadedNotes));
+      }
+    }
+
+    this.notes = loadedNotes;
+    if (this.notes.length > 0 && !this.activeNoteId) {
+      this.activeNoteId = this.notes[0].id;
+    }
+
+    // 2. Si SuperAdmin : charger l'ensemble des notes des administrateurs pour la consultation
+    if (isSuperAdmin && client && navigator.onLine) {
+      try {
+        const { data: allNotes, error: supErr } = await client
+          .from('admin_notes')
+          .select('*')
+          .neq('user_login', (user.login || '').toLowerCase())
+          .order('updated_at', { ascending: false });
+
+        if (!supErr && allNotes) {
+          this.supervisionNotes = allNotes;
+          localStorage.setItem('lc_supervision_notes_cache', JSON.stringify(allNotes));
+        }
+      } catch (e) {
+        console.warn('[TasksModule] Exception chargement supervision notes:', e);
+      }
+    }
+
+    if (isSuperAdmin && (!this.supervisionNotes || this.supervisionNotes.length === 0)) {
+      const cached = localStorage.getItem('lc_supervision_notes_cache');
+      if (cached) {
+        try { this.supervisionNotes = JSON.parse(cached); } catch (e) {}
+      }
+    }
+
+    if (this.supervisionNotes && this.supervisionNotes.length > 0 && !this.activeSupervisionNoteId) {
+      this.activeSupervisionNoteId = this.supervisionNotes[0].id;
+    }
+  },
+
+  async syncNoteToCloud(note) {
+    const user = Auth.getCurrentUser();
+    if (!user) return;
+    const client = SupabaseClient.client;
+    if (!client || !navigator.onLine) return;
+
+    try {
+      const payload = {
+        user_id: user.id !== '00000000-0000-0000-0000-000000000001' ? user.id : null,
+        user_login: (user.login || 'user').toLowerCase(),
+        user_name: user.full_name || user.login || 'Admin',
+        user_role: user.role_code || 'admin',
+        title: note.title || 'Note sans titre',
+        category: note.category || 'memo',
+        content: note.content || '',
+        updated_at: new Date().toISOString()
+      };
+
+      if (note.id && !note.id.startsWith('note-') && !note.id.startsWith('local-')) {
+        await client.from('admin_notes').update(payload).eq('id', note.id);
+      } else {
+        const { data, error } = await client.from('admin_notes').insert([payload]).select().single();
+        if (!error && data) {
+          note.id = data.id;
+          this.saveNotes();
+        }
+      }
+    } catch (e) {
+      console.warn('[TasksModule] Erreur syncNoteToCloud:', e);
+    }
+  },
+
+  async deleteNoteFromCloud(id) {
+    const client = SupabaseClient.client;
+    if (client && navigator.onLine && !id.startsWith('note-') && !id.startsWith('local-')) {
+      try {
+        await client.from('admin_notes').delete().eq('id', id);
+      } catch (e) {}
     }
   },
 
@@ -710,6 +817,13 @@ Remarques : Caisse scellée et signée.`,
   },
 
   renderNotesTab(container) {
+    const user = Auth.getCurrentUser();
+    const isSuperAdmin = Boolean(user && (user.is_original_superadmin || user.role_code === 'superadmin'));
+
+    if (isSuperAdmin && this.notesViewMode === 'supervision') {
+      return this.renderSupervisionNotes(container);
+    }
+
     const filteredNotes = this.getFilteredNotes();
     const activeNote = this.notes.find(n => n.id === this.activeNoteId) || filteredNotes[0] || this.notes[0];
     if (activeNote) this.activeNoteId = activeNote.id;
@@ -723,6 +837,18 @@ Remarques : Caisse scellée et signée.`,
     };
 
     container.innerHTML = `
+      ${isSuperAdmin ? `
+        <!-- Sous-navigation SuperAdmin pour alterner entre notes perso et supervision -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; background: var(--gray-100, #f1f5f9); padding: 0.35rem; border-radius: 8px; width: fit-content; flex-wrap: wrap;">
+          <button class="btn btn-sm btn-primary" onclick="TasksModule.switchNotesViewMode('personal')">
+            📝 Mes Notes Personnelles (${this.notes.length})
+          </button>
+          <button class="btn btn-sm btn-secondary" onclick="TasksModule.switchNotesViewMode('supervision')">
+            👁️ Consultation Blocs-Notes Admins (${this.supervisionNotes.length})
+          </button>
+        </div>
+      ` : ''}
+
       <!-- Bannière explicative d'espace illimité -->
       <div class="alert-banner info" style="margin-bottom: 1.25rem; font-size: 0.86rem; border-left: 5px solid #3b82f6;">
         <div>
@@ -1013,6 +1139,7 @@ Remarques : Caisse scellée et signée.`,
     this.notes.unshift(newNote);
     this.activeNoteId = newNote.id;
     this.saveNotes();
+    this.syncNoteToCloud(newNote);
     this.renderCurrentTab();
     Notify.success('Nouvelle note créée.');
 
@@ -1039,6 +1166,11 @@ Remarques : Caisse scellée et signée.`,
     this.saveNotes();
     this.updateTextStats(activeNote.content || '');
     this.adjustTextareaHeight();
+
+    if (this._noteSyncDebounce) clearTimeout(this._noteSyncDebounce);
+    this._noteSyncDebounce = setTimeout(() => {
+      this.syncNoteToCloud(activeNote);
+    }, 600);
 
     if (statusEl) {
       statusEl.innerHTML = '💾 Enregistré à ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1132,6 +1264,7 @@ Remarques : Caisse scellée et signée.`,
     this.notes.unshift(clone);
     this.activeNoteId = clone.id;
     this.saveNotes();
+    this.syncNoteToCloud(clone);
     this.renderCurrentTab();
     Notify.success('Note dupliquée avec succès.');
   },
@@ -1141,6 +1274,7 @@ Remarques : Caisse scellée et signée.`,
       'Supprimer cette note ?',
       'Confirmez-vous la suppression définitive de ce mémo personnel ?',
       () => {
+        this.deleteNoteFromCloud(id);
         this.notes = this.notes.filter(n => n.id !== id);
         this.activeNoteId = this.notes.length > 0 ? this.notes[0].id : null;
         this.saveNotes();
@@ -1178,6 +1312,317 @@ Remarques : Caisse scellée et signée.`,
     el.style.height = 'auto';
     const nextH = Math.max(380, el.scrollHeight + 15);
     el.style.height = nextH + 'px';
+  },
+
+  // -------------------------------------------------------------
+  // CONSULTATION BLOC-NOTES ADMINS (RÉSERVÉ SUPERADMIN - LECTURE SEULE)
+  // -------------------------------------------------------------
+  switchNotesViewMode(mode) {
+    this.notesViewMode = mode;
+    this.renderCurrentTab();
+  },
+
+  getFilteredSupervisionNotes() {
+    let list = this.supervisionNotes || [];
+    const pole = this.supervisionPoleFilter || 'all';
+    const admin = this.supervisionAdminFilter || 'all';
+    const q = (this.supervisionSearchQuery || '').toLowerCase();
+
+    if (pole !== 'all') {
+      list = list.filter(n => n.user_role === pole);
+    }
+    if (admin !== 'all') {
+      list = list.filter(n => (n.user_login || '').toLowerCase() === admin.toLowerCase());
+    }
+    if (q) {
+      list = list.filter(n =>
+        (n.title || '').toLowerCase().includes(q) ||
+        (n.content || '').toLowerCase().includes(q) ||
+        (n.user_name || '').toLowerCase().includes(q) ||
+        (n.user_login || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  },
+
+  renderSupervisionNotes(container) {
+    const filteredNotes = this.getFilteredSupervisionNotes();
+    const activeNote = this.supervisionNotes.find(n => n.id === this.activeSupervisionNoteId) || filteredNotes[0] || null;
+    if (activeNote) this.activeSupervisionNoteId = activeNote.id;
+
+    // Extraire la liste unique des administrateurs ayant des notes
+    const adminMap = new Map();
+    (this.supervisionNotes || []).forEach(n => {
+      const login = (n.user_login || '').toLowerCase();
+      if (login && !adminMap.has(login)) {
+        adminMap.set(login, {
+          login: n.user_login,
+          name: n.user_name || n.user_login,
+          role: n.user_role
+        });
+      }
+    });
+    const uniqueAdmins = Array.from(adminMap.values());
+
+    container.innerHTML = `
+      <!-- Sous-navigation SuperAdmin -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; background: var(--gray-100, #f1f5f9); padding: 0.35rem; border-radius: 8px; width: fit-content; flex-wrap: wrap;">
+        <button class="btn btn-sm btn-secondary" onclick="TasksModule.switchNotesViewMode('personal')">
+          📝 Mes Notes Personnelles (${this.notes.length})
+        </button>
+        <button class="btn btn-sm btn-primary" onclick="TasksModule.switchNotesViewMode('supervision')">
+          👁️ Consultation Blocs-Notes Admins (${this.supervisionNotes.length})
+        </button>
+      </div>
+
+      <!-- Bannière explicative Supervision -->
+      <div class="alert-banner info" style="margin-bottom: 1.25rem; font-size: 0.86rem; border-left: 5px solid #8b5cf6;">
+        <div>
+          👁️ <strong>Mode Consultation Superviseur (Lecture Seule) :</strong> Vous visualisez en direct les blocs-notes rédigés par les administrateurs de tous les pôles. Par respect de l'autonomie et de la confidentialité de chaque équipe, <strong>ces notes sont strictement consultables sans modification ni suppression directe</strong>.
+        </div>
+      </div>
+
+      <!-- Barre de filtres de supervision -->
+      <div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; padding: 0.85rem;">
+        <div style="flex: 1; min-width: 200px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--gray-600); display: block; margin-bottom: 0.25rem;">🏷️ Filtrer par Pôle :</label>
+          <select class="form-control" style="font-size: 0.82rem;" onchange="TasksModule.changeSupervisionPole(this.value)">
+            <option value="all" ${this.supervisionPoleFilter === 'all' ? 'selected' : ''}>🌟 Tous les pôles (${this.supervisionNotes.length} notes)</option>
+            ${this.POLES.map(p => {
+              const count = this.supervisionNotes.filter(n => n.user_role === p.code).length;
+              return `<option value="${p.code}" ${this.supervisionPoleFilter === p.code ? 'selected' : ''}>${p.icon} ${p.name} (${count})</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div style="flex: 1; min-width: 200px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--gray-600); display: block; margin-bottom: 0.25rem;">👤 Filtrer par Administrateur :</label>
+          <select class="form-control" style="font-size: 0.82rem;" onchange="TasksModule.changeSupervisionAdmin(this.value)">
+            <option value="all" ${this.supervisionAdminFilter === 'all' ? 'selected' : ''}>👥 Tous les administrateurs (${uniqueAdmins.length})</option>
+            ${uniqueAdmins.map(a => {
+              const count = this.supervisionNotes.filter(n => (n.user_login || '').toLowerCase() === a.login.toLowerCase()).length;
+              return `<option value="${a.login}" ${this.supervisionAdminFilter === a.login ? 'selected' : ''}>👤 ${a.name} (${a.login}) — ${count} note(s)</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div style="flex: 1.5; min-width: 240px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--gray-600); display: block; margin-bottom: 0.25rem;">🔍 Recherche dans les écrits :</label>
+          <input type="text" class="form-control" style="font-size: 0.82rem;" placeholder="Rechercher par mot-clé, titre, auteur..." value="${this.supervisionSearchQuery || ''}" oninput="TasksModule.searchSupervisionNotes(this.value)">
+        </div>
+      </div>
+
+      <div class="notes-workspace-grid">
+        <!-- Colonne latérale : Liste des notes des admins -->
+        <div class="notes-sidebar-col">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; font-size: 0.9rem; color: var(--gray-800);">
+              📑 Notes Admins (<span id="supervisionCountBadge">${filteredNotes.length}</span>)
+            </span>
+            <button class="btn btn-sm btn-secondary" onclick="TasksModule.loadNotes().then(() => TasksModule.renderCurrentTab())" title="Actualiser les notes depuis le serveur">
+              🔄 Actualiser
+            </button>
+          </div>
+
+          <div class="notes-list-scroll" id="supervisionNotesListScroll" style="max-height: 600px;">
+            ${this.renderSupervisionNotesCardsHtml(filteredNotes)}
+          </div>
+        </div>
+
+        <!-- Colonne centrale : Consultation en Lecture Seule -->
+        <div class="notes-editor-col" style="background: #ffffff;">
+          ${activeNote ? `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+              <div style="flex: 1; min-width: 200px;">
+                <h3 style="margin: 0; font-size: 1.2rem; color: var(--gray-900); font-weight: 700;">
+                  ${activeNote.title || 'Note sans titre'}
+                </h3>
+              </div>
+
+              <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                <span class="badge" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-weight: 700; font-size: 0.78rem; padding: 0.35rem 0.65rem;">
+                  🔒 Lecture Seule (Non modifiable)
+                </span>
+                <button class="btn btn-sm btn-secondary" onclick="TasksModule.copySupervisionNoteText()" title="Copier tout le texte">
+                  📑 Copier
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="TasksModule.shareSupervisionNoteOnWhatsapp()" title="Partager sur WhatsApp">
+                  💬 WhatsApp
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="TasksModule.downloadSupervisionNoteTxt()" title="Télécharger en fichier TXT">
+                  💾 TXT
+                </button>
+              </div>
+            </div>
+
+            <!-- Fiche d'identification de l'auteur & pôle -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem;">
+              <div>
+                👤 <strong>Auteur :</strong> <span style="color: #2563eb; font-weight: 600;">${activeNote.user_name || activeNote.user_login || 'Admin'}</span>
+                <span style="color: var(--gray-500); font-size: 0.8rem;">(@${activeNote.user_login || 'admin'})</span>
+                &nbsp;•&nbsp;
+                🏷️ <strong>Pôle :</strong> <span class="badge badge-info" style="font-size: 0.75rem;">${this.getPoleName(activeNote.user_role)}</span>
+              </div>
+              <div style="color: var(--gray-500); font-size: 0.8rem;">
+                🕒 Modifiée le : <strong>${new Date(activeNote.updated_at || Date.now()).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+              </div>
+            </div>
+
+            <!-- Contenu de la note en lecture seule propre -->
+            <div style="border: 1px solid var(--gray-200); border-radius: 8px; padding: 1.25rem; min-height: 400px; max-height: 650px; overflow-y: auto; background: #ffffff; box-shadow: inset 0 1px 3px rgba(0,0,0,0.02);">
+              ${this.formatNoteContentForDisplay(activeNote.content)}
+            </div>
+
+            <!-- Statut bas de page -->
+            <div class="notes-bottom-status-bar" style="margin-top: 0.75rem;">
+              <div style="display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap;">
+                <span class="badge badge-primary" style="font-size: 0.72rem; font-weight: 700;">
+                  👁️ Consultation Superviseur
+                </span>
+                <span style="font-weight: 600;">${(activeNote.content || '').split(/\s+/).filter(Boolean).length} mot(s)</span>
+                <span>•</span>
+                <span>${(activeNote.content || '').length} caractère(s)</span>
+                <span>•</span>
+                <span>${(activeNote.content || '').split('\n').length} ligne(s)</span>
+              </div>
+              <div style="color: var(--gray-500); font-size: 0.75rem;">
+                🔒 Données synchronisées depuis Supabase Cloud
+              </div>
+            </div>
+          ` : `
+            <div class="empty-state" style="padding: 3rem 1.5rem;">
+              <div class="empty-icon">👁️</div>
+              <div class="empty-title">Aucune note sélectionnée ou trouvée</div>
+              <div class="empty-desc">Sélectionnez une note dans la colonne de gauche ou modifiez vos filtres de recherche.</div>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  },
+
+  renderSupervisionNotesCardsHtml(list) {
+    if (!list || list.length === 0) {
+      return `
+        <div style="text-align: center; padding: 2rem 1rem; color: var(--gray-400); font-size: 0.85rem;">
+          Aucune note trouvée pour ce pôle ou cet administrateur.
+        </div>
+      `;
+    }
+
+    const catBadges = {
+      memo: '📌',
+      achats: '🛒',
+      caisse: '💰',
+      contacts: '📞',
+      checklist: '☑️'
+    };
+
+    return list.map(n => {
+      const isActive = n.id === this.activeSupervisionNoteId;
+      const snippet = (n.content || '').replace(/\n+/g, ' ').substring(0, 45);
+      const emoji = catBadges[n.category] || '📝';
+      const authorDisplay = n.user_name || n.user_login || 'Admin';
+
+      return `
+        <div class="note-card-item ${isActive ? 'active' : ''}" onclick="TasksModule.selectSupervisionNote('${n.id}')">
+          <div class="note-card-header-row">
+            <div class="note-card-title">
+              ${emoji} ${n.title || 'Note sans titre'}
+            </div>
+          </div>
+          <div style="font-size: 0.75rem; font-weight: 600; color: #2563eb; margin-bottom: 0.25rem;">
+            👤 ${authorDisplay} <span style="color: var(--gray-500); font-weight: normal;">(${this.getPoleName(n.user_role)})</span>
+          </div>
+          <div class="note-card-snippet">
+            ${snippet || '<em style="color: var(--gray-400);">Note vide...</em>'}
+          </div>
+          <div class="note-card-meta">
+            <span>${new Date(n.updated_at || Date.now()).toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${new Date(n.updated_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>${(n.content || '').length} car.</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  changeSupervisionPole(pole) {
+    this.supervisionPoleFilter = pole;
+    const list = this.getFilteredSupervisionNotes();
+    if (list.length > 0 && !list.find(n => n.id === this.activeSupervisionNoteId)) {
+      this.activeSupervisionNoteId = list[0].id;
+    }
+    this.renderCurrentTab();
+  },
+
+  changeSupervisionAdmin(login) {
+    this.supervisionAdminFilter = login;
+    const list = this.getFilteredSupervisionNotes();
+    if (list.length > 0 && !list.find(n => n.id === this.activeSupervisionNoteId)) {
+      this.activeSupervisionNoteId = list[0].id;
+    }
+    this.renderCurrentTab();
+  },
+
+  searchSupervisionNotes(q) {
+    this.supervisionSearchQuery = q;
+    const container = document.getElementById('supervisionNotesListScroll');
+    if (container) {
+      container.innerHTML = this.renderSupervisionNotesCardsHtml(this.getFilteredSupervisionNotes());
+    }
+  },
+
+  selectSupervisionNote(id) {
+    this.activeSupervisionNoteId = id;
+    this.renderCurrentTab();
+  },
+
+  copySupervisionNoteText() {
+    const note = this.supervisionNotes.find(n => n.id === this.activeSupervisionNoteId);
+    if (!note) return;
+    const full = `[Note de ${note.user_name || note.user_login} — ${this.getPoleName(note.user_role)}]\n${note.title}\n\n${note.content}`;
+    navigator.clipboard.writeText(full).then(() => {
+      Notify.success('Note de l\'administrateur copiée !');
+    }).catch(() => {
+      Notify.info('Veuillez sélectionner le texte pour copier.');
+    });
+  },
+
+  shareSupervisionNoteOnWhatsapp() {
+    const note = this.supervisionNotes.find(n => n.id === this.activeSupervisionNoteId);
+    if (!note) return;
+    const text = `📝 *${note.title}*\n👤 _Auteur : ${note.user_name || note.user_login} (${this.getPoleName(note.user_role)})_\n\n${note.content}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  },
+
+  downloadSupervisionNoteTxt() {
+    const note = this.supervisionNotes.find(n => n.id === this.activeSupervisionNoteId);
+    if (!note) return;
+    const safeTitle = (note.title || 'note').replace(/[^a-zA-Z0-9àéèçù_ -]/g, '').trim();
+    const safeAuthor = (note.user_name || note.user_login || 'admin').replace(/[^a-zA-Z0-9àéèçù_ -]/g, '').trim();
+    const filename = `Note_${safeAuthor}_${safeTitle}.txt`;
+    const textContent = `${note.title}\nAuteur: ${note.user_name || note.user_login} (${note.user_login})\nPôle: ${this.getPoleName(note.user_role)}\nDate: ${new Date(note.updated_at || Date.now()).toLocaleString('fr-FR')}\n----------------------------------------\n\n${note.content}`;
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    Notify.success(`Fichier ${filename} téléchargé.`);
+  },
+
+  formatNoteContentForDisplay(content) {
+    if (!content) return '<em style="color: var(--gray-400);">Cette note est vide.</em>';
+    const safe = content
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const formatted = safe
+      .replace(/\[ \]/g, '<span style="display:inline-block; width:15px; height:15px; border:2px solid #94a3b8; border-radius:4px; vertical-align:middle; margin-right:4px;"></span>')
+      .replace(/\[[xX]\]/g, '<span style="display:inline-block; width:15px; height:15px; background:#10b981; border:2px solid #10b981; border-radius:4px; vertical-align:middle; margin-right:4px; color:#fff; font-size:10px; text-align:center; line-height:15px;">✓</span>');
+
+    return `<div style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 0.95rem; line-height: 1.7; color: var(--gray-800);">${formatted}</div>`;
   },
 
   // 3. MODÈLES DE CHECKLISTS
