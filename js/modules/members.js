@@ -5,15 +5,17 @@
  * Responsable : admin_benevoles
  * Missions :
  * - Fiches bénévoles complètes & coordonnées (téléphone, WhatsApp direct)
- * - Compétences & disponibilités
- * - Planning par créneaux horaires (qui est où et à quelle heure)
- * - MOTEUR DE DÉTECTION ET PRÉVENTION DES CONFLITS D'AFFECTATION
- *   (interdit qu'une personne soit affectée à 2 stands ou pôles simultanément)
- * - Suivi des présences réelles (Planifié, Présent, Retard, Absent)
+ * - Affectation par groupes & en masse (sélection multiple de 10, 20, 50 bénévoles d'un coup)
+ * - Affectation précise par PÔLE (Restauration, Sécurité, Stands, Caisses, Logistique, Déco...)
+ * - Planning opérationnel regroupé par pôle avec compteurs de déploiement
+ * - Moteur anti-conflits d'affectation
+ * - Pointage des présences (Planifié, Présent, Retard, Absent)
  */
 
 const MembersModule = {
   currentTab: 'list', // 'list', 'planning', 'conflicts'
+  planningPoleFilter: 'all', // 'all' ou code du pôle
+  selectedMemberIds: new Set(),
 
   members: [],
   teams: [],
@@ -25,7 +27,7 @@ const MembersModule = {
       <div class="card">
         <div class="card-header">
           <div class="card-title">
-            <span>👥</span> Pôle 7 : Bénévoles &amp; Planning
+            <span>👥</span> Pôle 7 : Bénévoles &amp; Planning Opérationnel
           </div>
           <div class="card-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn btn-secondary btn-sm" onclick="MembersModule.openCreateScheduleModal()">
@@ -59,12 +61,12 @@ const MembersModule = {
           </div>
 
           <!-- Tabs Navigation -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.5rem; overflow-x: auto;">
+          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem; overflow-x: auto;">
             <button class="tab-btn active" id="tabVolList" onclick="MembersModule.switchTab('list')">
-              👥 Bénévoles &amp; Contacts
+              👥 Bénévoles &amp; Affectation en Masse
             </button>
             <button class="tab-btn" id="tabVolPlanning" onclick="MembersModule.switchTab('planning')">
-              📅 Planning Créneaux &amp; Présences
+              📅 Planning par Pôles &amp; Postes
             </button>
             <button class="tab-btn" id="tabVolConflicts" onclick="MembersModule.switchTab('conflicts')">
               ⚠️ Vérificateur Anti-Conflits
@@ -128,7 +130,7 @@ const MembersModule = {
           { id: 'mem-2', first_name: 'David', last_name: 'Ly', phone: '+221 77 200 00 02', primary_role: 'Responsable Décoration', is_active: true },
           { id: 'mem-3', first_name: 'Sarah', last_name: 'Mendy', phone: '+221 77 300 00 03', primary_role: 'Responsable Communication', is_active: true },
           { id: 'mem-4', first_name: 'Mamadou', last_name: 'Sy', phone: '+221 77 400 00 04', primary_role: 'Caissier Billetterie', is_active: true },
-          { id: 'mem-5', first_name: 'Fatou', last_name: 'Diop', phone: '+221 77 500 00 05', primary_role: 'Animatrice Stand Pêche aux canards', is_active: true }
+          { id: 'mem-5', first_name: 'Fatou', last_name: 'Diop', phone: '+221 77 500 00 05', primary_role: 'Animatrice Stand', is_active: true }
         ];
         localStorage.setItem('kermesse_members_data', JSON.stringify(this.members));
       }
@@ -140,8 +142,8 @@ const MembersModule = {
         try { this.schedules = JSON.parse(storedSc); } catch (e) {}
       } else {
         this.schedules = [
-          { id: 'sch-1', member_id: 'mem-4', member_name: 'Mamadou Sy', member_phone: '+221 77 400 00 04', location_or_stand: 'Zone 3 : Billetterie Centrale', pole_name: 'Billetterie', shift_date: '2026-09-20', start_time: '10:00', end_time: '13:00', role_title: 'Caissier billetterie', status: 'present' },
-          { id: 'sch-2', member_id: 'mem-5', member_name: 'Fatou Diop', member_phone: '+221 77 500 00 05', location_or_stand: 'Stand 1 : Pêche aux canards', pole_name: 'Stands', shift_date: '2026-09-20', start_time: '10:00', end_time: '14:00', role_title: 'Arbitre & animateur', status: 'present' }
+          { id: 'sch-1', member_id: 'mem-4', member_name: 'Mamadou Sy', member_phone: '+221 77 400 00 04', location_or_stand: 'Zone 3 : Billetterie Centrale', pole_name: 'Billetterie & Caisses', shift_date: '2026-09-20', start_time: '10:00', end_time: '13:00', role_title: 'Caissier billetterie', status: 'present' },
+          { id: 'sch-2', member_id: 'mem-5', member_name: 'Fatou Diop', member_phone: '+221 77 500 00 05', location_or_stand: 'Stand 1 : Pêche aux canards', pole_name: 'Stands & Jeux', shift_date: '2026-09-20', start_time: '10:00', end_time: '14:00', role_title: 'Arbitre & animateur', status: 'present' }
         ];
         localStorage.setItem('kermesse_volunteer_schedules', JSON.stringify(this.schedules));
       }
@@ -169,7 +171,6 @@ const MembersModule = {
           for (let j = i + 1; j < shifts.length; j++) {
             const s1 = shifts[i];
             const s2 = shifts[j];
-            // Chevauchement d'intervalles [start, end]
             if (s1.start_time < s2.end_time && s2.start_time < s1.end_time) {
               conflicts.push({
                 member_name: s1.member_name,
@@ -219,9 +220,50 @@ const MembersModule = {
     }
   },
 
-  // 1. ONGLET BÉNÉVOLES & CONTACTS
+  // 1. ONGLET BÉNÉVOLES & AFFECTATION EN MASSE
   renderListTab(container) {
+    const selectedCount = this.selectedMemberIds.size;
+
     container.innerHTML = `
+      <!-- BANDEAU D'AFFECTATION EN MASSE FLOTTANT / VISIBLE -->
+      <div id="bulkActionBar" style="display: ${selectedCount > 0 ? 'flex' : 'none'}; background: #eff6ff; border: 2px solid #3b82f6; border-radius: var(--radius-md); padding: 0.85rem 1.25rem; margin-bottom: 1.25rem; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="font-size: 1.25rem;">⚡</span>
+          <div>
+            <strong style="color: #1d4ed8; font-size: 1rem;"><span id="bulkSelectedCount">${selectedCount}</span> bénévole(s) sélectionné(s)</strong>
+            <div style="font-size: 0.8rem; color: #3b82f6;">Vous pouvez affecter ce groupe entier en un seul clic à un pôle (Restauration, Sécurité, Stands, etc.).</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary btn-sm" onclick="MembersModule.clearSelection()">
+            ✕ Désélectionner tout
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="MembersModule.openBulkScheduleModal()">
+            🚀 Affecter le groupe en masse
+          </button>
+        </div>
+      </div>
+
+      <!-- BOUTONS D'AIDE À LA SÉLECTION RAPIDE POUR GRANDS VOLUMES (10, 20, 50) -->
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; background: var(--gray-50); padding: 0.65rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+        <span style="font-size: 0.85rem; font-weight: 700; color: var(--gray-700);">Sélection rapide :</span>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.78rem;" onclick="MembersModule.selectQuickCount(10)">
+          +10 Bénévoles
+        </button>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.78rem;" onclick="MembersModule.selectQuickCount(15)">
+          +15 Bénévoles
+        </button>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.78rem;" onclick="MembersModule.selectQuickCount(20)">
+          +20 Bénévoles
+        </button>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.78rem;" onclick="MembersModule.selectQuickCount(50)">
+          +50 Bénévoles
+        </button>
+        <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.78rem;" onclick="MembersModule.selectAllMembers()">
+          Tout sélectionner (${this.members.length})
+        </button>
+      </div>
+
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
         <div class="search-box">
           <input type="text" id="memberSearch" class="form-control" placeholder="Rechercher par nom, rôle ou téléphone..." oninput="MembersModule.filterMembers()">
@@ -240,7 +282,7 @@ const MembersModule = {
         <div class="empty-state">
           <div class="empty-icon">👥</div>
           <div class="empty-title">Aucun bénévole enregistré</div>
-          <div class="empty-desc">Enregistrez les bénévoles pour leur assigner des créneaux et des stands.</div>
+          <div class="empty-desc">Enregistrez les bénévoles pour leur assigner des créneaux et des pôles de mission.</div>
           <button class="btn btn-primary" onclick="MembersModule.openCreateModal()">
             <span>➕</span> Ajouter le premier bénévole
           </button>
@@ -248,26 +290,34 @@ const MembersModule = {
       `;
     }
 
+    const allSelected = list.length > 0 && list.every(m => this.selectedMemberIds.has(m.id));
+
     return `
       <table class="data-table">
         <thead>
           <tr>
+            <th style="width: 40px; text-align: center;">
+              <input type="checkbox" id="selectAllCheckbox" ${allSelected ? 'checked' : ''} onchange="MembersModule.toggleSelectAll(this.checked)" title="Tout sélectionner / Tout désélectionner">
+            </th>
             <th>Bénévole</th>
-            <th>Téléphone &amp; Contact</th>
-            <th>Responsabilité Principale</th>
-            <th>Équipe / Stand</th>
-            <th>Créneaux Assignés</th>
+            <th>Téléphone &amp; WhatsApp</th>
+            <th>Rôle Principal</th>
+            <th>Affectation(s) Planifiée(s)</th>
             <th>Statut</th>
-            <th style="text-align: right;">Actions</th>
+            <th style="text-align: right;">Action</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="membersTableBody">
           ${list.map(m => {
-            const assignedCount = this.schedules.filter(s => s.member_id === m.id || s.member_name === `${m.first_name} ${m.last_name}`).length;
+            const assignedShifts = this.schedules.filter(s => s.member_id === m.id || s.member_name === `${m.first_name} ${m.last_name}`);
             const cleanPhone = (m.phone || '').replace(/[^0-9+]/g, '');
+            const isChecked = this.selectedMemberIds.has(m.id);
 
             return `
-              <tr>
+              <tr style="${isChecked ? 'background-color: #f0f7ff;' : ''}">
+                <td style="text-align: center;">
+                  <input type="checkbox" class="member-checkbox" value="${m.id}" ${isChecked ? 'checked' : ''} onchange="MembersModule.toggleMemberSelection('${m.id}', this.checked)">
+                </td>
                 <td>
                   <strong>${(m.last_name || '').toUpperCase()}</strong> ${m.first_name || ''}
                   ${m.notes ? `<div style="font-size: 0.75rem; color: var(--gray-500); margin-top: 2px;">💡 ${m.notes}</div>` : ''}
@@ -276,7 +326,7 @@ const MembersModule = {
                   ${m.phone ? `
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                       <span>${m.phone}</span>
-                      <a href="https://wa.me/${cleanPhone.replace('+', '')}" target="_blank" class="badge badge-success" style="text-decoration: none;" title="Ouvrir WhatsApp">
+                      <a href="https://wa.me/${cleanPhone.replace('+', '')}" target="_blank" class="badge badge-success" style="text-decoration: none;" title="Ouvrir WhatsApp direct">
                         💬 WhatsApp
                       </a>
                     </div>
@@ -284,21 +334,22 @@ const MembersModule = {
                 </td>
                 <td><span class="badge badge-primary">${m.primary_role || 'Bénévole'}</span></td>
                 <td>
-                  ${m.stands ? `<span class="badge badge-gray">🎪 Stand ${m.stands.number}</span>` : ''}
-                  ${m.teams ? `<span class="badge" style="background: ${m.teams.color_hex}20; color: ${m.teams.color_hex};">${m.teams.name}</span>` : ''}
-                  ${!m.stands && !m.teams ? '<span style="color: var(--gray-400); font-size: 0.8rem;">Non rattaché</span>' : ''}
-                </td>
-                <td>
-                  <span class="badge ${assignedCount > 0 ? 'badge-primary' : 'badge-warning'}">
-                    ${assignedCount} créneau(x)
-                  </span>
+                  ${assignedShifts.length > 0 ? `
+                    <div style="display: flex; flex-direction: column; gap: 3px;">
+                      ${assignedShifts.map(s => `
+                        <span class="badge badge-gray" style="font-size: 0.75rem; text-align: left;">
+                          📍 <strong>${s.pole_name || 'Poste'}</strong> : ${s.location_or_stand} (${s.start_time}-${s.end_time})
+                        </span>
+                      `).join('')}
+                    </div>
+                  ` : '<span class="badge badge-warning" style="font-size: 0.75rem;">Aucun créneau affecté</span>'}
                 </td>
                 <td>
                   ${m.is_active !== false ? '<span class="badge badge-success">Actif</span>' : '<span class="badge badge-gray">Inactif</span>'}
                 </td>
-                <td style="text-align: right;">
-                  <button class="btn-icon" onclick="MembersModule.openScheduleForMember('${m.id}', '${m.first_name} ${m.last_name}', '${m.phone || ''}')" title="Affecter un créneau">
-                    📅
+                <td style="text-align: right; white-space: nowrap;">
+                  <button class="btn btn-secondary btn-sm" onclick="MembersModule.openScheduleForMember('${m.id}', '${m.first_name} ${m.last_name}', '${m.phone || ''}')" title="Affecter un créneau individuel">
+                    📅 Créneau
                   </button>
                   <button class="btn-icon danger" onclick="MembersModule.deleteMember('${m.id}', '${m.first_name} ${m.last_name}')" title="Supprimer">
                     🗑️
@@ -310,6 +361,55 @@ const MembersModule = {
         </tbody>
       </table>
     `;
+  },
+
+  toggleMemberSelection(id, isChecked) {
+    if (isChecked) {
+      this.selectedMemberIds.add(id);
+    } else {
+      this.selectedMemberIds.delete(id);
+    }
+    this.updateBulkActionBar();
+  },
+
+  toggleSelectAll(isChecked) {
+    if (isChecked) {
+      this.members.forEach(m => this.selectedMemberIds.add(m.id));
+    } else {
+      this.selectedMemberIds.clear();
+    }
+    this.renderCurrentTab();
+  },
+
+  selectQuickCount(count) {
+    this.selectedMemberIds.clear();
+    const slice = this.members.slice(0, count);
+    slice.forEach(m => this.selectedMemberIds.add(m.id));
+    Notify.info(`${slice.length} premier(s) bénévole(s) sélectionné(s).`);
+    this.renderCurrentTab();
+  },
+
+  selectAllMembers() {
+    this.selectedMemberIds.clear();
+    this.members.forEach(m => this.selectedMemberIds.add(m.id));
+    Notify.info(`Tous les ${this.members.length} bénévoles ont été sélectionnés.`);
+    this.renderCurrentTab();
+  },
+
+  clearSelection() {
+    this.selectedMemberIds.clear();
+    this.renderCurrentTab();
+  },
+
+  updateBulkActionBar() {
+    const bar = document.getElementById('bulkActionBar');
+    const countEl = document.getElementById('bulkSelectedCount');
+    const count = this.selectedMemberIds.size;
+
+    if (bar && countEl) {
+      countEl.textContent = count;
+      bar.style.display = count > 0 ? 'flex' : 'none';
+    }
   },
 
   filterMembers() {
@@ -325,31 +425,343 @@ const MembersModule = {
     if (container) container.innerHTML = this.generateMembersTable(filtered);
   },
 
-  // 2. ONGLET PLANNING CRÉNEAUX & PRÉSENCES
-  renderPlanningTab(container) {
-    const statusBadges = {
-      'planifie': { label: 'Planifié', badge: 'badge-primary' },
-      'present': { label: 'Présent ✅', badge: 'badge-success' },
-      'retard': { label: 'En retard ⏰', badge: 'badge-warning' },
-      'absent': { label: 'Absent ❌', badge: 'badge-danger' }
+  // MODALE D'AFFECTATION EN MASSE (BULK ASSIGNMENT)
+  openBulkScheduleModal() {
+    const selectedIds = Array.from(this.selectedMemberIds);
+    if (selectedIds.length === 0) {
+      Notify.warning('Veuillez sélectionner au moins un bénévole à affecter.');
+      return;
+    }
+
+    const selectedMembers = this.members.filter(m => selectedIds.includes(m.id));
+
+    const poles = [
+      { code: 'Restauration & Buvette', label: '🍔 Pôle 4 : Restauration & Buvette (Cuisine, snacks, bar)' },
+      { code: 'Accueil & Sécurité', label: '🛡️ Pôle 9 : Accueil, Nettoyage & Sécurité (Filtrage, entrées, rondes)' },
+      { code: 'Stands & Jeux', label: '🎪 Pôle 5 : Stands & Jeux (Surveillance manèges, arbitres, animateurs)' },
+      { code: 'Billetterie & Caisses', label: '💵 Pôle 2 : Billetterie & Caisses (Vente tickets, caisses stands)' },
+      { code: 'Décoration & Organisation', label: '🎨 Pôle 3 : Décoration & Organisation (Aménagement zones, guidage)' },
+      { code: 'Logistique & Matériel', label: '📦 Pôle 8 : Logistique & Installation (Manutention, portage, tentes)' },
+      { code: 'Communication', label: '📢 Pôle 1 : Communication & Signalétique' },
+      { code: 'Lots & Cadeaux', label: '🎁 Pôle 6 : Lots & Cadeaux (Comptoir gros lots)' }
+    ];
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 650px;">
+        <div class="modal-header">
+          <h3>⚡ Affectation en Masse de ${selectedMembers.length} Bénévole(s)</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Aperçu des bénévoles sélectionnés -->
+          <div style="background: #eff6ff; padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid #bfdbfe; margin-bottom: 1rem;">
+            <div style="font-weight: 700; color: #1e40af; font-size: 0.85rem; margin-bottom: 0.35rem;">
+              👥 Bénévoles concernés (${selectedMembers.length}) :
+            </div>
+            <div style="max-height: 90px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 0.3rem;">
+              ${selectedMembers.map(m => `
+                <span class="badge badge-primary" style="font-size: 0.75rem;">
+                  ${m.first_name} ${m.last_name}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+
+          <form id="bulkScheduleForm">
+            <div class="form-group">
+              <label>Pôle d'Affectation Kermesse *</label>
+              <select id="bulkPole" class="form-control" required onchange="MembersModule.onBulkPoleChange()">
+                ${poles.map(p => `<option value="${p.code}">${p.label}</option>`).join('')}
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Poste ou Stand Précis *</label>
+                <input type="text" id="bulkLocation" class="form-control" required placeholder="Ex: Stand 1 Pêche aux canards, Entrée principale, Cuisine centrale...">
+                <div id="bulkStandSuggestions" style="margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap;"></div>
+              </div>
+              <div class="form-group">
+                <label>Mission / Rôle sur le terrain *</label>
+                <input type="text" id="bulkRole" class="form-control" required value="Surveillance et animation" placeholder="Ex: Surveillance des jeux, Service snack...">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Raccourcis Horaires</label>
+              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="MembersModule.setBulkTimePreset('09:00', '13:00')">
+                  ☀️ Matin (09h - 13h)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="MembersModule.setBulkTimePreset('13:00', '18:00')">
+                  ⛅ Après-midi (13h - 18h)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="MembersModule.setBulkTimePreset('09:00', '18:00')">
+                  🌟 Journée Entière (09h - 18h)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="MembersModule.setBulkTimePreset('18:00', '21:00')">
+                  🌙 Soirée / Démontage (18h - 21h)
+                </button>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Date *</label>
+                <input type="date" id="bulkDate" class="form-control" required value="${new Date().toISOString().split('T')[0]}">
+              </div>
+              <div class="form-group">
+                <label>Heure Début *</label>
+                <input type="time" id="bulkStart" class="form-control" required value="10:00">
+              </div>
+              <div class="form-group">
+                <label>Heure Fin *</label>
+                <input type="time" id="bulkEnd" class="form-control" required value="14:00">
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="confirmBulkScheduleBtn">
+            🚀 Valider l'affectation des ${selectedMembers.length} bénévoles
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    // Remplir les suggestions au départ
+    setTimeout(() => MembersModule.onBulkPoleChange(), 50);
+
+    modal.querySelector('#confirmBulkScheduleBtn').onclick = async () => {
+      const pole = document.getElementById('bulkPole').value;
+      const location = document.getElementById('bulkLocation').value.trim();
+      const role = document.getElementById('bulkRole').value.trim();
+      const date = document.getElementById('bulkDate').value;
+      const start = document.getElementById('bulkStart').value;
+      const end = document.getElementById('bulkEnd').value;
+
+      if (!location || !role || !date || !start || !end) {
+        Notify.error('Veuillez renseigner tous les champs obligatoires.');
+        return;
+      }
+
+      if (start >= end) {
+        Notify.error('L\'heure de fin doit être postérieure à l\'heure de début.');
+        return;
+      }
+
+      const client = SupabaseClient.client;
+      let insertedCount = 0;
+      let conflictsDetected = 0;
+      const newSchedules = [];
+
+      for (const m of selectedMembers) {
+        // Vérification de conflit
+        const hasConflict = MembersModule.schedules.some(s => {
+          return (s.member_id === m.id || s.member_name === `${m.first_name} ${m.last_name}`) &&
+                 s.shift_date === date &&
+                 (start < s.end_time && end > s.start_time);
+        });
+
+        if (hasConflict) conflictsDetected++;
+
+        const sched = {
+          id: 'sch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+          member_id: m.id,
+          member_name: `${m.first_name} ${m.last_name}`,
+          member_phone: m.phone || null,
+          location_or_stand: location,
+          pole_name: pole,
+          shift_date: date,
+          start_time: start,
+          end_time: end,
+          role_title: role,
+          status: 'planifie',
+          created_at: new Date().toISOString()
+        };
+
+        newSchedules.push(sched);
+        insertedCount++;
+      }
+
+      if (client) {
+        try {
+          const insertPayloads = newSchedules.map(s => ({
+            member_id: s.member_id,
+            member_name: s.member_name,
+            member_phone: s.member_phone,
+            location_or_stand: s.location_or_stand,
+            pole_name: s.pole_name,
+            shift_date: s.shift_date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            role_title: s.role_title,
+            status: s.status
+          }));
+          await client.from('volunteer_schedules').insert(insertPayloads);
+        } catch (e) {
+          console.warn('[Bulk Schedule Supabase Warning]', e);
+        }
+      }
+
+      MembersModule.schedules.push(...newSchedules);
+      localStorage.setItem('kermesse_volunteer_schedules', JSON.stringify(MembersModule.schedules));
+
+      AuditLogger.log(
+        'AFFECTATION_GROUPE_PLANNING',
+        'volunteer_schedule',
+        null,
+        `Affectation en masse de ${insertedCount} bénévoles au Pôle ${pole} (${location}) de ${start} à ${end}`
+      );
+
+      if (conflictsDetected > 0) {
+        Notify.warning(`${insertedCount} bénévoles affectés, mais ${conflictsDetected} conflit(s) d'horaires détecté(s).`);
+      } else {
+        Notify.success(`🎉 ${insertedCount} bénévoles affectés avec succès au Pôle "${pole}" !`);
+      }
+
+      MembersModule.selectedMemberIds.clear();
+      close();
+      MembersModule.updateStats();
+      MembersModule.switchTab('planning');
     };
+  },
+
+  onBulkPoleChange() {
+    const pole = document.getElementById('bulkPole')?.value;
+    const locInput = document.getElementById('bulkLocation');
+    const roleInput = document.getElementById('bulkRole');
+    const suggContainer = document.getElementById('bulkStandSuggestions');
+    if (!locInput || !roleInput || !suggContainer) return;
+
+    suggContainer.innerHTML = '';
+
+    if (pole === 'Stands & Jeux') {
+      roleInput.value = 'Surveillance des manèges & animation de jeu';
+      if (this.stands.length > 0) {
+        locInput.value = `Stand ${this.stands[0].number} : ${this.stands[0].name}`;
+        suggContainer.innerHTML = this.stands.slice(0, 4).map(s => `
+          <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Stand ${s.number} : ${s.name}'">
+            🎪 Stand ${s.number}
+          </button>
+        `).join('');
+      } else {
+        locInput.value = 'Espace Stands & Jeux Kermesse';
+      }
+    } else if (pole === 'Restauration & Buvette') {
+      locInput.value = 'Zone Restauration & Buvette Centrale';
+      roleInput.value = 'Cuisine, préparation sandwichs et service';
+      suggContainer.innerHTML = `
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Cuisine & Préparation denrées'">🍔 Cuisine</button>
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Comptoir Vente Snacks & Crêpes'">🥞 Snack/Crêpes</button>
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Comptoir Boissons & Bar'">🥤 Buvette</button>
+      `;
+    } else if (pole === 'Accueil & Sécurité') {
+      locInput.value = 'Entrée Principale (Contrôle et Filtrage)';
+      roleInput.value = 'Accueil des familles, sécurité & orientation';
+      suggContainer.innerHTML = `
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Entrée Principale (Filtrage)'">🚪 Entrée</button>
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Sortie Visiteurs & Flux'">🚶 Sortie</button>
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Rondes de Surveillance & Sécurité'">🛡️ Rondes</button>
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Rondes Sanitaires & Propreté'">🧹 Nettoyage</button>
+      `;
+    } else if (pole === 'Billetterie & Caisses') {
+      locInput.value = 'Zone 3 : Billetterie Centrale (Caisse)';
+      roleInput.value = 'Vente des tickets de jeux et encaissement';
+      suggContainer.innerHTML = `
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Caisse Centrale 1'">💵 Caisse 1</button>
+        <button type="button" class="badge badge-gray" style="cursor: pointer; border: none;" onclick="document.getElementById('bulkLocation').value='Caisse Centrale 2'">💵 Caisse 2</button>
+      `;
+    } else if (pole === 'Logistique & Matériel') {
+      locInput.value = 'Espace Stockage Central & Manutention';
+      roleInput.value = 'Montage barnums, portage matériel & ravitaillement';
+    } else if (pole === 'Décoration & Organisation') {
+      locInput.value = 'Zones Festives & Allées Kermesse';
+      roleInput.value = 'Installation décorations, fléchage & guidage';
+    }
+  },
+
+  setBulkTimePreset(start, end) {
+    const sInput = document.getElementById('bulkStart');
+    const eInput = document.getElementById('bulkEnd');
+    if (sInput && eInput) {
+      sInput.value = start;
+      eInput.value = end;
+    }
+  },
+
+  // 2. ONGLET PLANNING PAR PÔLES & POSTES (OPÉRATIONNEL)
+  renderPlanningTab(container) {
+    const polesCounts = {};
+    this.schedules.forEach(s => {
+      const p = s.pole_name || 'Autre';
+      polesCounts[p] = (polesCounts[p] || 0) + 1;
+    });
+
+    const activeFilter = this.planningPoleFilter;
+    const filteredList = activeFilter === 'all' 
+      ? this.schedules 
+      : this.schedules.filter(s => (s.pole_name || 'Autre') === activeFilter);
 
     container.innerHTML = `
+      <!-- RÉCAPITULATIF OPÉRATIONNEL PAR PÔLE (COMBIEN SONT OÙ) -->
+      <div style="margin-bottom: 1.25rem;">
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.65rem; color: var(--gray-800);">
+          📊 Répartition des Bénévoles sur le Terrain par Pôle :
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.65rem;">
+          <div class="stat-card" style="padding: 0.75rem; cursor: pointer; border: 2px solid ${activeFilter === 'all' ? 'var(--primary)' : 'var(--gray-200)'};" onclick="MembersModule.filterPlanningByPole('all')">
+            <div style="font-size: 0.8rem; color: var(--gray-600);">🌐 Tous les Pôles</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: var(--primary);">${this.schedules.length} planifié(s)</div>
+          </div>
+          <div class="stat-card" style="padding: 0.75rem; cursor: pointer; border: 2px solid ${activeFilter === 'Restauration & Buvette' ? '#f97316' : 'var(--gray-200)'};" onclick="MembersModule.filterPlanningByPole('Restauration & Buvette')">
+            <div style="font-size: 0.8rem; color: var(--gray-600);">🍔 Restauration</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #f97316;">${polesCounts['Restauration & Buvette'] || 0} bénévole(s)</div>
+          </div>
+          <div class="stat-card" style="padding: 0.75rem; cursor: pointer; border: 2px solid ${activeFilter === 'Accueil & Sécurité' ? '#10b981' : 'var(--gray-200)'};" onclick="MembersModule.filterPlanningByPole('Accueil & Sécurité')">
+            <div style="font-size: 0.8rem; color: var(--gray-600);">🛡️ Sécurité &amp; Accueil</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #10b981;">${polesCounts['Accueil & Sécurité'] || 0} bénévole(s)</div>
+          </div>
+          <div class="stat-card" style="padding: 0.75rem; cursor: pointer; border: 2px solid ${activeFilter === 'Stands & Jeux' ? '#8b5cf6' : 'var(--gray-200)'};" onclick="MembersModule.filterPlanningByPole('Stands & Jeux')">
+            <div style="font-size: 0.8rem; color: var(--gray-600);">🎪 Stands &amp; Jeux</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #8b5cf6;">${polesCounts['Stands & Jeux'] || 0} bénévole(s)</div>
+          </div>
+          <div class="stat-card" style="padding: 0.75rem; cursor: pointer; border: 2px solid ${activeFilter === 'Billetterie & Caisses' ? '#2563eb' : 'var(--gray-200)'};" onclick="MembersModule.filterPlanningByPole('Billetterie & Caisses')">
+            <div style="font-size: 0.8rem; color: var(--gray-600);">💵 Billetterie &amp; Caisses</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #2563eb;">${polesCounts['Billetterie & Caisses'] || 0} bénévole(s)</div>
+          </div>
+        </div>
+      </div>
+
       <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
         <div class="search-box">
           <input type="text" id="schedSearch" class="form-control" placeholder="Rechercher par bénévole, lieu ou stand..." oninput="MembersModule.filterSchedules()">
         </div>
-        <div>
+        <div style="display: flex; gap: 0.5rem;">
           <button class="btn btn-primary btn-sm" onclick="MembersModule.openCreateScheduleModal()">
-            <span>➕</span> Ajouter un Créneau
+            <span>➕</span> Créneau Individuel
           </button>
         </div>
       </div>
 
       <div class="table-responsive" id="schedulesTableContainer">
-        ${this.generateSchedulesTable(this.schedules)}
+        ${this.generateSchedulesTable(filteredList)}
       </div>
     `;
+  },
+
+  filterPlanningByPole(poleCode) {
+    this.planningPoleFilter = poleCode;
+    this.renderCurrentTab();
   },
 
   generateSchedulesTable(list) {
@@ -358,9 +770,9 @@ const MembersModule = {
         <div class="empty-state">
           <div class="empty-icon">📅</div>
           <div class="empty-title">Aucun créneau planifié</div>
-          <div class="empty-desc">Affectez les bénévoles aux stands et pôles avec leurs horaires de passage.</div>
-          <button class="btn btn-primary" onclick="MembersModule.openCreateScheduleModal()">
-            <span>➕</span> Créer le premier créneau
+          <div class="empty-desc">Sélectionnez vos bénévoles dans le premier onglet pour les affecter en masse à un pôle (Restauration, Sécurité, Stands...).</div>
+          <button class="btn btn-primary" onclick="MembersModule.switchTab('list')">
+            <span>👥</span> Aller à la sélection des bénévoles
           </button>
         </div>
       `;
@@ -378,10 +790,10 @@ const MembersModule = {
         <thead>
           <tr>
             <th>Bénévole</th>
-            <th>Date &amp; Horaires</th>
-            <th>Lieu / Stand</th>
+            <th>Pôle &amp; Emplacement / Stand</th>
             <th>Mission / Rôle</th>
-            <th>Présence</th>
+            <th>Date &amp; Horaires</th>
+            <th>Présence Terrain</th>
             <th style="text-align: right;">Pointer Présence</th>
             <th style="text-align: right;">Action</th>
           </tr>
@@ -404,16 +816,20 @@ const MembersModule = {
                   ` : ''}
                 </td>
                 <td>
+                  <span class="badge badge-gray" style="font-weight: 700; margin-bottom: 2px;">
+                    ${s.pole_name || 'Kermesse'}
+                  </span>
+                  <div style="font-size: 0.85rem; font-weight: 600; color: var(--gray-900);">
+                    📍 ${s.location_or_stand}
+                  </div>
+                </td>
+                <td><span class="badge badge-primary">${s.role_title}</span></td>
+                <td>
                   <strong>${s.shift_date}</strong><br>
                   <span class="badge badge-gray" style="font-size: 0.8rem; font-weight: 700;">
                     ⏰ ${s.start_time} - ${s.end_time}
                   </span>
                 </td>
-                <td>
-                  <strong>${s.location_or_stand}</strong>
-                  ${s.pole_name ? `<div style="font-size: 0.75rem; color: var(--gray-500);">${s.pole_name}</div>` : ''}
-                </td>
-                <td><span class="badge badge-primary">${s.role_title}</span></td>
                 <td><span class="badge ${st.badge}">${st.label}</span></td>
                 <td style="text-align: right;">
                   <button class="btn btn-sm btn-secondary" onclick="MembersModule.cyclePresenceStatus('${s.id}')" title="Pointer présence">
@@ -438,6 +854,7 @@ const MembersModule = {
     const filtered = this.schedules.filter(s => {
       return (s.member_name || '').toLowerCase().includes(q) ||
              (s.location_or_stand || '').toLowerCase().includes(q) ||
+             (s.pole_name || '').toLowerCase().includes(q) ||
              (s.role_title || '').toLowerCase().includes(q);
     });
 
@@ -460,7 +877,9 @@ const MembersModule = {
 
     const client = SupabaseClient.client;
     if (client && !id.startsWith('sch-')) {
-      await client.from('volunteer_schedules').update({ status: s.status }).eq('id', id);
+      try {
+        await client.from('volunteer_schedules').update({ status: s.status }).eq('id', id);
+      } catch (e) {}
     }
 
     localStorage.setItem('kermesse_volunteer_schedules', JSON.stringify(this.schedules));
@@ -477,7 +896,7 @@ const MembersModule = {
       <div class="alert-banner ${conflicts.length > 0 ? 'danger' : 'success'}" style="margin-bottom: 1.5rem;">
         <div>
           ${conflicts.length > 0 ? `
-            ⚠️ <strong>ALERTE CONFLIT D'AFFECTATION :</strong> ${conflicts.length} conflit(s) d'horaires détecté(s). Des bénévoles sont programmés sur des stands ou missions qui se chevauchent dans le temps !
+            ⚠️ <strong>ALERTE CONFLIT D'AFFECTATION :</strong> ${conflicts.length} conflit(s) d'horaires détecté(s). Des personnes sont programmées sur des postes qui se chevauchent dans le temps !
           ` : `
             ✅ <strong>AUCUN CONFLIT D'HORAIRE :</strong> Tous les plannings sont fluides. Aucun bénévole n'est affecté à deux endroits en même temps.
           `}
@@ -487,7 +906,7 @@ const MembersModule = {
       ${conflicts.length === 0 ? `
         <div class="empty-state">
           <div class="empty-icon">🛡️</div>
-          <div class="empty-title">Planning Optimisé & Sans Conflit</div>
+          <div class="empty-title">Planning Optimisé &amp; Sans Conflit</div>
           <div class="empty-desc">La règle d'or « Une personne à un seul endroit à la fois » est parfaitement respectée sur tous les créneaux.</div>
         </div>
       ` : `
@@ -526,14 +945,14 @@ const MembersModule = {
     `;
   },
 
-  // MODAL DE CRÉATION DE CRÉNEAU AVEC DÉTECTION STRICTE
+  // CRÉATION DE CRÉNEAU INDIVIDUEL
   openCreateScheduleModal(defaultMemberId = null, defaultMemberName = null, defaultPhone = null) {
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
       <div class="modal-dialog">
         <div class="modal-header">
-          <h3>Affecter un Créneau de Planning</h3>
+          <h3>Affecter un Créneau Individuel</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
@@ -566,8 +985,8 @@ const MembersModule = {
                   <option value="Billetterie & Caisses">Pôle 2 : Billetterie &amp; Caisses</option>
                   <option value="Restauration & Buvette">Pôle 4 : Restauration &amp; Buvette</option>
                   <option value="Accueil & Sécurité">Pôle 9 : Accueil &amp; Sécurité</option>
-                  <option value="Décoration & Espaces">Pôle 3 : Décoration &amp; Espaces</option>
-                  <option value="Logistique">Pôle 8 : Logistique &amp; Installation</option>
+                  <option value="Décoration & Organisation">Pôle 3 : Décoration &amp; Organisation</option>
+                  <option value="Logistique & Matériel">Pôle 8 : Logistique &amp; Installation</option>
                   <option value="Communication">Pôle 1 : Communication &amp; Affichage</option>
                 </select>
               </div>
@@ -586,12 +1005,12 @@ const MembersModule = {
 
             <div class="form-group">
               <label>Lieu / Stand Précis *</label>
-              <input type="text" id="schLocation" class="form-control" required placeholder="Ex: Stand 3 Tir aux ballons, Caisse 2...">
+              <input type="text" id="schLocation" class="form-control" required placeholder="Ex: Stand 3 Tir aux ballons, Caisse 2, Cuisine snack...">
             </div>
 
             <div class="form-group">
               <label>Rôle ou Mission sur le créneau *</label>
-              <input type="text" id="schRole" class="form-control" required placeholder="Ex: Arbitre de jeu, Caissier, Accueil visiteurs...">
+              <input type="text" id="schRole" class="form-control" required placeholder="Ex: Arbitre de jeu, Caissier, Accueil visiteurs, Cuistot...">
             </div>
           </form>
         </div>
@@ -734,7 +1153,9 @@ const MembersModule = {
 
     const client = SupabaseClient.client;
     if (client && !id.startsWith('sch-')) {
-      await client.from('volunteer_schedules').delete().eq('id', id);
+      try {
+        await client.from('volunteer_schedules').delete().eq('id', id);
+      } catch (e) {}
     }
 
     localStorage.setItem('kermesse_volunteer_schedules', JSON.stringify(this.schedules));
@@ -774,7 +1195,7 @@ const MembersModule = {
               </div>
               <div class="form-group">
                 <label>Responsabilité Principale *</label>
-                <input type="text" id="mPrimaryRole" class="form-control" required placeholder="Ex: Caissier, Arbitre, Sécurité...">
+                <input type="text" id="mPrimaryRole" class="form-control" required placeholder="Ex: Caissier, Arbitre, Sécurité, Service...">
               </div>
             </div>
 
@@ -870,10 +1291,13 @@ const MembersModule = {
     if (!confirm(`Supprimer définitivement le bénévole ${name} ?`)) return;
 
     this.members = this.members.filter(m => m.id !== id);
+    this.selectedMemberIds.delete(id);
 
     const client = SupabaseClient.client;
     if (client && !id.startsWith('mem-')) {
-      await client.from('members').delete().eq('id', id);
+      try {
+        await client.from('members').delete().eq('id', id);
+      } catch (e) {}
     }
 
     localStorage.setItem('kermesse_members_data', JSON.stringify(this.members));
