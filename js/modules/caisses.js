@@ -3,8 +3,8 @@
  * PÔLE 2 : BILLETTERIE, CAISSES & COMPTABILITÉ
  * 
  * Les 4 modules demandés :
- * 1. CaisseEntreeModule  : Caisse 1 — Entrée & Accueil Visiteurs + Onglet Dépenses
- * 2. CaisseJeuxModule    : Caisse 2 — Tickets de Jeux & Stands (relié au Pôle 5) + Onglet Dépenses
+ * 1. CaisseEntreeModule  : Caisse 1 — Entrée & Accueil Visiteurs + Onglet Dépenses + Annulation directe & Stepper (+ / -)
+ * 2. CaisseJeuxModule    : Caisse 2 — Tickets de Jeux & Stands (relié au Pôle 5) + Onglet Dépenses + Annulation directe & Stepper (+ / -)
  * 3. CaisseJetonsModule  : Caisse 3 — Change & Jetons de Monnaie + Onglet Dépenses
  * 4. CaisseBilanModule   : Bilan Financier Consolidé & Palmarès des Stands
  */
@@ -13,6 +13,10 @@
 // GESTIONNAIRE CENTRAL ET PERSISTANCE DES CAISSES (CaissesCore)
 // ==============================================================================
 const CaissesCore = {
+  isUuid(str) {
+    return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  },
+
   async getOrCreateRegister(roleKey, defaultName) {
     const client = SupabaseClient.client;
     let reg = null;
@@ -61,7 +65,7 @@ const CaissesCore = {
             name: reg.name,
             initial_amount_f: 0,
             status: 'open'
-          }]).select();
+          }]).select('id');
           if (!error && data && data[0]) reg.id = data[0].id;
         } catch (e) {}
       }
@@ -87,7 +91,7 @@ const CaissesCore = {
     const client = SupabaseClient.client;
     let list = [];
 
-    if (client && registerId) {
+    if (client && registerId && this.isUuid(registerId)) {
       try {
         const { data } = await client
           .from('cash_movements')
@@ -117,20 +121,18 @@ const CaissesCore = {
     const finalAmount = -Math.abs(amount);
     let newId = 'mvt-exp-' + Date.now();
 
-    if (client) {
+    if (client && this.isUuid(registerId)) {
       try {
-        // Enregistrer le mouvement négatif en caisse
-        const { data, error } = await client.from('cash_movements').insert([{
+        const { data } = await client.from('cash_movements').insert([{
           cash_register_id: registerId,
           type: 'depense_autorisee',
           amount_f: finalAmount,
           reason: motive + (receiptRef ? ` (Réf: ${receiptRef})` : ''),
           user_id: user ? user.id : null
-        }]).select();
+        }]).select('id');
 
         if (data && data[0]) newId = data[0].id;
 
-        // Enregistrer aussi dans la table expenses
         await client.from('expenses').insert([{
           cash_register_id: registerId,
           amount_f: Math.abs(amount),
@@ -170,7 +172,7 @@ const CaissesCore = {
     const finalAmount = -Math.abs(amount);
     const client = SupabaseClient.client;
 
-    if (client) {
+    if (client && this.isUuid(movementId)) {
       try {
         await client.from('cash_movements').update({
           amount_f: finalAmount,
@@ -198,7 +200,7 @@ const CaissesCore = {
 
   async deleteExpense(movementId, registerId, registerName, amount) {
     const client = SupabaseClient.client;
-    if (client) {
+    if (client && this.isUuid(movementId)) {
       try {
         await client.from('cash_movements').delete().eq('id', movementId);
       } catch (e) {}
@@ -220,7 +222,7 @@ const CaissesCore = {
     const client = SupabaseClient.client;
     const initial = Math.max(0, parseInt(newInitial, 10) || 0);
 
-    if (client) {
+    if (client && this.isUuid(registerId)) {
       try {
         await client.from('cash_registers').update({ initial_amount_f: initial }).eq('id', registerId);
       } catch (e) {}
@@ -244,7 +246,7 @@ const CaissesCore = {
     const client = SupabaseClient.client;
     const user = Auth.getCurrentUser();
 
-    if (client) {
+    if (client && this.isUuid(registerId)) {
       try {
         await client.from('cash_registers').update({
           status: 'closed',
@@ -279,7 +281,7 @@ const CaissesCore = {
 
   async reopenRegister(registerId, registerName) {
     const client = SupabaseClient.client;
-    if (client) {
+    if (client && this.isUuid(registerId)) {
       try {
         await client.from('cash_registers').update({
           status: 'open',
@@ -320,7 +322,7 @@ const CaisseEntreeModule = {
     { id: 'ent-enf', name: 'Entrée Enfant (-12 ans)', price: 200, icon: '🧒' },
     { id: 'ent-adu', name: 'Entrée Adulte', price: 500, icon: '🧑' },
     { id: 'ent-fam', name: 'Pass Famille (4 personnes)', price: 1200, icon: '👨‍👩‍👧‍👦' },
-    { id: 'ent-don', name: 'Entrée Bienfaiteur / Donateur', price: 2000, icon: '❤️' }
+    { id: 'ent-don', name: 'Entrée Donateur / Bienfaiteur', price: 2000, icon: '❤️' }
   ],
 
   async render(container) {
@@ -350,7 +352,7 @@ const CaisseEntreeModule = {
               💸 Dépenses de cette Caisse (${this.expenses.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('journal')">
-              🧾 Journal des Entrées
+              🧾 Journal des Entrées (${this.sales.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('closure')">
               🔒 Contrôle &amp; Clôture
@@ -372,7 +374,9 @@ const CaisseEntreeModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
-    if (client && this.register) {
+    this.sales = [];
+
+    if (client) {
       try {
         const { data: vData } = await client
           .from('ticket_sales')
@@ -380,6 +384,15 @@ const CaisseEntreeModule = {
           .eq('category', 'entree')
           .order('created_at', { ascending: false });
         if (vData) this.sales = vData;
+      } catch (e) {}
+    }
+
+    // Récupération locale de secours
+    const stored = localStorage.getItem('kermesse_entry_sales');
+    if (stored) {
+      try {
+        const local = JSON.parse(stored);
+        this.sales = [...this.sales, ...local.filter(l => !this.sales.some(s => s.id === l.id))];
       } catch (e) {}
     }
 
@@ -406,67 +419,129 @@ const CaisseEntreeModule = {
 
     container.innerHTML = `
       <div style="display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem;">
+        
         <div>
-          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+          <!-- Indicateurs du pôle entrée -->
+          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <div>
               <span style="font-weight: 700; color: #065f46;">👥 Visiteurs accueillis :</span>
-              <strong style="color: #047857; font-size: 1.2rem; margin-left: 6px;">${totalVisitors.toLocaleString()}</strong>
+              <strong style="color: #047857; font-size: 1.25rem; margin-left: 6px;">${totalVisitors.toLocaleString()}</strong>
             </div>
             <div>
-              <span style="font-weight: 700; color: #065f46;">Total Entrées :</span>
-              <strong style="color: #047857; font-size: 1.2rem; margin-left: 6px;">${totalRevenue.toLocaleString()} F</strong>
+              <span style="font-weight: 700; color: #065f46;">Recette Entrées :</span>
+              <strong style="color: #047857; font-size: 1.25rem; margin-left: 6px;">${totalRevenue.toLocaleString()} F</strong>
             </div>
           </div>
 
           <h4 style="margin-bottom: 0.75rem;">Sélectionnez les billets d'entrée :</h4>
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
-            ${this.entryCatalog.map(t => `
-              <div class="card" style="border: 2px solid #10b98140; border-top: 5px solid #10b981; cursor: pointer; transition: transform 0.15s;" onclick="CaisseEntreeModule.addToCart('${t.id}', '${t.name}', ${t.price}, 1)">
-                <div class="card-body" style="padding: 1rem;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <span style="font-size: 1.8rem;">${t.icon}</span>
-                    <strong style="font-size: 1.15rem; color: #047857;">${t.price.toLocaleString()} F</strong>
-                  </div>
-                  <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.5rem;">${t.name}</div>
-                  <div style="display: flex; gap: 0.25rem;" onclick="event.stopPropagation();">
-                    <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="CaisseEntreeModule.addToCart('${t.id}', '${t.name}', ${t.price}, 1)">+1</button>
-                    <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="CaisseEntreeModule.addToCart('${t.id}', '${t.name}', ${t.price}, 2)">+2</button>
-                    <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="CaisseEntreeModule.addToCart('${t.id}', '${t.name}', ${t.price}, 5)">+5</button>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.85rem;">
+            ${this.entryCatalog.map(t => {
+              const inCart = this.cart.find(i => i.id === t.id);
+              const qty = inCart ? inCart.qty : 0;
+
+              return `
+                <div class="card" style="border: 2px solid ${qty > 0 ? '#10b981' : '#e2e8f0'}; border-top: 5px solid #10b981; transition: box-shadow 0.15s; background: ${qty > 0 ? '#f0fdf4' : 'white'};">
+                  <div class="card-body" style="padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                      <span style="font-size: 2rem;">${t.icon}</span>
+                      <strong style="font-size: 1.15rem; color: #047857;">${t.price.toLocaleString()} F</strong>
+                    </div>
+                    <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.75rem; min-height: 2.2em; line-height: 1.2;">
+                      ${t.name}
+                    </div>
+
+                    <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+                      <button class="btn btn-secondary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseEntreeModule.decrementItem('${t.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                        −
+                      </button>
+                      <div style="text-align: center;">
+                        <span style="font-size: 1.2rem; font-weight: 800; color: ${qty > 0 ? '#047857' : 'var(--gray-400)'};">
+                          ${qty}
+                        </span>
+                        <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">billet(s)</div>
+                      </div>
+                      <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.incrementItem('${t.id}', '${t.name}', ${t.price})" title="Augmenter">
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
+
+          <!-- SECTION : DERNIÈRES ENTRÉES VALIDÉES (ANNULATION DIRECTE SUR CET ÉCRAN) -->
+          <div style="margin-top: 2rem; border-top: 2px dashed var(--gray-200); padding-top: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="margin: 0; font-size: 1rem; color: var(--gray-800); display: flex; align-items: center; gap: 0.4rem;">
+                <span>🧾</span> Derniers billets d'entrée validés
+              </h4>
+              <span style="font-size: 0.8rem; color: var(--gray-500);">Cliquez sur 🗑️ pour annuler un billet validé par erreur</span>
+            </div>
+
+            ${this.sales.length === 0 ? `
+              <p style="color: var(--gray-400); font-size: 0.85rem; font-style: italic;">Aucun billet d'entrée validé pour le moment.</p>
+            ` : `
+              <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 280px; overflow-y: auto;">
+                ${this.sales.slice(0, 8).map(s => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.85rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-md);">
+                    <div>
+                      <div style="font-weight: 700; font-size: 0.9rem;">
+                        🎟️ ${s.item_name} <span class="badge badge-gray" style="font-size: 0.72rem; margin-left: 4px;">×${s.quantity}</span>
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--gray-500);">
+                        Validé à ${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                      <strong style="color: var(--success); font-size: 1rem;">
+                        +${(s.total_amount_f || 0).toLocaleString()} F
+                      </strong>
+                      <button class="btn btn-danger btn-sm" onclick="CaisseEntreeModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler et enlever ce billet" style="display: flex; align-items: center; gap: 4px;">
+                        <span>🗑️</span> Enlever
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
         </div>
 
-        <!-- Panier Entrée -->
+        <!-- Panier Entrée (Colonne Droite) -->
         <div class="card" style="border: 2px solid #10b981; box-shadow: var(--shadow-md); position: sticky; top: 1rem;">
           <div class="card-header" style="background: #10b981; color: white;">
             <div class="card-title" style="color: white; font-size: 1rem;">
-              <span>🎟️</span> Panier Entrée (${this.cart.reduce((s, i) => s + i.qty, 0)})
+              <span>🛒</span> Panier Entrée (${this.cart.reduce((s, i) => s + i.qty, 0)})
             </div>
             ${this.cart.length > 0 ? `
-              <button class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: none;" onclick="CaisseEntreeModule.cart = []; CaisseEntreeModule.renderCurrentTab();">Vider</button>
+              <button class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 2px 8px; font-size: 0.75rem;" onclick="CaisseEntreeModule.cart = []; CaisseEntreeModule.renderCurrentTab();">Vider</button>
             ` : ''}
           </div>
+
           <div class="card-body" style="padding: 1rem;">
             ${this.cart.length === 0 ? `
               <div style="text-align: center; padding: 2rem 0; color: var(--gray-400);">
-                <div style="font-size: 2rem;">🎟️</div>
-                <div>Panier vide</div>
-                <div style="font-size: 0.8rem;">Cliquez sur un billet d'entrée</div>
+                <div style="font-size: 2.2rem; margin-bottom: 0.35rem;">🎟️</div>
+                <div style="font-weight: 700;">Panier vide</div>
+                <div style="font-size: 0.8rem; margin-top: 4px;">Utilisez les boutons <strong>+</strong> pour choisir le nombre de billets</div>
               </div>
             ` : `
-              <div style="max-height: 200px; overflow-y: auto; margin-bottom: 1rem;">
-                ${this.cart.map((item, idx) => `
-                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--gray-100);">
-                    <div>
-                      <div style="font-weight: 700; font-size: 0.85rem;">${item.name}</div>
-                      <div style="font-size: 0.75rem; color: var(--gray-500);">${item.qty} × ${item.price} F</div>
+              <div style="max-height: 220px; overflow-y: auto; margin-bottom: 1rem;">
+                ${this.cart.map(item => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--gray-100);">
+                    <div style="flex: 1;">
+                      <div style="font-weight: 700; font-size: 0.88rem;">${item.name}</div>
+                      <div style="font-size: 0.75rem; color: var(--gray-500);">${(item.price * item.qty).toLocaleString()} F (${item.price} F / billet)</div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                      <strong>${(item.price * item.qty).toLocaleString()} F</strong>
-                      <button class="btn btn-sm btn-danger" style="padding: 1px 6px; font-size: 0.75rem;" onclick="CaisseEntreeModule.cart.splice(${idx}, 1); CaisseEntreeModule.renderCurrentTab();">✕</button>
+                    <!-- Stepper dans le panier -->
+                    <div style="display: flex; align-items: center; gap: 0.3rem;">
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseEntreeModule.decrementItem('${item.id}')">−</button>
+                      <strong style="min-width: 24px; text-align: center; font-size: 0.95rem;">${item.qty}</strong>
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseEntreeModule.incrementItem('${item.id}', '${item.name}', ${item.price})">+</button>
+                      <button class="btn btn-danger btn-sm" style="padding: 2px 6px; font-size: 0.75rem; margin-left: 2px;" onclick="CaisseEntreeModule.removeItem('${item.id}')" title="Retirer">✕</button>
                     </div>
                   </div>
                 `).join('')}
@@ -478,25 +553,46 @@ const CaisseEntreeModule = {
               </div>
 
               <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label style="font-size: 0.8rem;">Espèces remises par le client :</label>
-                <input type="number" id="caisseEntreeCashGiven" class="form-control" placeholder="Montant reçu" oninput="CaisseEntreeModule.calcChange(${cartTotal})">
+                <label style="font-size: 0.8rem;">Espèces reçues :</label>
+                <input type="number" id="caisseEntreeCashGiven" class="form-control" placeholder="Montant remis" oninput="CaisseEntreeModule.calcChange(${cartTotal})">
                 <div id="caisseEntreeChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.85rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
               </div>
 
               <button class="btn btn-primary" style="width: 100%; font-size: 1.05rem; font-weight: 800; background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.checkout()">
-                💳 Encaisser (${cartTotal.toLocaleString()} F)
+                💳 Valider &amp; Encaisser (${cartTotal.toLocaleString()} F)
               </button>
             `}
           </div>
         </div>
+
       </div>
     `;
   },
 
-  addToCart(id, name, price, qty = 1) {
+  incrementItem(id, name, price) {
     const ex = this.cart.find(i => i.id === id);
-    if (ex) ex.qty += qty;
-    else this.cart.push({ id, name, price, qty });
+    if (ex) {
+      ex.qty += 1;
+    } else {
+      this.cart.push({ id, name, price, qty: 1 });
+    }
+    this.renderCurrentTab();
+  },
+
+  decrementItem(id) {
+    const idx = this.cart.findIndex(i => i.id === id);
+    if (idx >= 0) {
+      if (this.cart[idx].qty > 1) {
+        this.cart[idx].qty -= 1;
+      } else {
+        this.cart.splice(idx, 1);
+      }
+      this.renderCurrentTab();
+    }
+  },
+
+  removeItem(id) {
+    this.cart = this.cart.filter(i => i.id !== id);
     this.renderCurrentTab();
   },
 
@@ -516,10 +612,13 @@ const CaisseEntreeModule = {
     const client = SupabaseClient.client;
     const user = Auth.getCurrentUser();
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const regId = this.register.id;
 
     for (const item of this.cart) {
+      let realSaleId = 'sale-ent-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+
       const saleObj = {
-        cash_register_id: this.register.id,
+        cash_register_id: CaissesCore.isUuid(regId) ? regId : null,
         item_name: item.name,
         category: 'entree',
         quantity: item.qty,
@@ -529,15 +628,28 @@ const CaisseEntreeModule = {
       };
 
       if (client) {
-        try { await client.from('ticket_sales').insert([saleObj]); } catch (e) {}
+        try {
+          const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
+          if (data && data[0]) realSaleId = data[0].id;
+        } catch (e) {
+          console.warn('[Checkout Entree DB Warning]', e);
+        }
       }
-      this.sales.unshift({ ...saleObj, id: 'sale-ent-' + Date.now() + Math.random(), created_at: new Date().toISOString() });
+
+      this.sales.unshift({
+        ...saleObj,
+        id: realSaleId,
+        created_at: new Date().toISOString()
+      });
     }
 
-    if (client) {
+    // Persistance locale
+    localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
+
+    if (client && CaissesCore.isUuid(regId)) {
       try {
         await client.from('cash_movements').insert([{
-          cash_register_id: this.register.id,
+          cash_register_id: regId,
           type: 'vente',
           amount_f: cartTotal,
           reason: `Vente entrées (${this.cart.reduce((s, i) => s + i.qty, 0)} pers.)`,
@@ -547,8 +659,42 @@ const CaisseEntreeModule = {
     }
 
     AuditLogger.log('VENTE_ENTREE', 'ticket_sales', null, `Encaissement de ${cartTotal} F en Caisse Entrée`);
-    Notify.success(`Entrées validées ! Total : ${cartTotal.toLocaleString()} F`);
+    Notify.success(`Billets d'entrée validés ! Total : ${cartTotal.toLocaleString()} F`);
     this.cart = [];
+    this.renderCurrentTab();
+  },
+
+  async deleteSale(id, name, amount) {
+    if (!confirm(`Annuler et enlever le billet « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et le visiteur sera décompté.`)) {
+      return;
+    }
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        if (CaissesCore.isUuid(id)) {
+          await client.from('ticket_sales').delete().eq('id', id);
+        }
+        // Ajouter un mouvement de compensation pour réduire la caisse du montant
+        if (CaissesCore.isUuid(this.register.id)) {
+          await client.from('cash_movements').insert([{
+            cash_register_id: this.register.id,
+            type: 'correction',
+            amount_f: -Math.abs(amount),
+            reason: `Annulation billet entrée : ${name}`,
+            user_id: Auth.getCurrentUser()?.id || null
+          }]);
+        }
+      } catch (e) {
+        console.warn('[Delete Sale DB Warning]', e);
+      }
+    }
+
+    this.sales = this.sales.filter(s => s.id !== id);
+    localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
+
+    AuditLogger.log('SUPPRESSION_VENTE_ENTREE', 'ticket_sale', id, `Annulation vente entrée ${name} (-${amount} F)`);
+    Notify.success(`Billet « ${name} » enlevé avec succès. Total mis à jour.`);
     this.renderCurrentTab();
   },
 
@@ -559,8 +705,8 @@ const CaisseEntreeModule = {
     container.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
         <div>
-          <h3 style="margin: 0; font-size: 1.1rem;">Sorties &amp; Dépenses payées par la Caisse Entrée</h3>
-          <p style="margin: 0; font-size: 0.85rem; color: var(--gray-500);">Toute dépense est déduite immédiatement du solde théorique de cette caisse.</p>
+          <h3 style="margin: 0; font-size: 1.1rem;">Dépenses payées par la Caisse Entrée</h3>
+          <p style="margin: 0; font-size: 0.85rem; color: var(--gray-500);">Toute dépense est déduite du solde théorique de cette caisse.</p>
         </div>
         <div style="display: flex; gap: 0.75rem; align-items: center;">
           <div style="font-weight: 800; font-size: 1.1rem; color: var(--danger);">
@@ -577,7 +723,7 @@ const CaisseEntreeModule = {
           <div class="empty-state">
             <div class="empty-icon">💸</div>
             <div class="empty-title">Aucune dépense enregistrée sur cette caisse</div>
-            <div class="empty-desc">Enregistrez les achats d'urgence, badges ou fournitures payés directement avec l'argent de l'entrée.</div>
+            <div class="empty-desc">Enregistrez les achats d'urgence, badges ou fournitures payés directement avec l'argent de l'accueil.</div>
             <button class="btn btn-primary btn-sm" onclick="CaisseEntreeModule.openAddExpenseModal()">
               <span>➕</span> Enregistrer une dépense
             </button>
@@ -632,7 +778,7 @@ const CaisseEntreeModule = {
             </div>
             <div class="form-group">
               <label>Motif de la dépense *</label>
-              <input type="text" id="expEntreeMotive" class="form-control" required placeholder="Ex: Achat ruban balisage, stylos, piles...">
+              <input type="text" id="expEntreeMotive" class="form-control" required placeholder="Ex: Achat ruban balisage, stylos, badges...">
             </div>
             <div class="form-group">
               <label>Bénéficiaire / Justificatif (optionnel)</label>
@@ -756,7 +902,7 @@ const CaisseEntreeModule = {
                   <td>${s.quantity}</td>
                   <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
                   <td style="text-align: right;">
-                    <button class="btn btn-danger btn-sm" onclick="CaisseEntreeModule.deleteSale('${s.id}', '${s.item_name}', ${s.total_amount_f})" title="Annuler cette vente">🗑️</button>
+                    <button class="btn btn-danger btn-sm" onclick="CaisseEntreeModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler cette vente">🗑️ Enlever</button>
                   </td>
                 </tr>
               `).join('')}
@@ -765,18 +911,6 @@ const CaisseEntreeModule = {
         `}
       </div>
     `;
-  },
-
-  async deleteSale(id, name, amount) {
-    if (!confirm(`Annuler et supprimer la vente d'entrée « ${name} » (${amount} F) ?`)) return;
-    const client = SupabaseClient.client;
-    if (client) {
-      try { await client.from('ticket_sales').delete().eq('id', id); } catch (e) {}
-    }
-    this.sales = this.sales.filter(s => s.id !== id);
-    AuditLogger.log('SUPPRESSION_VENTE_ENTREE', 'ticket_sale', id, `Annulation vente entrée ${name} (${amount} F)`);
-    Notify.success('Vente d\'entrée supprimée.');
-    this.renderCurrentTab();
   },
 
   // 4. Onglet Contrôle & Clôture
@@ -946,7 +1080,7 @@ const CaisseJeuxModule = {
               💸 Dépenses de cette Caisse (${this.expenses.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('journal')">
-              🧾 Journal des Ventes Jeux
+              🧾 Journal des Ventes Jeux (${this.sales.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('closure')">
               🔒 Contrôle &amp; Clôture
@@ -968,20 +1102,19 @@ const CaisseJeuxModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
+    this.sales = [];
+
     if (client) {
       try {
-        // Jeux avec स्टैंड rattaché
         const { data: gData } = await client
           .from('games')
           .select('id, name, ticket_price_f, stand_id, is_active, stand:stands(id, name, number, color_name, color_hex)')
           .order('name');
         if (gData) this.games = gData;
 
-        // Stands
         const { data: sData } = await client.from('stands').select('id, name, number, color_name, color_hex').order('number');
         if (sData) this.stands = sData;
 
-        // Ventes de jeux
         const { data: vData } = await client
           .from('ticket_sales')
           .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, stand:stands(name, color_name, color_hex), seller:app_users(login)')
@@ -991,6 +1124,15 @@ const CaisseJeuxModule = {
       } catch (e) {
         console.warn('[CaisseJeux DB Error]', e);
       }
+    }
+
+    // Récupération locale de secours
+    const stored = localStorage.getItem('kermesse_game_sales');
+    if (stored) {
+      try {
+        const local = JSON.parse(stored);
+        this.sales = [...this.sales, ...local.filter(l => !this.sales.some(s => s.id === l.id))];
+      } catch (e) {}
     }
 
     if (this.register) {
@@ -1016,11 +1158,25 @@ const CaisseJeuxModule = {
       : activeGames.filter(g => g.stand && g.stand.id === this.activeStandFilter);
 
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const totalGameTickets = this.sales.reduce((s, x) => s + (x.quantity || 1), 0);
+    const totalGameRevenue = this.sales.reduce((s, x) => s + (x.total_amount_f || 0), 0);
 
     container.innerHTML = `
       <div style="display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem;">
         
         <div>
+          <!-- Indicateurs caisse jeux -->
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <span style="font-weight: 700; color: #1e40af;">🎯 Tickets vendus :</span>
+              <strong style="color: #1d4ed8; font-size: 1.25rem; margin-left: 6px;">${totalGameTickets.toLocaleString()}</strong>
+            </div>
+            <div>
+              <span style="font-weight: 700; color: #1e40af;">Recette Jeux :</span>
+              <strong style="color: #1d4ed8; font-size: 1.25rem; margin-left: 6px;">${totalGameRevenue.toLocaleString()} F</strong>
+            </div>
+          </div>
+
           <!-- Filtres rapides par Stand -->
           <div style="display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.5rem; margin-bottom: 1rem;">
             <button class="btn btn-sm ${this.activeStandFilter === 'all' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseJeuxModule.activeStandFilter='all'; CaisseJeuxModule.renderCurrentTab();">
@@ -1045,14 +1201,17 @@ const CaisseJeuxModule = {
               </button>
             </div>
           ` : `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 0.75rem;">
               ${filteredGames.map(g => {
                 const standColor = g.stand ? g.stand.color_hex : '#64748b';
                 const standName = g.stand ? `${g.stand.color_name} ${g.stand.number}` : 'Général';
                 const price = g.ticket_price_f || 200;
 
+                const inCart = this.cart.find(i => i.gameId === g.id);
+                const qty = inCart ? inCart.qty : 0;
+
                 return `
-                  <div class="card" style="border: 2px solid ${standColor}40; border-top: 5px solid ${standColor}; cursor: pointer; transition: transform 0.15s;" onclick="CaisseJeuxModule.addToCart('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}', 1)">
+                  <div class="card" style="border: 2px solid ${qty > 0 ? standColor : `${standColor}40`}; border-top: 5px solid ${standColor}; transition: box-shadow 0.15s; background: ${qty > 0 ? `${standColor}08` : 'white'};">
                     <div class="card-body" style="padding: 0.85rem;">
                       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.35rem;">
                         <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.72rem; padding: 1px 6px;">
@@ -1062,13 +1221,24 @@ const CaisseJeuxModule = {
                           ${price.toLocaleString()} F
                         </strong>
                       </div>
-                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.5rem; min-height: 2.2em; line-height: 1.2;">
+                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.65rem; min-height: 2.2em; line-height: 1.2;">
                         ${g.name}
                       </div>
-                      <div style="display: flex; gap: 0.25rem;" onclick="event.stopPropagation();">
-                        <button class="btn btn-secondary btn-sm" style="flex: 1; padding: 2px 4px; font-size: 0.75rem;" onclick="CaisseJeuxModule.addToCart('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}', 1)">+1</button>
-                        <button class="btn btn-secondary btn-sm" style="flex: 1; padding: 2px 4px; font-size: 0.75rem;" onclick="CaisseJeuxModule.addToCart('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}', 3)">+3</button>
-                        <button class="btn btn-secondary btn-sm" style="flex: 1; padding: 2px 4px; font-size: 0.75rem;" onclick="CaisseJeuxModule.addToCart('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}', 5)">+5</button>
+
+                      <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
+                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+                        <button class="btn btn-secondary btn-sm" style="width: 36px; height: 36px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.decrementGame('${g.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                          −
+                        </button>
+                        <div style="text-align: center;">
+                          <span style="font-size: 1.15rem; font-weight: 800; color: ${qty > 0 ? 'var(--primary)' : 'var(--gray-400)'};">
+                            ${qty}
+                          </span>
+                          <div style="font-size: 0.68rem; color: var(--gray-500); line-height: 1;">ticket(s)</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" style="width: 36px; height: 36px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Augmenter">
+                          +
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1076,37 +1246,84 @@ const CaisseJeuxModule = {
               }).join('')}
             </div>
           `}
+
+          <!-- SECTION : DERNIERS TICKETS DE JEUX VALIDÉS (ANNULATION DIRECTE SUR CET ÉCRAN) -->
+          <div style="margin-top: 2rem; border-top: 2px dashed var(--gray-200); padding-top: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="margin: 0; font-size: 1rem; color: var(--gray-800); display: flex; align-items: center; gap: 0.4rem;">
+                <span>🧾</span> Derniers tickets de jeux validés
+              </h4>
+              <span style="font-size: 0.8rem; color: var(--gray-500);">Cliquez sur 🗑️ pour annuler un ticket validé par erreur</span>
+            </div>
+
+            ${this.sales.length === 0 ? `
+              <p style="color: var(--gray-400); font-size: 0.85rem; font-style: italic;">Aucun ticket de jeu validé pour le moment.</p>
+            ` : `
+              <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 280px; overflow-y: auto;">
+                ${this.sales.slice(0, 8).map(s => {
+                  const standName = s.stand ? s.stand.name : 'Stand';
+                  const standColor = s.stand ? (s.stand.color_hex || '#3b82f6') : '#3b82f6';
+
+                  return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.85rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-md);">
+                      <div>
+                        <div style="font-weight: 700; font-size: 0.9rem;">
+                          🎯 ${s.item_name} <span class="badge badge-gray" style="font-size: 0.72rem; margin-left: 4px;">×${s.quantity}</span>
+                          <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.7rem; margin-left: 6px;">${standName}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--gray-500);">
+                          Validé à ${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <strong style="color: var(--success); font-size: 1rem;">
+                          +${(s.total_amount_f || 0).toLocaleString()} F
+                        </strong>
+                        <button class="btn btn-danger btn-sm" onclick="CaisseJeuxModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler et enlever ce ticket">
+                          <span>🗑️</span> Enlever
+                        </button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          </div>
+
         </div>
 
-        <!-- Panier de vente tactile -->
+        <!-- Panier de vente tactile (Colonne Droite) -->
         <div class="card" style="border: 2px solid var(--primary); box-shadow: var(--shadow-md); position: sticky; top: 1rem;">
           <div class="card-header" style="background: var(--primary); color: white;">
             <div class="card-title" style="color: white; font-size: 1rem;">
               <span>🛒</span> Panier Jeux (${this.cart.reduce((s, i) => s + i.qty, 0)})
             </div>
             ${this.cart.length > 0 ? `
-              <button class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: none;" onclick="CaisseJeuxModule.cart = []; CaisseJeuxModule.renderCurrentTab();">Vider</button>
+              <button class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 2px 8px; font-size: 0.75rem;" onclick="CaisseJeuxModule.cart = []; CaisseJeuxModule.renderCurrentTab();">Vider</button>
             ` : ''}
           </div>
 
           <div class="card-body" style="padding: 1rem;">
             ${this.cart.length === 0 ? `
               <div style="text-align: center; padding: 2rem 0; color: var(--gray-400);">
-                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🎯</div>
-                <div>Panier vide</div>
-                <div style="font-size: 0.8rem;">Cliquez sur un jeu à gauche</div>
+                <div style="font-size: 2.2rem; margin-bottom: 0.35rem;">🎯</div>
+                <div style="font-weight: 700;">Panier vide</div>
+                <div style="font-size: 0.8rem; margin-top: 4px;">Cliquez sur <strong>+</strong> pour choisir le nombre de tickets</div>
               </div>
             ` : `
               <div style="max-height: 220px; overflow-y: auto; margin-bottom: 1rem;">
-                ${this.cart.map((item, idx) => `
-                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--gray-100);">
-                    <div>
-                      <div style="font-weight: 700; font-size: 0.85rem;">${item.name}</div>
+                ${this.cart.map(item => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--gray-100);">
+                    <div style="flex: 1;">
+                      <div style="font-weight: 700; font-size: 0.88rem;">${item.name}</div>
                       <div style="font-size: 0.72rem; color: var(--gray-500);">${item.qty} × ${item.price} F (${item.standName})</div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.4rem;">
-                      <strong>${(item.price * item.qty).toLocaleString()} F</strong>
-                      <button class="btn btn-sm btn-danger" style="padding: 1px 6px; font-size: 0.75rem;" onclick="CaisseJeuxModule.cart.splice(${idx}, 1); CaisseJeuxModule.renderCurrentTab();">✕</button>
+                    <!-- Stepper dans le panier -->
+                    <div style="display: flex; align-items: center; gap: 0.3rem;">
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseJeuxModule.decrementGame('${item.gameId}')">−</button>
+                      <strong style="min-width: 24px; text-align: center; font-size: 0.95rem;">${item.qty}</strong>
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseJeuxModule.incrementGame('${item.gameId}', '${item.name}', ${item.price}, '${item.standName}', '${item.standColor}', '${item.standId}')">+</button>
+                      <button class="btn btn-danger btn-sm" style="padding: 2px 6px; font-size: 0.75rem; margin-left: 2px;" onclick="CaisseJeuxModule.removeGame('${item.gameId}')" title="Retirer">✕</button>
                     </div>
                   </div>
                 `).join('')}
@@ -1118,8 +1335,8 @@ const CaisseJeuxModule = {
               </div>
 
               <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label style="font-size: 0.8rem;">Monnaie reçue du client :</label>
-                <input type="number" id="caisseJeuxCashGiven" class="form-control" placeholder="Montant remis" oninput="CaisseJeuxModule.calcChange(${cartTotal})">
+                <label style="font-size: 0.8rem;">Espèces remises par le client :</label>
+                <input type="number" id="caisseJeuxCashGiven" class="form-control" placeholder="Montant reçu" oninput="CaisseJeuxModule.calcChange(${cartTotal})">
                 <div id="caisseJeuxChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.85rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
               </div>
 
@@ -1134,10 +1351,30 @@ const CaisseJeuxModule = {
     `;
   },
 
-  addToCart(gameId, name, price, standName, standColor, standId, qty = 1) {
+  incrementGame(gameId, name, price, standName, standColor, standId) {
     const ex = this.cart.find(i => i.gameId === gameId);
-    if (ex) ex.qty += qty;
-    else this.cart.push({ gameId, name, price, standName, standColor, standId, qty });
+    if (ex) {
+      ex.qty += 1;
+    } else {
+      this.cart.push({ gameId, name, price, standName, standColor, standId, qty: 1 });
+    }
+    this.renderCurrentTab();
+  },
+
+  decrementGame(gameId) {
+    const idx = this.cart.findIndex(i => i.gameId === gameId);
+    if (idx >= 0) {
+      if (this.cart[idx].qty > 1) {
+        this.cart[idx].qty -= 1;
+      } else {
+        this.cart.splice(idx, 1);
+      }
+      this.renderCurrentTab();
+    }
+  },
+
+  removeGame(gameId) {
+    this.cart = this.cart.filter(i => i.gameId !== gameId);
     this.renderCurrentTab();
   },
 
@@ -1157,10 +1394,13 @@ const CaisseJeuxModule = {
     const client = SupabaseClient.client;
     const user = Auth.getCurrentUser();
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const regId = this.register.id;
 
     for (const item of this.cart) {
+      let realSaleId = 'sale-game-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+
       const saleObj = {
-        cash_register_id: this.register.id,
+        cash_register_id: CaissesCore.isUuid(regId) ? regId : null,
         stand_id: item.standId || null,
         game_id: item.gameId || null,
         item_name: item.name,
@@ -1172,15 +1412,28 @@ const CaisseJeuxModule = {
       };
 
       if (client) {
-        try { await client.from('ticket_sales').insert([saleObj]); } catch (e) {}
+        try {
+          const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
+          if (data && data[0]) realSaleId = data[0].id;
+        } catch (e) {
+          console.warn('[Checkout Jeux DB Warning]', e);
+        }
       }
-      this.sales.unshift({ ...saleObj, id: 'sale-game-' + Date.now() + Math.random(), created_at: new Date().toISOString(), stand: { name: item.standName, color_hex: item.standColor } });
+
+      this.sales.unshift({
+        ...saleObj,
+        id: realSaleId,
+        created_at: new Date().toISOString(),
+        stand: { name: item.standName, color_hex: item.standColor }
+      });
     }
 
-    if (client) {
+    localStorage.setItem('kermesse_game_sales', JSON.stringify(this.sales));
+
+    if (client && CaissesCore.isUuid(regId)) {
       try {
         await client.from('cash_movements').insert([{
-          cash_register_id: this.register.id,
+          cash_register_id: regId,
           type: 'vente',
           amount_f: cartTotal,
           reason: `Vente tickets jeux (${this.cart.reduce((s, i) => s + i.qty, 0)} tickets)`,
@@ -1190,8 +1443,41 @@ const CaisseJeuxModule = {
     }
 
     AuditLogger.log('VENTE_JEUX', 'ticket_sales', null, `Encaissement de ${cartTotal} F en Caisse Jeux`);
-    Notify.success(`Tickets de jeux encaissés ! Total : ${cartTotal.toLocaleString()} F`);
+    Notify.success(`Tickets de jeux validés ! Total : ${cartTotal.toLocaleString()} F`);
     this.cart = [];
+    this.renderCurrentTab();
+  },
+
+  async deleteSale(id, name, amount) {
+    if (!confirm(`Annuler et enlever la vente de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et déduit du bilan du stand.`)) {
+      return;
+    }
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        if (CaissesCore.isUuid(id)) {
+          await client.from('ticket_sales').delete().eq('id', id);
+        }
+        if (CaissesCore.isUuid(this.register.id)) {
+          await client.from('cash_movements').insert([{
+            cash_register_id: this.register.id,
+            type: 'correction',
+            amount_f: -Math.abs(amount),
+            reason: `Annulation vente jeu : ${name}`,
+            user_id: Auth.getCurrentUser()?.id || null
+          }]);
+        }
+      } catch (e) {
+        console.warn('[Delete Game Sale DB Warning]', e);
+      }
+    }
+
+    this.sales = this.sales.filter(s => s.id !== id);
+    localStorage.setItem('kermesse_game_sales', JSON.stringify(this.sales));
+
+    AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Annulation vente jeu ${name} (-${amount} F)`);
+    Notify.success(`Vente de « ${name} » enlevée avec succès.`);
     this.renderCurrentTab();
   },
 
@@ -1410,7 +1696,7 @@ const CaisseJeuxModule = {
                     <td>${s.unit_price_f} F</td>
                     <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
                     <td style="text-align: right;">
-                      <button class="btn btn-danger btn-sm" onclick="CaisseJeuxModule.deleteSale('${s.id}', '${s.item_name}', ${s.total_amount_f})" title="Annuler cette vente">🗑️</button>
+                      <button class="btn btn-danger btn-sm" onclick="CaisseJeuxModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler cette vente">🗑️ Enlever</button>
                     </td>
                   </tr>
                 `;
@@ -1420,18 +1706,6 @@ const CaisseJeuxModule = {
         `}
       </div>
     `;
-  },
-
-  async deleteSale(id, name, amount) {
-    if (!confirm(`Annuler et supprimer la vente de « ${name} » (${amount} F) ?`)) return;
-    const client = SupabaseClient.client;
-    if (client) {
-      try { await client.from('ticket_sales').delete().eq('id', id); } catch (e) {}
-    }
-    this.sales = this.sales.filter(s => s.id !== id);
-    AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Annulation vente jeu ${name} (${amount} F)`);
-    Notify.success(`Vente de ${name} supprimée.`);
-    this.renderCurrentTab();
   },
 
   // 4. Onglet Contrôle & Clôture Caisse Jeux
@@ -1620,7 +1894,7 @@ const CaisseJetonsModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
-    if (client && this.register) {
+    if (client && this.register && CaissesCore.isUuid(this.register.id)) {
       try {
         const { data: tData } = await client.from('token_debts').select('*').eq('cash_register_id', this.register.id);
         if (tData) this.tokens = tData;
@@ -1735,7 +2009,7 @@ const CaisseJetonsModule = {
     if (isNaN(val) || isNaN(qty) || qty <= 0) return;
 
     const client = SupabaseClient.client;
-    if (client) {
+    if (client && CaissesCore.isUuid(this.register.id)) {
       try {
         await client.from('token_debts').insert([{
           cash_register_id: this.register.id,
@@ -1761,7 +2035,7 @@ const CaisseJetonsModule = {
     const client = SupabaseClient.client;
     const user = Auth.getCurrentUser();
 
-    if (client) {
+    if (client && CaissesCore.isUuid(this.register.id)) {
       try {
         await client.from('cash_movements').insert([{
           cash_register_id: this.register.id,
@@ -1977,7 +2251,7 @@ const CaisseJetonsModule = {
   async deleteMovement(id, amount) {
     if (!confirm(`Supprimer ce mouvement de ${amount} F ?`)) return;
     const client = SupabaseClient.client;
-    if (client) {
+    if (client && CaissesCore.isUuid(id)) {
       try { await client.from('cash_movements').delete().eq('id', id); } catch (e) {}
     }
     Notify.success('Mouvement supprimé.');
@@ -2110,6 +2384,10 @@ const CaisseBilanModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
+    this.sales = [];
+    this.registers = [];
+    this.expenses = [];
+
     if (client) {
       try {
         const { data: s } = await client
@@ -2125,6 +2403,17 @@ const CaisseBilanModule = {
       } catch (e) {
         console.warn('[Bilan DB Error]', e);
       }
+    }
+
+    // Récupération locale de secours si Supabase vide ou hors ligne
+    const storedEntree = localStorage.getItem('kermesse_entry_sales');
+    const storedJeux = localStorage.getItem('kermesse_game_sales');
+    let localCombined = [];
+    try { if (storedEntree) localCombined = [...localCombined, ...JSON.parse(storedEntree)]; } catch (e) {}
+    try { if (storedJeux) localCombined = [...localCombined, ...JSON.parse(storedJeux)]; } catch (e) {}
+
+    if (localCombined.length > 0) {
+      this.sales = [...this.sales, ...localCombined.filter(l => !this.sales.some(s => s.id === l.id))];
     }
   },
 
