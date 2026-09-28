@@ -161,14 +161,19 @@ const TicketsModule = {
       } catch (e) {}
     }
 
-    // S'assurer que les 3 caisses officielles existent localement si DB vide
+    // Récupérer les caisses réelles depuis le stockage local sans injecter de données factices
     if (!this.registers || this.registers.length === 0) {
-      this.registers = [
-        { id: 'reg-1', name: 'Caisse 1 — Entrée & Accueil Visiteurs', status: 'open', initial_amount_f: 20000 },
-        { id: 'reg-2', name: 'Caisse 2 — Vente Tickets Jeux & Stands', status: 'open', initial_amount_f: 20000 },
-        { id: 'reg-3', name: 'Caisse 3 — Change & Jetons de Monnaie', status: 'open', initial_amount_f: 20000 },
-        { id: 'reg-4', name: 'Caisse 4 — Restauration & Buvette (Optionnelle)', status: 'open', initial_amount_f: 20000 }
-      ];
+      const storedRegs = localStorage.getItem('kermesse_cash_registers');
+      if (storedRegs) {
+        try {
+          const parsed = JSON.parse(storedRegs);
+          this.registers = parsed.filter(r => !(typeof r.id === 'string' && r.id.startsWith('reg-') && r.initial_amount_f === 20000 && !r.created_at));
+        } catch (e) {
+          this.registers = [];
+        }
+      } else {
+        this.registers = [];
+      }
     }
 
     this.updateKpis();
@@ -251,9 +256,14 @@ const TicketsModule = {
           <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <div>
               <span style="font-weight: 700; color: #1e40af;">🎯 Caisse Active :</span>
-              <select id="posActiveRegister" class="form-control" style="display: inline-block; width: auto; font-size: 0.85rem; padding: 4px 8px; margin-left: 6px;">
-                ${openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
-              </select>
+              ${openRegs.length > 0 ? `
+                <select id="posActiveRegister" class="form-control" style="display: inline-block; width: auto; font-size: 0.85rem; padding: 4px 8px; margin-left: 6px;">
+                  ${openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                </select>
+              ` : `
+                <span style="color: var(--danger); font-size: 0.85rem; margin-left: 6px; font-weight: 700;">Aucune caisse ouverte</span>
+                <button class="btn btn-sm btn-primary" onclick="App.navigateTo('cash')" style="margin-left: 8px; padding: 2px 8px; font-size: 0.75rem;">Ouvrir une caisse</button>
+              `}
             </div>
             <div style="font-size: 0.8rem; color: #3b82f6;">
               💡 Cliquez sur un jeu pour l'ajouter au panier. Tout est comptabilisé automatiquement par Stand.
@@ -590,9 +600,14 @@ const TicketsModule = {
           <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <div>
               <span style="font-weight: 700; color: #065f46;">🎟️ Caisse d'Entrée Active :</span>
-              <select id="posEntryActiveRegister" class="form-control" style="display: inline-block; width: auto; font-size: 0.85rem; padding: 4px 8px; margin-left: 6px;">
-                ${openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
-              </select>
+              ${openRegs.length > 0 ? `
+                <select id="posEntryActiveRegister" class="form-control" style="display: inline-block; width: auto; font-size: 0.85rem; padding: 4px 8px; margin-left: 6px;">
+                  ${openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                </select>
+              ` : `
+                <span style="color: var(--danger); font-size: 0.85rem; margin-left: 6px; font-weight: 700;">Aucune caisse ouverte</span>
+                <button class="btn btn-sm btn-primary" onclick="App.navigateTo('cash')" style="margin-left: 8px; padding: 2px 8px; font-size: 0.75rem;">Ouvrir une caisse</button>
+              `}
             </div>
             <div style="font-size: 0.85rem; font-weight: 700; color: #047857;">
               👥 Visiteurs comptabilisés : ${totalVisitors.toLocaleString()}
@@ -818,7 +833,7 @@ const TicketsModule = {
             <div class="form-group">
               <label>Caisse émettrice :</label>
               <select id="tokenIssueRegister" class="form-control">
-                ${openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                ${openRegs.length > 0 ? openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('') : '<option value="">-- Aucune caisse ouverte --</option>'}
               </select>
             </div>
             <div class="form-row">
@@ -851,7 +866,7 @@ const TicketsModule = {
             <div class="form-group">
               <label>Caisse remboursant :</label>
               <select id="tokenRefundRegister" class="form-control">
-                ${openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                ${openRegs.length > 0 ? openRegs.map(r => `<option value="${r.id}" ${defaultReg && defaultReg.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('') : '<option value="">-- Aucune caisse ouverte --</option>'}
               </select>
             </div>
             <div class="form-row">
@@ -979,6 +994,7 @@ const TicketsModule = {
             <th>Prix Unitaire</th>
             <th>Total Encaissé</th>
             <th>Caissier</th>
+            <th style="text-align: right;">Actions</th>
           </tr>
         </thead>
         <tbody id="salesJournalBody">
@@ -1004,6 +1020,9 @@ const TicketsModule = {
                 <td>${s.unit_price_f} F</td>
                 <td><strong style="color: var(--success, #10b981); font-size: 0.95rem;">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
                 <td><span class="badge badge-gray">${s.seller ? s.seller.login : 'Caissier'}</span></td>
+                <td style="text-align: right;">
+                  <button class="btn btn-danger btn-sm" onclick="TicketsModule.deleteSale('${s.id}', '${(s.item_name || 'Ticket').replace(/'/g, "\\'")}', ${s.total_amount_f || 0})" title="Supprimer cette vente">🗑️</button>
+                </td>
               </tr>
             `;
           }).join('')}
@@ -1021,6 +1040,30 @@ const TicketsModule = {
       const stand = (r.dataset.stand || '').toLowerCase();
       r.style.display = (name.includes(q) || stand.includes(q)) ? '' : 'none';
     });
+  },
+
+  async deleteSale(saleId, itemName, amount) {
+    if (!confirm(`Voulez-vous supprimer définitivement cette vente de « ${itemName} » (${amount} F) ?`)) return;
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        const { error } = await client.from('ticket_sales').delete().eq('id', saleId);
+        if (error) {
+          console.warn('[Delete Sale DB Error]', error);
+        }
+      } catch (e) {
+        console.warn('[Delete Sale Exception]', e);
+      }
+    }
+
+    this.sales = this.sales.filter(s => s.id !== saleId);
+    localStorage.setItem('kermesse_ticket_sales', JSON.stringify(this.sales));
+
+    AuditLogger.log('SUPPRESSION_VENTE', 'ticket_sale', saleId, `Suppression de la vente ${itemName} (${amount} F)`);
+    Notify.success(`Vente de « ${itemName} » supprimée.`);
+    this.updateKpis();
+    this.renderCurrentTab();
   },
 
   // ============================================================================
