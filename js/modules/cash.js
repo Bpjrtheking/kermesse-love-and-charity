@@ -1,8 +1,12 @@
 /**
  * LOVE AND CHARITY (L&C) — GESTION ET CONTRÔLE DE KERMESSE
- * MODULE : CAISSES (CONTRÔLE FINANCIER, ÉCARTS & CLÔTURE)
+ * MODULE : CAISSES (CONTRÔLE FINANCIER, LES 3 CAISSES OFFICIELLES & CLÔTURES)
  * 
  * Suivi strict et traçabilité des fonds de caisse :
+ * - Caisse 1 : Entrée & Accueil Visiteurs
+ * - Caisse 2 : Vente Tickets Jeux & Stands
+ * - Caisse 3 : Change & Jetons de Monnaie
+ * - Caisse 4 : Restauration & Buvette (Optionnelle)
  * - Fond initial
  * - Ventes (+)
  * - Remboursements de jetons (-)
@@ -12,28 +16,40 @@
  */
 
 const CashModule = {
+  registers: [],
+
   async render(container) {
     container.innerHTML = `
       <div class="card">
         <div class="card-header">
           <div class="card-title">
-            <span>💵</span> Gestion des Caisses & Contrôle des Écarts
+            <span>💵</span> Pôle 2 : Gestion des Caisses &amp; Contrôle des Écarts
           </div>
-          <div class="card-actions">
+          <div class="card-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="CashModule.initOfficialRegisters()">
+              <span>⚡</span> Initialiser les 3 Caisses Officielles
+            </button>
             <button class="btn btn-primary btn-sm" onclick="CashModule.openRegisterModal()">
               <span>🔓</span> Ouvrir une Caisse
             </button>
           </div>
         </div>
         <div class="card-body">
+          <div class="alert-banner info" style="margin-bottom: 1.25rem;">
+            <div>
+              💡 <strong>Organisation des 3 Caisses Love &amp; Charity :</strong> 
+              <strong>Caisse 1</strong> (Entrées &amp; Accueil), 
+              <strong>Caisse 2</strong> (Tickets Jeux reliés aux Stands), 
+              <strong>Caisse 3</strong> (Change &amp; Jetons), et 
+              <strong>Caisse 4</strong> (Restauration optionnelle). 
+              Chaque caisse a son fond initial de monnaie, enregistre ses opérations, et calcule automatiquement ses écarts à la fermeture.
+            </div>
+          </div>
+
           <div class="table-responsive" id="cashRegistersTableContainer">
             <div class="empty-state">
               <div class="empty-icon">💵</div>
-              <div class="empty-title">Aucune caisse enregistrée</div>
-              <div class="empty-desc">Ouvrez une caisse avec son fond initial pour un stand et désignez son caissier responsable.</div>
-              <button class="btn btn-primary" onclick="CashModule.openRegisterModal()">
-                <span>🔓</span> Ouvrir la première caisse
-              </button>
+              <div class="empty-title">Chargement des caisses...</div>
             </div>
           </div>
         </div>
@@ -45,23 +61,87 @@ const CashModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
-    if (!client) return;
 
     try {
-      const { data: registers, error } = await client
-        .from('cash_registers')
-        .select(`
-          id, name, initial_amount_f, opened_at, closed_at, expected_amount_f, counted_amount_f, variance_f, status,
-          stand:stands(name, color_name, color_hex),
-          cashier:members(first_name, last_name)
-        `)
-        .order('opened_at', { ascending: false });
+      if (client) {
+        const { data: registers, error } = await client
+          .from('cash_registers')
+          .select(`
+            id, name, initial_amount_f, opened_at, closed_at, expected_amount_f, counted_amount_f, variance_f, status,
+            stand:stands(name, color_name, color_hex),
+            cashier:members(first_name, last_name)
+          `)
+          .order('name', { ascending: true });
 
-      if (error) throw error;
-      this.renderRegisters(registers || []);
+        if (!error && registers) {
+          this.registers = registers;
+        }
+      }
     } catch (e) {
-      console.error('[CashModule Error]', e);
+      console.warn('[CashModule Error]', e);
     }
+
+    // Récupération locale de secours
+    if (!this.registers || this.registers.length === 0) {
+      const stored = localStorage.getItem('kermesse_cash_registers');
+      if (stored) {
+        try { this.registers = JSON.parse(stored); } catch (e) {}
+      }
+    }
+
+    if (!this.registers || this.registers.length === 0) {
+      this.registers = [
+        { id: 'reg-1', name: 'Caisse 1 — Entrée & Accueil Visiteurs', status: 'open', initial_amount_f: 20000, opened_at: new Date().toISOString() },
+        { id: 'reg-2', name: 'Caisse 2 — Vente Tickets Jeux & Stands', status: 'open', initial_amount_f: 20000, opened_at: new Date().toISOString() },
+        { id: 'reg-3', name: 'Caisse 3 — Change & Jetons de Monnaie', status: 'open', initial_amount_f: 20000, opened_at: new Date().toISOString() },
+        { id: 'reg-4', name: 'Caisse 4 — Restauration & Buvette (Optionnelle)', status: 'open', initial_amount_f: 20000, opened_at: new Date().toISOString() }
+      ];
+      localStorage.setItem('kermesse_cash_registers', JSON.stringify(this.registers));
+    }
+
+    this.renderRegisters(this.registers);
+  },
+
+  async initOfficialRegisters() {
+    const officialNames = [
+      'Caisse 1 — Entrée & Accueil Visiteurs',
+      'Caisse 2 — Vente Tickets Jeux & Stands',
+      'Caisse 3 — Change & Jetons de Monnaie',
+      'Caisse 4 — Restauration & Buvette (Optionnelle)'
+    ];
+
+    const client = SupabaseClient.client;
+    let added = 0;
+
+    for (const name of officialNames) {
+      const exists = this.registers.some(r => r.name.toLowerCase().includes(name.substring(0, 8).toLowerCase()));
+      if (!exists) {
+        const newReg = {
+          id: 'reg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+          name,
+          initial_amount_f: 20000,
+          status: 'open',
+          opened_at: new Date().toISOString()
+        };
+
+        if (client) {
+          try {
+            await client.from('cash_registers').insert([{
+              name: newReg.name,
+              initial_amount_f: 20000,
+              status: 'open'
+            }]);
+          } catch (e) {}
+        }
+
+        this.registers.push(newReg);
+        added++;
+      }
+    }
+
+    localStorage.setItem('kermesse_cash_registers', JSON.stringify(this.registers));
+    Notify.success(`Caisses officielles prêtes (${added} nouvelle(s) caisse(s) initialisée(s)).`);
+    this.renderRegisters(this.registers);
   },
 
   renderRegisters(registers) {
@@ -73,9 +153,9 @@ const CashModule = {
         <div class="empty-state">
           <div class="empty-icon">💵</div>
           <div class="empty-title">Aucune caisse enregistrée</div>
-          <div class="empty-desc">Ouvrez une caisse avec son fond initial pour un stand et désignez son caissier responsable.</div>
-          <button class="btn btn-primary" onclick="CashModule.openRegisterModal()">
-            <span>🔓</span> Ouvrir la première caisse
+          <div class="empty-desc">Initialisez les 3 caisses officielles pour démarrer les encaissements.</div>
+          <button class="btn btn-primary" onclick="CashModule.initOfficialRegisters()">
+            <span>⚡</span> Initialiser les 3 Caisses Officielles
           </button>
         </div>
       `;
@@ -87,11 +167,11 @@ const CashModule = {
         <thead>
           <tr>
             <th>Nom de Caisse</th>
-            <th>Stand</th>
+            <th>Type / Rôle</th>
             <th>Caissier Attitré</th>
             <th>Fond Initial</th>
             <th>Statut</th>
-            <th>Comptage & Écart</th>
+            <th>Comptage &amp; Écart</th>
             <th style="text-align: right;">Actions</th>
           </tr>
         </thead>
@@ -99,33 +179,35 @@ const CashModule = {
           ${registers.map(r => {
             const isOpen = r.status === 'open';
 
+            let roleBadge = '<span class="badge badge-gray">Caisse Stand</span>';
+            if (r.name.includes('Caisse 1')) roleBadge = '<span class="badge badge-success">🎟️ Caisse 1 : Entrée</span>';
+            if (r.name.includes('Caisse 2')) roleBadge = '<span class="badge badge-primary">🎯 Caisse 2 : Jeux</span>';
+            if (r.name.includes('Caisse 3')) roleBadge = '<span class="badge badge-warning">🪙 Caisse 3 : Monnaie &amp; Jetons</span>';
+            if (r.name.includes('Caisse 4')) roleBadge = '<span class="badge" style="background: #fef3c7; color: #b45309;">🍔 Caisse 4 : Restauration</span>';
+
             return `
               <tr>
                 <td><strong>${r.name}</strong></td>
+                <td>${roleBadge}</td>
                 <td>
-                  ${r.stand ? `
-                    <span class="stand-tag" style="background-color: ${r.stand.color_hex}15; color: ${r.stand.color_hex}; border-color: ${r.stand.color_hex}; font-size: 0.8rem;">
-                      ${r.stand.name}
-                    </span>
-                  ` : '<span style="color: var(--gray-400);">Caisse Générale</span>'}
+                  ${r.cashier ? `<strong>${r.cashier.first_name} ${r.cashier.last_name}</strong>` : '<span style="color: var(--gray-400);">Non assigné</span>'}
                 </td>
-                <td>${r.cashier ? `<strong>${r.cashier.first_name} ${r.cashier.last_name}</strong>` : '<span style="color: var(--gray-400);">Non assigné</span>'}</td>
-                <td>${r.initial_amount_f.toLocaleString()} ${KermesseConfig.currency}</td>
+                <td>${(r.initial_amount_f || 0).toLocaleString()} ${KermesseConfig.currency}</td>
                 <td>
                   ${isOpen ? '<span class="badge badge-success">Ouverte</span>' : '<span class="badge badge-gray">Clôturée</span>'}
                 </td>
                 <td>
                   ${!isOpen ? `
-                    <div>Compté : <strong>${r.counted_amount_f.toLocaleString()} F</strong></div>
+                    <div>Compté : <strong>${(r.counted_amount_f || 0).toLocaleString()} F</strong></div>
                     <div style="font-size: 0.8rem; font-weight: 700; color: ${r.variance_f < 0 ? 'var(--danger)' : (r.variance_f > 0 ? 'var(--success)' : 'var(--gray-500)')};">
-                      Écart : ${r.variance_f > 0 ? '+' : ''}${r.variance_f.toLocaleString()} ${KermesseConfig.currency}
+                      Écart : ${r.variance_f > 0 ? '+' : ''}${(r.variance_f || 0).toLocaleString()} ${KermesseConfig.currency}
                     </div>
                   ` : '<span style="color: var(--info); font-size: 0.8rem;">En cours d\'opération</span>'}
                 </td>
-                <td style="text-align: right;">
-                  <button class="btn btn-secondary btn-sm" onclick="CashModule.openMovementsModal('${r.id}', '${r.name}')" title="Voir les mouvements">Mouvements</button>
+                <td style="text-align: right; white-space: nowrap;">
+                  <button class="btn btn-secondary btn-sm" onclick="CashModule.openMovementsModal('${r.id}', '${r.name.replace(/'/g, "\\'")}')" title="Voir les mouvements de cette caisse">Mouvements</button>
                   ${isOpen ? `
-                    <button class="btn btn-primary btn-sm" onclick="CashModule.openCloseRegisterModal('${r.id}', '${r.name}', ${r.initial_amount_f})" style="margin-left: 0.35rem;">Clôturer</button>
+                    <button class="btn btn-primary btn-sm" onclick="CashModule.openCloseRegisterModal('${r.id}', '${r.name.replace(/'/g, "\\'")}', ${r.initial_amount_f || 0})" style="margin-left: 0.35rem;">Clôturer</button>
                   ` : ''}
                 </td>
               </tr>
@@ -160,12 +242,21 @@ const CashModule = {
           <form id="openRegisterForm">
             <div class="form-group">
               <label>Nom ou Désignation de la Caisse *</label>
-              <input type="text" id="regName" class="form-control" required placeholder="Ex: Caisse Stand Rouge 1, Caisse Entrée...">
+              <select id="regPresetSelect" class="form-control" onchange="
+                if (this.value) document.getElementById('regName').value = this.value;
+              ">
+                <option value="">-- Choisir un modèle ou saisir librement --</option>
+                <option value="Caisse 1 — Entrée &amp; Accueil Visiteurs">🎟️ Caisse 1 — Entrée &amp; Accueil Visiteurs</option>
+                <option value="Caisse 2 — Vente Tickets Jeux &amp; Stands">🎯 Caisse 2 — Vente Tickets Jeux &amp; Stands</option>
+                <option value="Caisse 3 — Change &amp; Jetons de Monnaie">🪙 Caisse 3 — Change &amp; Jetons de Monnaie</option>
+                <option value="Caisse 4 — Restauration &amp; Buvette (Optionnelle)">🍔 Caisse 4 — Restauration &amp; Buvette</option>
+              </select>
+              <input type="text" id="regName" class="form-control" style="margin-top: 6px;" required placeholder="Ex: Caisse 2 — Vente Tickets Jeux">
             </div>
 
             <div class="form-row">
               <div class="form-group">
-                <label>Stand rattaché</label>
+                <label>Stand rattaché (optionnel)</label>
                 <select id="regStand" class="form-control">
                   <option value="">Caisse Centrale / Entrée</option>
                   ${stands.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
@@ -212,85 +303,108 @@ const CashModule = {
         return;
       }
 
+      const client = SupabaseClient.client;
+      let newId = 'reg-' + Date.now();
+
       if (client) {
-        const { error } = await client.from('cash_registers').insert([{
+        const { data, error } = await client.from('cash_registers').insert([{
           name,
           stand_id: standId,
           cashier_id: cashierId,
           initial_amount_f: initial,
           opened_by: user ? user.id : null,
           status: 'open'
-        }]);
+        }]).select();
 
         if (error) {
           Notify.error('Erreur: ' + error.message);
           return;
         }
-
-        AuditLogger.log('OUVERTURE_CAISSE', 'cash_register', null, `Ouverture de la caisse ${name} avec un fond initial de ${initial} F par ${user?.login}`);
-        Notify.success(`Caisse ${name} ouverte avec succès.`);
-        close();
-        CashModule.render(document.getElementById('mainContent'));
+        if (data && data[0]) newId = data[0].id;
       }
+
+      const newReg = {
+        id: newId,
+        name,
+        stand_id: standId,
+        cashier_id: cashierId,
+        initial_amount_f: initial,
+        status: 'open',
+        opened_at: new Date().toISOString()
+      };
+
+      CashModule.registers.push(newReg);
+      localStorage.setItem('kermesse_cash_registers', JSON.stringify(CashModule.registers));
+
+      AuditLogger.log('OUVERTURE_CAISSE', 'cash_register', newId, `Ouverture de la caisse ${name} avec un fond initial de ${initial} F`);
+      Notify.success(`Caisse ${name} ouverte avec succès.`);
+      close();
+      CashModule.render(document.getElementById('mainContent'));
     };
   },
 
   async openMovementsModal(regId, regName) {
     const client = SupabaseClient.client;
-    if (!client) return;
+    let movements = [];
 
-    const { data: movements } = await client
-      .from('cash_movements')
-      .select('id, type, amount_f, reason, created_at, user:app_users(login)')
-      .eq('cash_register_id', regId)
-      .order('created_at', { ascending: false });
+    if (client) {
+      const { data } = await client
+        .from('cash_movements')
+        .select('id, type, amount_f, reason, created_at, user:app_users(login)')
+        .eq('cash_register_id', regId)
+        .order('created_at', { ascending: false });
+      movements = data || [];
+    }
 
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
       <div class="modal-dialog" style="max-width: 650px;">
         <div class="modal-header">
-          <h3>Mouvements financiers : ${regName}</h3>
+          <h3>Mouvements Financiers : ${regName}</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="CashModule.addCashMovementModal('${regId}', '${regName}', 'apport')">
+              <span>➕</span> Apport de Monnaie
+            </button>
             <button class="btn btn-secondary btn-sm" onclick="CashModule.addCashMovementModal('${regId}', '${regName}', 'depense_autorisee')">
-              <span>➖</span> Dépense
+              <span>💸</span> Dépense Autorisée
             </button>
             <button class="btn btn-secondary btn-sm" onclick="CashModule.addCashMovementModal('${regId}', '${regName}', 'remboursement_jeton')">
-              <span>🪙</span> Remboursement Jeton
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="CashModule.addCashMovementModal('${regId}', '${regName}', 'apport')">
-              <span>➕</span> Apport Monnaie
+              <span>🪙</span> Sortie Remboursement Jeton
             </button>
           </div>
 
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Heure</th>
-                  <th>Type</th>
-                  <th>Montant</th>
-                  <th>Motif</th>
-                  <th>Auteur</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(movements && movements.length > 0) ? movements.map(m => `
+          <div style="max-height: 280px; overflow-y: auto;">
+            ${movements.length > 0 ? `
+              <table class="data-table">
+                <thead>
                   <tr>
-                    <td style="font-family: monospace; font-size: 0.8rem; color: var(--gray-500);">
-                      ${new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td><span class="badge ${m.amount_f >= 0 ? 'badge-success' : 'badge-danger'}">${m.type}</span></td>
-                    <td><strong>${m.amount_f > 0 ? '+' : ''}${m.amount_f.toLocaleString()} F</strong></td>
-                    <td>${m.reason}</td>
-                    <td>${m.user ? m.user.login : '-'}</td>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Motif</th>
+                    <th style="text-align: right;">Montant</th>
                   </tr>
-                `).join('') : '<tr><td colspan="5" style="text-align: center; color: var(--gray-400);">Aucun mouvement pour le moment.</td></tr>'}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${movements.map(m => {
+                    const isPositive = m.amount_f >= 0;
+                    return `
+                      <tr>
+                        <td style="font-size: 0.8rem; color: var(--gray-500);">${new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td><span class="badge ${isPositive ? 'badge-success' : 'badge-danger'}">${m.type}</span></td>
+                        <td>${m.reason}</td>
+                        <td style="text-align: right; font-weight: 700; color: ${isPositive ? 'var(--success)' : 'var(--danger)'};">
+                          ${isPositive ? '+' : ''}${m.amount_f.toLocaleString()} F
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            ` : '<p style="color: var(--gray-500); text-align: center; padding: 1.5rem 0;">Aucun mouvement enregistré pour cette caisse.</p>'}
           </div>
         </div>
         <div class="modal-footer">
@@ -331,7 +445,7 @@ const CashModule = {
             </div>
             <div class="form-group">
               <label>Motif / Justification *</label>
-              <input type="text" id="mvtReason" class="form-control" required placeholder="Ex: Achat d'urgence pain, Remise 2x200F jetons...">
+              <input type="text" id="mvtReason" class="form-control" required placeholder="Ex: Achat d'urgence pain/glace, Remise monnaie...">
             </div>
           </form>
         </div>
@@ -375,7 +489,7 @@ const CashModule = {
           return;
         }
 
-        AuditLogger.log('MOUVEMENT_CAISSE', 'cash_register', regId, `${type} de ${finalAmount} F sur ${regName} (${reason}) par ${user?.login}`);
+        AuditLogger.log('MOUVEMENT_CAISSE', 'cash_register', regId, `${type} de ${finalAmount} F sur ${regName} (${reason})`);
         Notify.success('Mouvement de caisse enregistré.');
         close();
         document.querySelector('.modal-backdrop.open')?.remove();
@@ -386,18 +500,19 @@ const CashModule = {
 
   async openCloseRegisterModal(regId, regName, initialAmount) {
     const client = SupabaseClient.client;
-    if (!client) return;
-
-    // Calculer le montant attendu à partir des mouvements
-    const { data: movements } = await client
-      .from('cash_movements')
-      .select('amount_f')
-      .eq('cash_register_id', regId);
-
     let sumMovements = 0;
-    if (movements) {
-      movements.forEach(m => sumMovements += m.amount_f);
+
+    if (client) {
+      const { data: movements } = await client
+        .from('cash_movements')
+        .select('amount_f')
+        .eq('cash_register_id', regId);
+
+      if (movements) {
+        movements.forEach(m => sumMovements += m.amount_f);
+      }
     }
+
     const expectedAmount = initialAmount + sumMovements;
 
     const modal = document.createElement('div');
@@ -446,7 +561,7 @@ const CashModule = {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary close-btn">Annuler</button>
-          <button class="btn btn-danger" id="confirmCloseRegBtn">Valider & Clôturer la caisse</button>
+          <button class="btn btn-danger" id="confirmCloseRegBtn">Valider &amp; Clôturer la caisse</button>
         </div>
       </div>
     `;
@@ -463,58 +578,64 @@ const CashModule = {
       const user = Auth.getCurrentUser();
 
       if (isNaN(counted)) {
-        Notify.error('Veuillez saisir le montant réellement compté.');
+        Notify.error('Veuillez renseigner le montant réellement compté.');
         return;
       }
 
       const variance = counted - expectedAmount;
 
-      const { error } = await client.from('cash_registers').update({
-        closed_at: new Date().toISOString(),
-        closed_by: user ? user.id : null,
-        expected_amount_f: expectedAmount,
-        counted_amount_f: counted,
-        variance_f: variance,
-        status: 'closed',
-        closing_notes: notes
-      }).eq('id', regId);
+      if (client) {
+        const { error } = await client
+          .from('cash_registers')
+          .update({
+            counted_amount_f: counted,
+            expected_amount_f: expectedAmount,
+            variance_f: variance,
+            status: 'closed',
+            closed_at: new Date().toISOString(),
+            closed_by: user ? user.id : null,
+            closing_notes: notes
+          })
+          .eq('id', regId);
 
-      if (error) {
-        Notify.error('Erreur: ' + error.message);
-        return;
+        if (error) {
+          Notify.error('Erreur: ' + error.message);
+          return;
+        }
+
+        AuditLogger.log('CLOTURE_CAISSE', 'cash_register', regId, `Clôture de ${regName} : Attendu ${expectedAmount} F, Compté ${counted} F, Écart ${variance} F`);
+        Notify.success(`Caisse ${regName} clôturée avec succès.`);
+        close();
+        CashModule.render(document.getElementById('mainContent'));
       }
-
-      // Si écart important, générer automatiquement un incident de caisse !
-      if (variance !== 0) {
-        await client.from('incidents').insert([{
-          incident_number: 'INC-CASH-' + Math.floor(1000 + Math.random() * 9000),
-          type: 'probleme_caisse',
-          title: `Écart de caisse sur ${regName} (${variance > 0 ? '+' : ''}${variance} F)`,
-          description: `Lors de la clôture par ${user?.login}, montant attendu: ${expectedAmount} F, montant compté: ${counted} F. Écart: ${variance} F. Remarques: ${notes || 'Aucune'}`,
-          severity: Math.abs(variance) > 5000 ? 'eleve' : 'moyen',
-          status: 'ouvert',
-          reported_by: user ? user.id : null
-        }]);
-      }
-
-      AuditLogger.log('CLOTURE_CAISSE', 'cash_register', regId, `Clôture de la caisse ${regName}. Attendu: ${expectedAmount} F, Compté: ${counted} F, Écart: ${variance} F`);
-      Notify.success(`Caisse ${regName} clôturée avec succès.`);
-      close();
-      CashModule.render(document.getElementById('mainContent'));
     };
   },
 
   calcVariance(expected) {
-    const countedVal = document.getElementById('countedAmount').value;
-    const counted = parseInt(countedVal, 10);
-    const box = document.getElementById('varianceDisplay');
+    const counted = parseInt(document.getElementById('countedAmount').value, 10);
+    const disp = document.getElementById('varianceDisplay');
+    const box = document.getElementById('varianceDisplayBox');
+
     if (isNaN(counted)) {
-      box.textContent = '-';
+      disp.textContent = '-';
+      box.style.background = 'var(--gray-100)';
       return;
     }
+
     const variance = counted - expected;
-    box.textContent = `${variance > 0 ? '+' : ''}${variance.toLocaleString()} ${KermesseConfig.currency}`;
-    box.style.color = variance < 0 ? 'var(--danger)' : (variance > 0 ? 'var(--success)' : 'var(--gray-800)');
+    if (variance === 0) {
+      disp.textContent = '0 F (Caisse Parfaite ✅)';
+      disp.style.color = 'var(--success)';
+      box.style.background = 'var(--success-light, #dcfce7)';
+    } else if (variance > 0) {
+      disp.textContent = `+${variance.toLocaleString()} F (Excédent de caisse 📈)`;
+      disp.style.color = '#1e40af';
+      box.style.background = '#dbeafe';
+    } else {
+      disp.textContent = `${variance.toLocaleString()} F (Déficit de caisse ⚠️)`;
+      disp.style.color = 'var(--danger)';
+      box.style.background = 'var(--danger-light, #fee2e2)';
+    }
   }
 };
 
