@@ -125,6 +125,10 @@ const Permissions = {
         return role === this.ROLES.ADMIN_COMMUNICATION;
 
       // Pôle 2 : Billetterie, Tickets, Caisse & Comptabilité
+      case 'caisse_entree':
+      case 'caisse_jeux':
+      case 'caisse_jetons':
+      case 'caisse_bilan':
       case 'tickets':
       case 'cash':
       case 'expenses':
@@ -204,9 +208,10 @@ const Permissions = {
       case 'admin_billetterie':
         return [
           { module: 'dashboard', icon: '📊', label: 'Accueil' },
-          { module: 'tickets', icon: '🎟️', label: 'Tickets' },
-          { module: 'cash', icon: '💵', label: 'Caisses' },
-          { module: 'closures', icon: '🔒', label: 'Clôtures' },
+          { module: 'caisse_entree', icon: '🎟️', label: 'Entrée' },
+          { module: 'caisse_jeux', icon: '🎯', label: 'Jeux' },
+          { module: 'caisse_jetons', icon: '🪙', label: 'Jetons' },
+          { module: 'caisse_bilan', icon: '📊', label: 'Bilan' },
           { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
         ];
 

@@ -58,25 +58,25 @@
           </ul>
         </div>
 
-        <!-- Pôle 2 : Billetterie / Tickets / Caisse / Comptabilité -->
+        <!-- Pôle 2 : Billetterie, Caisses & Comptabilité -->
         <div class="nav-group">
-          <div class="nav-group-title">Pôle 2 : Billetterie, Tickets, Caisse &amp; Compta</div>
+          <div class="nav-group-title">Pôle 2 : Billetterie, Caisses &amp; Compta</div>
           <ul class="nav-links">
-            <li class="nav-item" data-module="tickets" onclick="App.navigateTo('tickets')">
+            <li class="nav-item" data-module="caisse_entree" onclick="App.navigateTo('caisse_entree')">
               <span class="nav-icon">🎟️</span>
-              <span>Tickets &amp; Séries</span>
+              <span>Caisse Entrée</span>
             </li>
-            <li class="nav-item" data-module="cash" onclick="App.navigateTo('cash')">
-              <span class="nav-icon">💵</span>
-              <span>Caisses &amp; Écarts</span>
+            <li class="nav-item" data-module="caisse_jeux" onclick="App.navigateTo('caisse_jeux')">
+              <span class="nav-icon">🎯</span>
+              <span>Caisse Tickets de Jeux</span>
             </li>
-            <li class="nav-item" data-module="expenses" onclick="App.navigateTo('expenses')">
-              <span class="nav-icon">💸</span>
-              <span>Dépenses Autorisées</span>
+            <li class="nav-item" data-module="caisse_jetons" onclick="App.navigateTo('caisse_jetons')">
+              <span class="nav-icon">🪙</span>
+              <span>Caisse Jetons</span>
             </li>
-            <li class="nav-item" data-module="closures" onclick="App.navigateTo('closures')">
-              <span class="nav-icon">🔒</span>
-              <span>Clôtures &amp; Bilans</span>
+            <li class="nav-item" data-module="caisse_bilan" onclick="App.navigateTo('caisse_bilan')">
+              <span class="nav-icon">📊</span>
+              <span>Bilan</span>
             </li>
           </ul>
         </div>
@@ -317,7 +317,7 @@
   <script src="js/audit.js?v=3.0"></script>
   <script src="js/offline.js?v=3.0"></script>
   <script src="js/auth.js?v=3.0"></script>
-  <script src="js/permissions.js?v=3.0"></script>
+  <script src="js/permissions.js?v=3.8"></script>
 
   <!-- Module Scripts -->
   <script src="js/modules/dashboard.js?v=3.0"></script>
@@ -328,6 +328,7 @@
   <script src="js/modules/roles.js?v=3.0"></script>
   <script src="js/modules/tickets.js?v=3.7"></script>
   <script src="js/modules/cash.js?v=3.7"></script>
+  <script src="js/modules/caisses.js?v=3.8"></script>
   <script src="js/modules/games.js?v=3.5"></script>
   <script src="js/modules/decoration.js?v=3.0"></script>
   <script src="js/modules/stocks.js?v=3.0"></script>
@@ -357,10 +358,14 @@
         messages: { title: 'Consignes & Messages', sub: 'Communication interne, directives par stand et alertes', handler: MessagesModule },
         tasks: { title: 'Mes Tâches & Bloc-Notes', sub: 'Checklist personnelle, suivi de progression et mémos rapides', handler: TasksModule },
         communication: { title: 'Pôle 1 : Communication & Affichage', sub: 'Affiches, flyers, réseaux sociaux, WhatsApp et signalétique', handler: CommunicationModule },
-        tickets: { title: 'Pôle 2 : Billetterie & Tickets', sub: 'Billetterie, séries numérotées, jetons et préventes', handler: TicketsModule },
-        cash: { title: 'Pôle 2 : Caisses & Écarts', sub: 'Fonds de caisse initiaux, encaissements, clôtures et traçabilité', handler: CashModule },
-        expenses: { title: 'Pôle 2 : Dépenses Autorisées', sub: 'Enregistrement et contrôle des sorties d\'argent sur caisse', handler: ExpensesModule },
-        closures: { title: 'Pôle 2 : Clôtures & Bilans', sub: 'Clôture de fin de journée, calcul des écarts et bilan financier', handler: ClosuresModule },
+        caisse_entree: { title: 'Pôle 2 : Caisse Entrée & Accueil', sub: 'Vente des billets d\'entrée, dépenses de caisse et clôture', handler: CaisseEntreeModule },
+        caisse_jeux: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Vente tactile des tickets liée aux stands & jeux, dépenses et clôture', handler: CaisseJeuxModule },
+        caisse_jetons: { title: 'Pôle 2 : Caisse Jetons & Monnaie', sub: 'Change, émission et remboursement de jetons, dépenses', handler: CaisseJetonsModule },
+        caisse_bilan: { title: 'Pôle 2 : Bilan Financier Kermesse', sub: 'Bilan comptable consolidé des 3 caisses et rentabilité des stands', handler: CaisseBilanModule },
+        tickets: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Vente tactile liée aux stands & jeux', handler: CaisseJeuxModule },
+        cash: { title: 'Pôle 2 : Caisse Entrée & Caisses', sub: 'Gestion des caisses et fonds', handler: CaisseEntreeModule },
+        expenses: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Dépenses et sorties de caisse', handler: CaisseJeuxModule },
+        closures: { title: 'Pôle 2 : Bilan Financier', sub: 'Clôtures et bilan consolidé', handler: CaisseBilanModule },
         decoration: { title: 'Pôle 3 : Décoration & Organisation', sub: 'Aménagement des 10 zones, barnums, mobilier et circulation', handler: DecorationModule },
         locations: { title: 'Pôle 3 : Emplacements & Repères', sub: 'Lieux physiques, repères de l\'espace et zones', handler: LocationsModule },
         stocks: { title: 'Pôle 4 : Restauration', sub: 'Denrées, snacks, boissons, emballages, cuisine et réapprovisionnements', handler: StocksModule },
