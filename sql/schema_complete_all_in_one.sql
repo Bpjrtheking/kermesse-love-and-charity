@@ -143,7 +143,9 @@ CREATE TABLE IF NOT EXISTS ticket_sales (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cash_register_id UUID NOT NULL REFERENCES cash_registers(id) ON DELETE CASCADE,
     stand_id UUID REFERENCES stands(id) ON DELETE SET NULL,
-    ticket_id UUID NOT NULL REFERENCES tickets_catalog(id) ON DELETE RESTRICT,
+    ticket_id UUID REFERENCES tickets_catalog(id) ON DELETE SET NULL,
+    item_name TEXT,
+    category TEXT DEFAULT 'jeux',
     quantity INT NOT NULL CHECK (quantity > 0),
     unit_price_f INT NOT NULL CHECK (unit_price_f >= 0),
     total_amount_f INT NOT NULL CHECK (total_amount_f >= 0),
@@ -497,14 +499,14 @@ DROP POLICY IF EXISTS "Gestion caisses" ON cash_registers;
 CREATE POLICY "Gestion caisses" ON cash_registers FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Lecture ventes tickets" ON ticket_sales;
-CREATE POLICY "Lecture ventes tickets" ON ticket_sales FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Insertion ventes tickets" ON ticket_sales;
-CREATE POLICY "Insertion ventes tickets" ON ticket_sales FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Gestion ventes tickets" ON ticket_sales;
+CREATE POLICY "Gestion ventes tickets" ON ticket_sales FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Lecture mouvements caisse" ON cash_movements;
-CREATE POLICY "Lecture mouvements caisse" ON cash_movements FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Insertion mouvements caisse" ON cash_movements;
-CREATE POLICY "Insertion mouvements caisse" ON cash_movements FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Gestion mouvements caisse" ON cash_movements;
+CREATE POLICY "Gestion mouvements caisse" ON cash_movements FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Lecture jetons dette" ON token_debts;
 CREATE POLICY "Lecture jetons dette" ON token_debts FOR SELECT USING (true);

@@ -17,6 +17,78 @@ const CaissesCore = {
     return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   },
 
+  getCancelledSaleIds() {
+    try {
+      const stored = localStorage.getItem('kermesse_cancelled_sale_ids');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  addCancelledSaleId(id) {
+    if (!id) return;
+    const ids = this.getCancelledSaleIds();
+    if (!ids.includes(id)) {
+      ids.push(id);
+      localStorage.setItem('kermesse_cancelled_sale_ids', JSON.stringify(ids));
+    }
+  },
+
+  async loadEntryCatalog() {
+    const client = SupabaseClient.client;
+    let catalog = [];
+
+    if (client) {
+      try {
+        const { data, error } = await client
+          .from('tickets_catalog')
+          .select('id, name, value_f, color, description, is_active')
+          .eq('type', 'entree')
+          .eq('is_active', true)
+          .order('value_f', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          catalog = data.map(d => ({
+            id: d.id,
+            name: d.name,
+            price: d.value_f,
+            icon: d.color || '🎟️',
+            description: d.description || ''
+          }));
+        }
+      } catch (e) {
+        console.warn('[CaissesCore DB Warning]', e);
+      }
+    }
+
+    if (catalog.length === 0) {
+      const stored = localStorage.getItem('kermesse_entry_catalog');
+      if (stored) {
+        try {
+          catalog = JSON.parse(stored);
+        } catch (e) {}
+      }
+    }
+
+    // Suggestions par défaut si rien n'est encore configuré
+    if (!catalog || catalog.length === 0) {
+      catalog = [
+        { id: 'ent-enf', name: 'Entrée Enfant (-12 ans)', price: 200, icon: '🧒', description: 'Moins de 12 ans' },
+        { id: 'ent-adu', name: 'Entrée Adulte', price: 500, icon: '🧑', description: 'Tarif standard' },
+        { id: 'ent-fam', name: 'Pass Famille', price: 1200, icon: '👨‍👩‍👧‍👦', description: 'Valable pour 4 personnes' },
+        { id: 'ent-don', name: 'Entrée Donateur & Bienfaiteur', price: 2000, icon: '❤️', description: 'Soutien aux œuvres sociales' }
+      ];
+      localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+    }
+
+    return catalog;
+  },
+
+  async saveEntryCatalog(catalog) {
+    localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+  },
+
   async getOrCreateRegister(roleKey, defaultName) {
     const client = SupabaseClient.client;
     let reg = null;
@@ -318,16 +390,12 @@ const CaisseEntreeModule = {
   expenses: [],
   cart: [],
 
-  entryCatalog: [
-    { id: 'ent-enf', name: 'Entrée Enfant (-12 ans)', price: 200, icon: '🧒' },
-    { id: 'ent-adu', name: 'Entrée Adulte', price: 500, icon: '🧑' },
-    { id: 'ent-fam', name: 'Pass Famille (4 personnes)', price: 1200, icon: '👨‍👩‍👧‍👦' },
-    { id: 'ent-don', name: 'Entrée Donateur / Bienfaiteur', price: 2000, icon: '❤️' }
-  ],
+  entryCatalog: [],
 
   async render(container) {
     this.register = await CaissesCore.getOrCreateRegister('Entrée', 'Caisse 1 — Entrée & Accueil');
     await this.loadData();
+    this.entryCatalog = await CaissesCore.loadEntryCatalog();
 
     container.innerHTML = `
       <div class="card">
@@ -348,8 +416,11 @@ const CaisseEntreeModule = {
             <button class="tab-btn ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('pos')">
               🎟️ Vente Entrées
             </button>
+            <button class="tab-btn ${this.currentTab === 'config' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('config')">
+              ⚙️ Tarifs &amp; Billets (${this.entryCatalog.length})
+            </button>
             <button class="tab-btn ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('expenses')">
-              💸 Dépenses de cette Caisse (${this.expenses.length})
+              💸 Dépenses (${this.expenses.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('journal')">
               🧾 Journal des Entrées (${this.sales.length})
@@ -376,6 +447,9 @@ const CaisseEntreeModule = {
     const client = SupabaseClient.client;
     this.sales = [];
 
+    // Liste des ventes annulées
+    const cancelledIds = CaissesCore.getCancelledSaleIds();
+
     if (client) {
       try {
         const { data: vData } = await client
@@ -383,7 +457,9 @@ const CaisseEntreeModule = {
           .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, seller:app_users(login)')
           .eq('category', 'entree')
           .order('created_at', { ascending: false });
-        if (vData) this.sales = vData;
+        if (vData) {
+          this.sales = vData.filter(s => !cancelledIds.includes(s.id));
+        }
       } catch (e) {}
     }
 
@@ -392,7 +468,8 @@ const CaisseEntreeModule = {
     if (stored) {
       try {
         const local = JSON.parse(stored);
-        this.sales = [...this.sales, ...local.filter(l => !this.sales.some(s => s.id === l.id))];
+        const filteredLocal = local.filter(l => !cancelledIds.includes(l.id));
+        this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
       } catch (e) {}
     }
 
@@ -406,6 +483,7 @@ const CaisseEntreeModule = {
     if (!container) return;
 
     if (this.currentTab === 'pos') this.renderPosTab(container);
+    else if (this.currentTab === 'config') this.renderConfigTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
     else if (this.currentTab === 'journal') this.renderJournalTab(container);
     else if (this.currentTab === 'closure') this.renderClosureTab(container);
@@ -433,43 +511,68 @@ const CaisseEntreeModule = {
             </div>
           </div>
 
-          <h4 style="margin-bottom: 0.75rem;">Sélectionnez les billets d'entrée :</h4>
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.85rem;">
-            ${this.entryCatalog.map(t => {
-              const inCart = this.cart.find(i => i.id === t.id);
-              const qty = inCart ? inCart.qty : 0;
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 style="margin: 0;">Sélectionnez les billets d'entrée :</h4>
+            <button class="btn btn-secondary btn-sm" onclick="CaisseEntreeModule.switchTab('config')" title="Ajouter ou modifier les tarifs des billets">
+              <span>⚙️</span> Gérer les tarifs (${this.entryCatalog.length})
+            </button>
+          </div>
 
-              return `
-                <div class="card" style="border: 2px solid ${qty > 0 ? '#10b981' : '#e2e8f0'}; border-top: 5px solid #10b981; transition: box-shadow 0.15s; background: ${qty > 0 ? '#f0fdf4' : 'white'};">
-                  <div class="card-body" style="padding: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                      <span style="font-size: 2rem;">${t.icon}</span>
-                      <strong style="font-size: 1.15rem; color: #047857;">${t.price.toLocaleString()} F</strong>
-                    </div>
-                    <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.75rem; min-height: 2.2em; line-height: 1.2;">
-                      ${t.name}
-                    </div>
+          ${this.entryCatalog.length === 0 ? `
+            <div class="empty-state" style="padding: 2rem; background: var(--gray-50); border: 2px dashed var(--gray-300); border-radius: var(--radius-md); text-align: center; margin-bottom: 1.5rem;">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎟️</div>
+              <div style="font-weight: 800; font-size: 1.1rem; color: var(--gray-800);">Aucun billet d'entrée configuré</div>
+              <div style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 1.25rem;">
+                Créez vos tarifs d'entrée (Adultes, Enfants, Pass, etc.) pour commencer à encaisser.
+              </div>
+              <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                <button class="btn btn-primary btn-sm" style="background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.switchTab('config')">
+                  <span>⚙️</span> Configurer les tarifs
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="CaisseEntreeModule.loadDefaultSuggestions()">
+                  <span>🔄</span> Suggestions par défaut
+                </button>
+              </div>
+            </div>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.85rem;">
+              ${this.entryCatalog.map(t => {
+                const inCart = this.cart.find(i => i.id === t.id);
+                const qty = inCart ? inCart.qty : 0;
 
-                    <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
-                    <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
-                      <button class="btn btn-secondary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseEntreeModule.decrementItem('${t.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
-                        −
-                      </button>
-                      <div style="text-align: center;">
-                        <span style="font-size: 1.2rem; font-weight: 800; color: ${qty > 0 ? '#047857' : 'var(--gray-400)'};">
-                          ${qty}
-                        </span>
-                        <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">billet(s)</div>
+                return `
+                  <div class="card" style="border: 2px solid ${qty > 0 ? '#10b981' : '#e2e8f0'}; border-top: 5px solid #10b981; transition: box-shadow 0.15s; background: ${qty > 0 ? '#f0fdf4' : 'white'};">
+                    <div class="card-body" style="padding: 1rem;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span style="font-size: 2rem;">${t.icon || '🎟️'}</span>
+                        <strong style="font-size: 1.15rem; color: #047857;">${t.price > 0 ? `${t.price.toLocaleString()} F` : 'Gratuit'}</strong>
                       </div>
-                      <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.incrementItem('${t.id}', '${t.name}', ${t.price})" title="Augmenter">
-                        +
-                      </button>
+                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.35rem; min-height: 2.2em; line-height: 1.2;">
+                        ${t.name}
+                      </div>
+                      ${t.description ? `<div style="font-size: 0.72rem; color: var(--gray-500); margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${t.description}</div>` : ''}
+
+                      <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
+                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+                        <button class="btn btn-secondary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseEntreeModule.decrementItem('${t.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                          −
+                        </button>
+                        <div style="text-align: center;">
+                          <span style="font-size: 1.2rem; font-weight: 800; color: ${qty > 0 ? '#047857' : 'var(--gray-400)'};">
+                            ${qty}
+                          </span>
+                          <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">billet(s)</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.incrementItem('${t.id}', '${t.name.replace(/'/g, "\\'")}', ${t.price})" title="Augmenter">
+                          +
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
+                `;
+              }).join('')}
+            </div>
+          `}
 
           <!-- SECTION : DERNIÈRES ENTRÉES VALIDÉES (ANNULATION DIRECTE SUR CET ÉCRAN) -->
           <div style="margin-top: 2rem; border-top: 2px dashed var(--gray-200); padding-top: 1.25rem;">
@@ -670,6 +773,9 @@ const CaisseEntreeModule = {
     }
 
     const client = SupabaseClient.client;
+    // 1. Enregistrer dans la liste noire globale des ventes annulées (garantit la suppression dans le Bilan)
+    CaissesCore.addCancelledSaleId(id);
+
     if (client) {
       try {
         if (CaissesCore.isUuid(id)) {
@@ -693,8 +799,340 @@ const CaisseEntreeModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('SUPPRESSION_VENTE_ENTREE', 'ticket_sale', id, `Annulation vente entrée ${name} (-${amount} F)`);
-    Notify.success(`Billet « ${name} » enlevé avec succès. Total mis à jour.`);
+    AuditLogger.log('ANNULATION_VENTE_ENTREE', 'ticket_sales', id, `Annulation vente entrée ${name} (-${amount} F)`);
+    Notify.success(`Billet « ${name} » enlevé avec succès. Caisse et bilan actualisés.`);
+    this.renderCurrentTab();
+  },
+
+  // 1. bis — Onglet Configuration des Billets d'Entrée
+  renderConfigTab(container) {
+    container.innerHTML = `
+      <div style="margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.15rem; color: #065f46;">⚙️ Configuration &amp; Tarifs des Billets d'Entrée</h3>
+          <p style="margin: 0; font-size: 0.85rem; color: var(--gray-500);">
+            Personnalisez librement les types de billets, leurs tarifs et leurs icônes.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-primary btn-sm" style="background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.openAddTicketModal()">
+            <span>➕</span> Nouveau Billet d'Entrée
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="CaisseEntreeModule.loadDefaultSuggestions()">
+            <span>🔄</span> Suggestions par défaut
+          </button>
+        </div>
+      </div>
+
+      ${this.entryCatalog.length === 0 ? `
+        <div class="empty-state" style="padding: 2.5rem; background: var(--gray-50); border: 2px dashed var(--gray-300); border-radius: var(--radius-md); text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎟️</div>
+          <div style="font-weight: 800; font-size: 1.1rem; color: var(--gray-800);">Aucun billet d'entrée configuré</div>
+          <div style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 1.25rem;">
+            Cliquez sur le bouton ci-dessous pour créer votre premier billet d'entrée ou charger les suggestions de base.
+          </div>
+          <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" style="background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.openAddTicketModal()">
+              <span>➕</span> Créer un billet d'entrée
+            </button>
+            <button class="btn btn-secondary" onclick="CaisseEntreeModule.loadDefaultSuggestions()">
+              <span>🔄</span> Suggestions par défaut
+            </button>
+          </div>
+        </div>
+      ` : `
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+          ${this.entryCatalog.map(t => `
+            <div class="card" style="border: 2px solid #e2e8f0; border-top: 4px solid #10b981; padding: 1.15rem; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                  <span style="font-size: 2.2rem;">${t.icon || '🎟️'}</span>
+                  <div style="text-align: right;">
+                    <div style="font-size: 1.3rem; font-weight: 800; color: #047857;">
+                      ${t.price > 0 ? `${t.price.toLocaleString()} F` : '<span class="badge badge-success">Gratuit</span>'}
+                    </div>
+                    <div style="font-size: 0.72rem; color: var(--gray-400);">par visiteur</div>
+                  </div>
+                </div>
+                <h4 style="margin: 0 0 0.4rem 0; font-size: 1.05rem; font-weight: 700;">${t.name}</h4>
+                <p style="margin: 0 0 1rem 0; font-size: 0.82rem; color: var(--gray-500); line-height: 1.4;">
+                  ${t.description || 'Aucune consigne particulière.'}
+                </p>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; border-top: 1px solid var(--gray-100); padding-top: 0.75rem;">
+                <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="CaisseEntreeModule.openEditTicketModal('${t.id}')">
+                  <span>✏️</span> Modifier
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="CaisseEntreeModule.deleteTicket('${t.id}')" title="Supprimer ce billet">
+                  <span>🗑️</span>
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+
+      <div style="margin-top: 2rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 0.85rem 1.15rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="font-size: 0.85rem; color: #065f46;">
+          💡 <strong>Prise d'effet immédiate :</strong> Tous les billets configurés ci-dessus sont instantanément disponibles dans l'onglet <strong>Vente Entrées</strong>.
+        </div>
+        <button class="btn btn-primary btn-sm" style="background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.switchTab('pos')">
+          <span>🎟️</span> Aller au terminal de vente
+        </button>
+      </div>
+    `;
+  },
+
+  openAddTicketModal() {
+    const emojis = ['🎟️', '🎫', '🧒', '🧑', '👨‍👩‍👧‍👦', '🌟', '❤️', '🏷️', '🎪', '🎈', '🍭', '👑'];
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Nouveau Billet d'Entrée</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="addTicketForm">
+            <div class="form-group">
+              <label>Nom du billet *</label>
+              <input type="text" id="newTicketName" class="form-control" required placeholder="Ex: Entrée Adulte, Tarif Étudiant...">
+            </div>
+
+            <div class="form-group">
+              <label>Tarif en Francs (${KermesseConfig.currency}) *</label>
+              <input type="number" id="newTicketPrice" class="form-control" required min="0" step="50" placeholder="Ex: 500 (mettre 0 si gratuit)">
+            </div>
+
+            <div class="form-group">
+              <label>Icône / Émoji</label>
+              <div style="display: flex; gap: 0.35rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                ${emojis.map(e => `
+                  <button type="button" class="btn btn-secondary btn-sm emoji-pick-btn" style="font-size: 1.2rem; padding: 2px 8px;" data-emoji="${e}">${e}</button>
+                `).join('')}
+              </div>
+              <input type="text" id="newTicketIcon" class="form-control" value="🎟️" style="max-width: 120px; font-size: 1.2rem; text-align: center;">
+            </div>
+
+            <div class="form-group">
+              <label>Description / Public ciblé (optionnel)</label>
+              <input type="text" id="newTicketDesc" class="form-control" placeholder="Ex: À partir de 12 ans, justificatif requis...">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="confirmAddTicketBtn" style="background: #059669; border-color: #047857;">Enregistrer le Billet</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    modal.querySelectorAll('.emoji-pick-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.getElementById('newTicketIcon').value = btn.dataset.emoji;
+      };
+    });
+
+    modal.querySelector('#confirmAddTicketBtn').onclick = async () => {
+      const name = document.getElementById('newTicketName').value.trim();
+      const priceStr = document.getElementById('newTicketPrice').value;
+      const icon = document.getElementById('newTicketIcon').value.trim() || '🎟️';
+      const desc = document.getElementById('newTicketDesc').value.trim();
+
+      if (!name || priceStr === '') {
+        Notify.error('Veuillez renseigner le nom et le tarif.');
+        return;
+      }
+      const price = Math.max(0, parseInt(priceStr, 10) || 0);
+
+      let newId = 'ent-' + Date.now();
+      const client = SupabaseClient.client;
+      if (client) {
+        try {
+          const { data, error } = await client.from('tickets_catalog').insert([{
+            type: 'entree',
+            name: name,
+            value_f: price,
+            color: icon,
+            description: desc,
+            is_active: true
+          }]).select('id');
+          if (!error && data && data[0]) newId = data[0].id;
+        } catch (e) {
+          console.warn('[Add Ticket DB Warning]', e);
+        }
+      }
+
+      this.entryCatalog.push({
+        id: newId,
+        name,
+        price,
+        icon,
+        description: desc
+      });
+
+      await CaissesCore.saveEntryCatalog(this.entryCatalog);
+      AuditLogger.log('CREATION_BILLET_ENTREE', 'tickets_catalog', newId, `Création billet ${name} (${price} F)`);
+      Notify.success(`Billet « ${name} » ajouté au catalogue.`);
+      close();
+      this.renderCurrentTab();
+    };
+  },
+
+  openEditTicketModal(ticketId) {
+    const ticket = this.entryCatalog.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    const emojis = ['🎟️', '🎫', '🧒', '🧑', '👨‍👩‍👧‍👦', '🌟', '❤️', '🏷️', '🎪', '🎈', '🍭', '👑'];
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Modifier le Billet d'Entrée</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editTicketForm">
+            <div class="form-group">
+              <label>Nom du billet *</label>
+              <input type="text" id="editTicketName" class="form-control" required value="${ticket.name.replace(/"/g, '&quot;')}">
+            </div>
+
+            <div class="form-group">
+              <label>Tarif en Francs (${KermesseConfig.currency}) *</label>
+              <input type="number" id="editTicketPrice" class="form-control" required min="0" step="50" value="${ticket.price}">
+            </div>
+
+            <div class="form-group">
+              <label>Icône / Émoji</label>
+              <div style="display: flex; gap: 0.35rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                ${emojis.map(e => `
+                  <button type="button" class="btn btn-secondary btn-sm emoji-pick-btn" style="font-size: 1.2rem; padding: 2px 8px;" data-emoji="${e}">${e}</button>
+                `).join('')}
+              </div>
+              <input type="text" id="editTicketIcon" class="form-control" value="${ticket.icon || '🎟️'}" style="max-width: 120px; font-size: 1.2rem; text-align: center;">
+            </div>
+
+            <div class="form-group">
+              <label>Description / Public ciblé (optionnel)</label>
+              <input type="text" id="editTicketDesc" class="form-control" value="${(ticket.description || '').replace(/"/g, '&quot;')}">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="confirmEditTicketBtn" style="background: #059669; border-color: #047857;">Enregistrer les Modifications</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    modal.querySelectorAll('.emoji-pick-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.getElementById('editTicketIcon').value = btn.dataset.emoji;
+      };
+    });
+
+    modal.querySelector('#confirmEditTicketBtn').onclick = async () => {
+      const name = document.getElementById('editTicketName').value.trim();
+      const priceStr = document.getElementById('editTicketPrice').value;
+      const icon = document.getElementById('editTicketIcon').value.trim() || '🎟️';
+      const desc = document.getElementById('editTicketDesc').value.trim();
+
+      if (!name || priceStr === '') {
+        Notify.error('Veuillez renseigner le nom et le tarif.');
+        return;
+      }
+      const price = Math.max(0, parseInt(priceStr, 10) || 0);
+
+      ticket.name = name;
+      ticket.price = price;
+      ticket.icon = icon;
+      ticket.description = desc;
+
+      const client = SupabaseClient.client;
+      if (client && CaissesCore.isUuid(ticketId)) {
+        try {
+          await client.from('tickets_catalog').update({
+            name: name,
+            value_f: price,
+            color: icon,
+            description: desc
+          }).eq('id', ticketId);
+        } catch (e) {
+          console.warn('[Edit Ticket DB Warning]', e);
+        }
+      }
+
+      // Si le billet était dans le panier en cours, mettre à jour son nom et son prix
+      const cartItem = this.cart.find(c => c.id === ticketId);
+      if (cartItem) {
+        cartItem.name = name;
+        cartItem.price = price;
+      }
+
+      await CaissesCore.saveEntryCatalog(this.entryCatalog);
+      AuditLogger.log('MODIFICATION_BILLET_ENTREE', 'tickets_catalog', ticketId, `Mise à jour billet ${name} (${price} F)`);
+      Notify.success(`Billet « ${name} » modifié avec succès.`);
+      close();
+      this.renderCurrentTab();
+    };
+  },
+
+  async deleteTicket(ticketId) {
+    const ticket = this.entryCatalog.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    if (!confirm(`Supprimer définitivement le billet « ${ticket.name} » du catalogue ?\n\nIl ne sera plus proposé sur l'écran d'accueil.`)) {
+      return;
+    }
+
+    const client = SupabaseClient.client;
+    if (client && CaissesCore.isUuid(ticketId)) {
+      try {
+        await client.from('tickets_catalog').delete().eq('id', ticketId);
+      } catch (e) {
+        console.warn('[Delete Ticket DB Warning]', e);
+      }
+    }
+
+    this.entryCatalog = this.entryCatalog.filter(t => t.id !== ticketId);
+    this.cart = this.cart.filter(c => c.id !== ticketId);
+
+    await CaissesCore.saveEntryCatalog(this.entryCatalog);
+    AuditLogger.log('SUPPRESSION_BILLET_ENTREE', 'tickets_catalog', ticketId, `Suppression billet ${ticket.name}`);
+    Notify.success(`Billet « ${ticket.name} » supprimé.`);
+    this.renderCurrentTab();
+  },
+
+  async loadDefaultSuggestions() {
+    if (this.entryCatalog.length > 0) {
+      if (!confirm('Rétablir les 4 tarifs d\'entrée suggérés par défaut ?\n\n(Enfant 200 F, Adulte 500 F, Pass Famille 1 200 F, Donateur 2 000 F)')) {
+        return;
+      }
+    }
+
+    this.entryCatalog = [
+      { id: 'ent-enf', name: 'Entrée Enfant (-12 ans)', price: 200, icon: '🧒', description: 'Moins de 12 ans' },
+      { id: 'ent-adu', name: 'Entrée Adulte', price: 500, icon: '🧑', description: 'Tarif standard' },
+      { id: 'ent-fam', name: 'Pass Famille', price: 1200, icon: '👨‍👩‍👧‍👦', description: 'Valable pour 4 personnes' },
+      { id: 'ent-don', name: 'Entrée Donateur & Bienfaiteur', price: 2000, icon: '❤️', description: 'Soutien aux œuvres sociales' }
+    ];
+
+    await CaissesCore.saveEntryCatalog(this.entryCatalog);
+    Notify.success('Suggestions de base chargées.');
     this.renderCurrentTab();
   },
 
@@ -1115,12 +1553,15 @@ const CaisseJeuxModule = {
         const { data: sData } = await client.from('stands').select('id, name, number, color_name, color_hex').order('number');
         if (sData) this.stands = sData;
 
+        const cancelledIds = CaissesCore.getCancelledSaleIds();
         const { data: vData } = await client
           .from('ticket_sales')
           .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, stand:stands(name, color_name, color_hex), seller:app_users(login)')
           .eq('category', 'jeu')
           .order('created_at', { ascending: false });
-        if (vData) this.sales = vData;
+        if (vData) {
+          this.sales = vData.filter(s => !cancelledIds.includes(s.id));
+        }
       } catch (e) {
         console.warn('[CaisseJeux DB Error]', e);
       }
@@ -1131,7 +1572,9 @@ const CaisseJeuxModule = {
     if (stored) {
       try {
         const local = JSON.parse(stored);
-        this.sales = [...this.sales, ...local.filter(l => !this.sales.some(s => s.id === l.id))];
+        const cancelledIds = CaissesCore.getCancelledSaleIds();
+        const filteredLocal = local.filter(l => !cancelledIds.includes(l.id));
+        this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
       } catch (e) {}
     }
 
@@ -1454,6 +1897,9 @@ const CaisseJeuxModule = {
     }
 
     const client = SupabaseClient.client;
+    // 1. Ajouter à la liste noire globale des annulations
+    CaissesCore.addCancelledSaleId(id);
+
     if (client) {
       try {
         if (CaissesCore.isUuid(id)) {
@@ -2388,12 +2834,16 @@ const CaisseBilanModule = {
     this.registers = [];
     this.expenses = [];
 
+    const cancelledIds = CaissesCore.getCancelledSaleIds();
+
     if (client) {
       try {
         const { data: s } = await client
           .from('ticket_sales')
-          .select('quantity, total_amount_f, category, stand:stands(name, color_name, color_hex)');
-        if (s) this.sales = s;
+          .select('id, quantity, total_amount_f, category, item_name, stand:stands(name, color_name, color_hex)');
+        if (s && s.length > 0) {
+          this.sales = s.filter(item => !cancelledIds.includes(item.id));
+        }
 
         const { data: r } = await client.from('cash_registers').select('*').order('name');
         if (r) this.registers = r;
@@ -2412,8 +2862,14 @@ const CaisseBilanModule = {
     try { if (storedEntree) localCombined = [...localCombined, ...JSON.parse(storedEntree)]; } catch (e) {}
     try { if (storedJeux) localCombined = [...localCombined, ...JSON.parse(storedJeux)]; } catch (e) {}
 
-    if (localCombined.length > 0) {
-      this.sales = [...this.sales, ...localCombined.filter(l => !this.sales.some(s => s.id === l.id))];
+    // Filtrer les ventes annulées du localCombined
+    localCombined = localCombined.filter(l => !cancelledIds.includes(l.id));
+
+    if (this.sales.length === 0) {
+      this.sales = localCombined;
+    } else {
+      const unSynced = localCombined.filter(l => !this.sales.some(s => s.id === l.id) && !cancelledIds.includes(l.id));
+      this.sales = [...this.sales, ...unSynced];
     }
   },
 
