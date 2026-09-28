@@ -2798,11 +2798,902 @@ const CaisseJetonsModule = {
 
 
 // ==============================================================================
-// 4. MODULE : BILAN FINANCIER GLOBAL KERMESSE (CaisseBilanModule)
+// 4. MODULE : CAISSE RESTAURATION & BUVETTE (CaisseRestaurationModule)
+// Pôle 4 : Restauration
+// ==============================================================================
+const CaisseRestaurationModule = {
+  currentTab: 'pos', // 'pos', 'expenses', 'journal', 'closure'
+  activeCategoryFilter: 'all',
+  register: null,
+  products: [],
+  sales: [],
+  expenses: [],
+  cart: [],
+  paymentMethod: 'cash', // 'cash' | 'tokens'
+
+  async render(container) {
+    this.register = await CaissesCore.getOrCreateRegister('Restauration', 'Caisse 4 — Restauration & Buvette');
+    await this.loadData();
+
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🍔</span> Pôle 4 : Caisse Restauration &amp; Buvette
+          </div>
+          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="badge ${this.register.status === 'open' ? 'badge-success' : 'badge-gray'}">
+              ${this.register.status === 'open' ? '🟢 Caisse Ouverte' : '🔴 Caisse Clôturée'}
+            </span>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <!-- Onglets de la caisse Restauration -->
+          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem; overflow-x: auto;">
+            <button class="tab-btn ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('pos')">
+              🍔 Vente Tactile Restauration
+            </button>
+            <button class="tab-btn ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('expenses')">
+              💸 Dépenses de cette Caisse (${this.expenses.length})
+            </button>
+            <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('journal')">
+              🧾 Journal des Ventes (${this.sales.length})
+            </button>
+            <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('closure')">
+              🔒 Contrôle &amp; Clôture
+            </button>
+          </div>
+
+          <div id="caisseRestaurationTabContainer"></div>
+        </div>
+      </div>
+    `;
+
+    this.renderCurrentTab();
+  },
+
+  switchTab(tab) {
+    this.currentTab = tab;
+    this.render(document.getElementById('mainContent'));
+  },
+
+  async loadData() {
+    const client = SupabaseClient.client;
+    this.sales = [];
+    this.products = [];
+
+    // Récupérer les produits alimentaires depuis Supabase
+    if (client) {
+      try {
+        const { data: pData, error } = await client
+          .from('food_products')
+          .select('*')
+          .eq('is_active', true)
+          .order('name');
+        if (!error && pData) this.products = pData;
+      } catch (e) {
+        console.warn('[CaisseRestauration Load Products DB]', e);
+      }
+    }
+
+    // Récupération locale des produits si vide
+    if (this.products.length === 0) {
+      const stored = localStorage.getItem('kermesse_food_products');
+      if (stored) {
+        try { this.products = JSON.parse(stored); } catch (e) {}
+      }
+    }
+
+    // Ventes Restauration
+    const cancelledIds = CaissesCore.getCancelledSaleIds();
+    if (client) {
+      try {
+        const { data: vData } = await client
+          .from('ticket_sales')
+          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, payment_mode, product_id, created_at, seller:app_users(login)')
+          .eq('category', 'restauration')
+          .order('created_at', { ascending: false });
+        if (vData) {
+          this.sales = vData.filter(s => !cancelledIds.includes(s.id));
+        }
+      } catch (e) {
+        console.warn('[CaisseRestauration Load Sales DB]', e);
+      }
+    }
+
+    const storedSales = localStorage.getItem('kermesse_food_sales');
+    if (storedSales) {
+      try {
+        const local = JSON.parse(storedSales);
+        const filteredLocal = local.filter(l => !cancelledIds.includes(l.id));
+        this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
+      } catch (e) {}
+    }
+
+    if (this.register) {
+      this.expenses = await CaissesCore.loadExpenses(this.register.id);
+    }
+  },
+
+  renderCurrentTab() {
+    const container = document.getElementById('caisseRestaurationTabContainer');
+    if (!container) return;
+
+    if (this.currentTab === 'pos') this.renderPosTab(container);
+    else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
+    else if (this.currentTab === 'journal') this.renderJournalTab(container);
+    else if (this.currentTab === 'closure') this.renderClosureTab(container);
+  },
+
+  getProductEmoji(name, category) {
+    const n = (name || '').toLowerCase();
+    const c = (category || '').toLowerCase();
+    if (n.includes('burger') || n.includes('hamb')) return '🍔';
+    if (n.includes('hot dog') || n.includes('saucisse')) return '🌭';
+    if (n.includes('pizza')) return '🍕';
+    if (n.includes('sandwich') || n.includes('pain') || n.includes('panini')) return '🥪';
+    if (n.includes('frite')) return '🍟';
+    if (n.includes('crêpe') || n.includes('crepe') || n.includes('pancake')) return '🥞';
+    if (n.includes('gâteau') || n.includes('gateau') || n.includes('cake')) return '🍰';
+    if (n.includes('glace') || n.includes('cornet')) return '🍦';
+    if (n.includes('bonbon') || n.includes('sucette')) return '🍭';
+    if (n.includes('poulet') || n.includes('chawarma') || n.includes('viande') || n.includes('brochette')) return '🍗';
+    if (n.includes('eau')) return '💧';
+    if (n.includes('coca') || n.includes('soda') || n.includes('fanta') || n.includes('sprite')) return '🥤';
+    if (n.includes('jus') || n.includes('cocktail') || n.includes('bissap')) return '🧃';
+    if (n.includes('bière') || n.includes('biere')) return '🍺';
+    if (c.includes('boisson')) return '🥤';
+    if (c.includes('dessert') || c.includes('sucre')) return '🍰';
+    if (c.includes('plat') || c.includes('snack')) return '🍔';
+    return '🍽️';
+  },
+
+  // 1. Onglet Vente Tactile Restauration
+  renderPosTab(container) {
+    const totalServi = this.sales.reduce((s, x) => s + (x.quantity || 1), 0);
+    const totalRevenue = this.sales.reduce((s, x) => s + (x.total_amount_f || 0), 0);
+    const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+
+    const categories = ['all', ...new Set(this.products.map(p => p.category || 'Autre'))];
+    const filteredProducts = this.activeCategoryFilter === 'all' 
+      ? this.products 
+      : this.products.filter(p => (p.category || 'Autre') === this.activeCategoryFilter);
+
+    container.innerHTML = `
+      <div style="display: grid; grid-template-columns: 1fr 350px; gap: 1.25rem;">
+        
+        <div>
+          <!-- Indicateurs Restauration -->
+          <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <span style="font-weight: 700; color: #9a3412;">🍽️ Articles servis :</span>
+              <strong style="color: #c2410c; font-size: 1.25rem; margin-left: 6px;">${totalServi.toLocaleString()}</strong>
+            </div>
+            <div>
+              <span style="font-weight: 700; color: #9a3412;">Recette Restauration :</span>
+              <strong style="color: #c2410c; font-size: 1.25rem; margin-left: 6px;">${totalRevenue.toLocaleString()} F</strong>
+            </div>
+          </div>
+
+          <!-- Filtres par catégorie -->
+          ${categories.length > 2 ? `
+            <div style="display: flex; gap: 0.4rem; margin-bottom: 1rem; overflow-x: auto; padding-bottom: 4px;">
+              ${categories.map(cat => `
+                <button class="btn btn-sm ${this.activeCategoryFilter === cat ? 'btn-primary' : 'btn-secondary'}" 
+                  style="${this.activeCategoryFilter === cat ? 'background: #ea580c; border-color: #c2410c;' : ''}"
+                  onclick="CaisseRestaurationModule.activeCategoryFilter = '${cat.replace(/'/g, "\\'")}'; CaisseRestaurationModule.renderCurrentTab();">
+                  ${cat === 'all' ? `🍽️ Tout (${this.products.length})` : cat}
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          <!-- Grille des produits alimentaires -->
+          ${this.products.length === 0 ? `
+            <div class="empty-state" style="padding: 2.5rem; background: var(--gray-50); border: 2px dashed var(--gray-300); border-radius: var(--radius-md); text-align: center;">
+              <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">🍔</div>
+              <div style="font-weight: 800; font-size: 1.15rem; color: var(--gray-800);">Aucun produit alimentaire enregistré</div>
+              <div style="font-size: 0.85rem; color: var(--gray-500); max-width: 480px; margin: 0.5rem auto 1.25rem;">
+                Cette caisse utilise la liste de nourriture définie dans le Pôle 4. Enregistrez vos boissons, snacks ou repas dans le module <strong>Denrées &amp; Boissons</strong> pour qu'ils s'affichent ici.
+              </div>
+              <button class="btn btn-primary" style="background: #ea580c; border-color: #c2410c;" onclick="App.navigateTo('stocks')">
+                <span>➕</span> Aller dans Denrées &amp; Boissons (Pôle 4)
+              </button>
+            </div>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.85rem;">
+              ${filteredProducts.map(p => {
+                const inCart = this.cart.find(i => i.id === p.id);
+                const qty = inCart ? inCart.qty : 0;
+                const price = p.selling_price_f || 0;
+                const stock = p.current_stock !== undefined ? p.current_stock : 999;
+                const isOutOfStock = stock <= 0;
+                const emoji = this.getProductEmoji(p.name, p.category);
+
+                return `
+                  <div class="card" style="border: 2px solid ${qty > 0 ? '#ea580c' : '#e2e8f0'}; border-top: 5px solid ${isOutOfStock ? 'var(--danger)' : '#ea580c'}; transition: box-shadow 0.15s; background: ${qty > 0 ? '#fff7ed' : 'white'}; opacity: ${isOutOfStock ? '0.7' : '1'};">
+                    <div class="card-body" style="padding: 1rem;">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">
+                        <span style="font-size: 2rem;">${emoji}</span>
+                        <div style="text-align: right;">
+                          <strong style="font-size: 1.15rem; color: #c2410c;">${price.toLocaleString()} F</strong>
+                          <div>
+                            ${isOutOfStock ? `
+                              <span class="badge badge-danger" style="font-size: 0.68rem;">Épuisé</span>
+                            ` : stock <= 10 ? `
+                              <span class="badge badge-warning" style="font-size: 0.68rem;">Reste ${stock}</span>
+                            ` : `
+                              <span class="badge badge-gray" style="font-size: 0.68rem;">Stock: ${stock}</span>
+                            `}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; min-height: 2.2em; line-height: 1.2;">
+                        ${p.name}
+                      </div>
+                      <div style="font-size: 0.72rem; color: var(--gray-500); margin-bottom: 0.6rem;">
+                        ${p.category || 'Restauration'} • ${p.unit || 'portion'}
+                      </div>
+
+                      <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
+                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+                        <button class="btn btn-secondary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseRestaurationModule.decrementItem('${p.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                          −
+                        </button>
+                        <div style="text-align: center;">
+                          <span style="font-size: 1.2rem; font-weight: 800; color: ${qty > 0 ? '#c2410c' : 'var(--gray-400)'};">
+                            ${qty}
+                          </span>
+                          <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">servi(s)</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.incrementItem('${p.id}', '${p.name.replace(/'/g, "\\'")}', ${price}, ${stock})" ${isOutOfStock ? 'disabled title="Rupture de stock"' : ''} title="Augmenter">
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `}
+
+          <!-- SECTION : DERNIÈRES VENTES RESTAURATION VALIDÉES (ANNULATION DIRECTE) -->
+          <div style="margin-top: 2rem; border-top: 2px dashed var(--gray-200); padding-top: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="margin: 0; font-size: 1rem; color: var(--gray-800); display: flex; align-items: center; gap: 0.4rem;">
+                <span>🧾</span> Dernières commandes restauration validées
+              </h4>
+              <span style="font-size: 0.8rem; color: var(--gray-500);">Cliquez sur 🗑️ pour annuler et restituer le stock</span>
+            </div>
+
+            ${this.sales.length === 0 ? `
+              <p style="color: var(--gray-400); font-size: 0.85rem; font-style: italic;">Aucune commande validée pour le moment.</p>
+            ` : `
+              <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 280px; overflow-y: auto;">
+                ${this.sales.slice(0, 8).map(s => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.85rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-md);">
+                    <div>
+                      <div style="font-weight: 700; font-size: 0.9rem;">
+                        🍽️ ${s.item_name} <span class="badge badge-gray" style="font-size: 0.72rem; margin-left: 4px;">×${s.quantity}</span>
+                        ${s.payment_mode === 'tokens' ? '<span class="badge badge-warning" style="margin-left: 4px; font-size: 0.7rem;">🪙 Jetons</span>' : '<span class="badge badge-success" style="margin-left: 4px; font-size: 0.7rem;">💵 Espèces</span>'}
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--gray-500);">
+                        Validé à ${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                      <strong style="color: var(--success); font-size: 1rem;">
+                        +${(s.total_amount_f || 0).toLocaleString()} F
+                      </strong>
+                      <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f}, '${s.product_id || ''}', ${s.quantity})" title="Annuler et remettre en stock" style="display: flex; align-items: center; gap: 4px;">
+                        <span>🗑️</span> Enlever
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+        </div>
+
+        <!-- Panier Commande Restauration (Colonne Droite) -->
+        <div class="card" style="border: 2px solid #ea580c; box-shadow: var(--shadow-md); position: sticky; top: 1rem;">
+          <div class="card-header" style="background: #ea580c; color: white;">
+            <div class="card-title" style="color: white; font-size: 1rem;">
+              <span>🛒</span> Commande (${this.cart.reduce((s, i) => s + i.qty, 0)})
+            </div>
+            ${this.cart.length > 0 ? `
+              <button class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 2px 8px; font-size: 0.75rem;" onclick="CaisseRestaurationModule.cart = []; CaisseRestaurationModule.renderCurrentTab();">Vider</button>
+            ` : ''}
+          </div>
+
+          <div class="card-body" style="padding: 1rem;">
+            ${this.cart.length === 0 ? `
+              <div style="text-align: center; padding: 2rem 0; color: var(--gray-400);">
+                <div style="font-size: 2.2rem; margin-bottom: 0.35rem;">🍔</div>
+                <div style="font-weight: 700;">Aucun article sélectionné</div>
+                <div style="font-size: 0.8rem; margin-top: 4px;">Cliquez sur <strong>+</strong> pour ajouter des plats ou boissons</div>
+              </div>
+            ` : `
+              <div style="max-height: 220px; overflow-y: auto; margin-bottom: 0.75rem;">
+                ${this.cart.map(item => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--gray-100);">
+                    <div style="flex: 1;">
+                      <div style="font-weight: 700; font-size: 0.88rem;">${item.name}</div>
+                      <div style="font-size: 0.75rem; color: var(--gray-500);">${(item.price * item.qty).toLocaleString()} F (${item.price} F / u.)</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.3rem;">
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseRestaurationModule.decrementItem('${item.id}')">−</button>
+                      <strong style="min-width: 24px; text-align: center; font-size: 0.95rem;">${item.qty}</strong>
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseRestaurationModule.incrementItem('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, ${item.maxStock})">+</button>
+                      <button class="btn btn-danger btn-sm" style="padding: 2px 6px; font-size: 0.75rem; margin-left: 2px;" onclick="CaisseRestaurationModule.removeItem('${item.id}')" title="Retirer">✕</button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+
+              <div style="display: flex; justify-content: space-between; font-size: 1.15rem; font-weight: 800; border-top: 2px solid var(--gray-200); padding-top: 0.5rem; margin-bottom: 0.75rem;">
+                <span>Total Commande :</span>
+                <span style="color: #c2410c;">${cartTotal.toLocaleString()} F</span>
+              </div>
+
+              <!-- SÉLECTEUR DU MODE DE PAIEMENT : ESPÈCES OU JETONS -->
+              <div style="background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 0.65rem; margin-bottom: 0.75rem;">
+                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-700); display: block; margin-bottom: 0.35rem;">
+                  Mode de règlement :
+                </label>
+                <div style="display: flex; gap: 0.4rem;">
+                  <button type="button" class="btn btn-sm" style="flex: 1; font-weight: 700; ${this.paymentMethod === 'cash' ? 'background: #ea580c; color: white;' : 'background: white; border: 1px solid var(--gray-300);'}" onclick="CaisseRestaurationModule.setPaymentMethod('cash')">
+                    💵 Espèces (FCFA)
+                  </button>
+                  <button type="button" class="btn btn-sm" style="flex: 1; font-weight: 700; ${this.paymentMethod === 'tokens' ? 'background: #b45309; color: white;' : 'background: white; border: 1px solid var(--gray-300);'}" onclick="CaisseRestaurationModule.setPaymentMethod('tokens')">
+                    🪙 Jetons de Monnaie
+                  </button>
+                </div>
+
+                ${this.paymentMethod === 'cash' ? `
+                  <div style="margin-top: 0.6rem;">
+                    <input type="number" id="caisseRestoCashGiven" class="form-control form-control-sm" placeholder="Espèces reçues (FCFA)" oninput="CaisseRestaurationModule.calcChange(${cartTotal})">
+                    <div id="caisseRestoChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.8rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
+                  </div>
+                ` : `
+                  <div style="margin-top: 0.6rem; padding: 0.5rem; background: #fef3c7; border: 1px solid #fde68a; border-radius: var(--radius-sm); font-size: 0.78rem; color: #92400e;">
+                    <div>🪙 Équivalence en Jetons à réclamer :</div>
+                    <strong style="font-size: 0.95rem; color: #b45309;">${cartTotal.toLocaleString()} F en Jetons</strong>
+                    <div style="font-size: 0.7rem; color: #78350f; margin-top: 2px;">
+                      (Ex: ${Math.ceil(cartTotal / 100)} jetons de 100 F, ou mix 50F / 200F / 250F)
+                    </div>
+                  </div>
+                `}
+              </div>
+
+              <button class="btn btn-primary" style="width: 100%; font-size: 1.05rem; font-weight: 800; background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.checkout()">
+                ⚡ Encaisser &amp; Déstocker (${cartTotal.toLocaleString()} F)
+              </button>
+            `}
+          </div>
+        </div>
+
+      </div>
+    `;
+  },
+
+  setPaymentMethod(method) {
+    this.paymentMethod = method;
+    this.renderCurrentTab();
+  },
+
+  incrementItem(id, name, price, maxStock = 999) {
+    const ex = this.cart.find(i => i.id === id);
+    if (ex) {
+      if (maxStock !== null && maxStock !== undefined && ex.qty >= maxStock) {
+        Notify.warning(`Stock maximum atteint pour « ${name} » (${maxStock} dispo).`);
+        return;
+      }
+      ex.qty += 1;
+    } else {
+      if (maxStock <= 0) {
+        Notify.error(`« ${name} » est en rupture de stock.`);
+        return;
+      }
+      this.cart.push({ id, name, price, qty: 1, maxStock });
+    }
+    this.renderCurrentTab();
+  },
+
+  decrementItem(id) {
+    const idx = this.cart.findIndex(i => i.id === id);
+    if (idx >= 0) {
+      if (this.cart[idx].qty > 1) {
+        this.cart[idx].qty -= 1;
+      } else {
+        this.cart.splice(idx, 1);
+      }
+      this.renderCurrentTab();
+    }
+  },
+
+  removeItem(id) {
+    this.cart = this.cart.filter(i => i.id !== id);
+    this.renderCurrentTab();
+  },
+
+  calcChange(total) {
+    const input = document.getElementById('caisseRestoCashGiven');
+    const disp = document.getElementById('caisseRestoChangeDisp');
+    if (!input || !disp) return;
+    const given = parseInt(input.value || '0', 10);
+    const diff = given - total;
+    if (given <= 0) disp.innerHTML = 'Monnaie à rendre : 0 F';
+    else if (diff < 0) disp.innerHTML = `<span style="color: var(--danger);">⚠️ Manque ${Math.abs(diff).toLocaleString()} F !</span>`;
+    else disp.innerHTML = `<span style="color: var(--success);">💵 À RENDRE : ${diff.toLocaleString()} F</span>`;
+  },
+
+  async checkout() {
+    if (this.cart.length === 0) return;
+    const client = SupabaseClient.client;
+    const user = Auth.getCurrentUser();
+    const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const regId = this.register.id;
+    const mode = this.paymentMethod;
+
+    for (const item of this.cart) {
+      let realSaleId = 'sale-food-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+
+      const saleObj = {
+        cash_register_id: CaissesCore.isUuid(regId) ? regId : null,
+        item_name: item.name,
+        category: 'restauration',
+        quantity: item.qty,
+        unit_price_f: item.price,
+        total_amount_f: item.price * item.qty,
+        payment_mode: mode,
+        product_id: CaissesCore.isUuid(item.id) ? item.id : null,
+        sold_by: user ? user.id : null
+      };
+
+      if (client) {
+        try {
+          const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
+          if (data && data[0]) realSaleId = data[0].id;
+
+          // Déstockage automatique dans stock_movements
+          if (CaissesCore.isUuid(item.id)) {
+            await client.from('stock_movements').insert([{
+              product_id: item.id,
+              type: 'vente',
+              quantity: item.qty,
+              reason: `Vente Caisse Restauration (${mode})`,
+              user_id: user ? user.id : null
+            }]);
+          }
+        } catch (e) {
+          console.warn('[Checkout Resto DB Warning]', e);
+        }
+      }
+
+      // Mettre à jour le stock localement aussi
+      const p = this.products.find(prod => prod.id === item.id);
+      if (p && p.current_stock !== undefined) {
+        p.current_stock = Math.max(0, p.current_stock - item.qty);
+      }
+
+      this.sales.unshift({
+        ...saleObj,
+        id: realSaleId,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    // Sauvegarde locale
+    localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
+    localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+
+    if (client && CaissesCore.isUuid(regId)) {
+      try {
+        await client.from('cash_movements').insert([{
+          cash_register_id: regId,
+          type: 'vente',
+          amount_f: cartTotal,
+          reason: `Vente Restauration (${mode === 'tokens' ? 'En Jetons' : 'En Espèces'})`,
+          tokens_detail: mode === 'tokens' ? { total_tokens_f: cartTotal } : null,
+          user_id: user ? user.id : null
+        }]);
+      } catch (e) {}
+    }
+
+    AuditLogger.log('VENTE_RESTAURATION', 'ticket_sales', null, `Vente restauration de ${cartTotal} F (${mode})`);
+    Notify.success(`Commande validée et stock décompté ! Total : ${cartTotal.toLocaleString()} F`);
+    this.cart = [];
+    this.renderCurrentTab();
+  },
+
+  async deleteSale(id, name, amount, productId, quantity) {
+    if (!confirm(`Annuler et enlever la commande de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et la quantité (${quantity}) sera remise en stock.`)) {
+      return;
+    }
+
+    const client = SupabaseClient.client;
+    const user = Auth.getCurrentUser();
+
+    // 1. Ajouter à la liste noire des annulations (pour mise à jour Bilan)
+    CaissesCore.addCancelledSaleId(id);
+
+    // 2. Supprimer dans Supabase et réapprovisionner le stock
+    if (client) {
+      try {
+        if (CaissesCore.isUuid(id)) {
+          await client.from('ticket_sales').delete().eq('id', id);
+        }
+        if (CaissesCore.isUuid(this.register.id)) {
+          await client.from('cash_movements').insert([{
+            cash_register_id: this.register.id,
+            type: 'correction',
+            amount_f: -Math.abs(amount),
+            reason: `Annulation vente restauration : ${name}`,
+            user_id: user ? user.id : null
+          }]);
+        }
+        if (CaissesCore.isUuid(productId)) {
+          await client.from('stock_movements').insert([{
+            product_id: productId,
+            type: 'livraison_entree',
+            quantity: quantity,
+            reason: `Restitution stock suite annulation vente : ${name}`,
+            user_id: user ? user.id : null
+          }]);
+        }
+      } catch (e) {
+        console.warn('[Delete Resto Sale DB Warning]', e);
+      }
+    }
+
+    // Remettre le stock localement
+    const p = this.products.find(prod => prod.id === productId || prod.name === name);
+    if (p && p.current_stock !== undefined) {
+      p.current_stock += (quantity || 1);
+      localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+    }
+
+    this.sales = this.sales.filter(s => s.id !== id);
+    localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
+
+    AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Annulation vente resto ${name} (-${amount} F)`);
+    Notify.success(`Commande « ${name} » enlevée. Stock réapprovisionné et bilan synchronisé.`);
+    this.renderCurrentTab();
+  },
+
+  // 2. Onglet Dépenses de la Caisse Restauration
+  renderExpensesTab(container) {
+    const totalExp = this.expenses.reduce((s, e) => s + Math.abs(e.amount_f), 0);
+    container.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.1rem;">Dépenses payées par la Caisse Restauration</h3>
+          <p style="margin: 0; font-size: 0.85rem; color: var(--gray-500);">Achats urgents : glace, pain, sauces, charbon, gobelets...</p>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <div style="font-weight: 800; font-size: 1.1rem; color: var(--danger);">
+            Total Sorties : -${totalExp.toLocaleString()} F
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="CaisseRestaurationModule.openAddExpenseModal()">
+            <span>➕</span> Nouvelle Dépense
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        ${this.expenses.length === 0 ? `
+          <div class="empty-state">
+            <div class="empty-icon">💸</div>
+            <div class="empty-title">Aucune dépense enregistrée sur cette caisse</div>
+            <div class="empty-desc">Enregistrez les sorties d'argent effectuées avec les recettes de la buvette ou du snack.</div>
+            <button class="btn btn-primary btn-sm" onclick="CaisseRestaurationModule.openAddExpenseModal()">
+              <span>➕</span> Enregistrer une dépense
+            </button>
+          </div>
+        ` : `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date &amp; Heure</th>
+                <th>Motif / Justification</th>
+                <th>Montant</th>
+                <th>Enregistré par</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${this.expenses.map(e => `
+                <tr>
+                  <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(e.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td><strong>${e.reason}</strong></td>
+                  <td style="font-weight: 700; color: var(--danger); font-size: 1rem;">
+                    -${Math.abs(e.amount_f).toLocaleString()} F
+                  </td>
+                  <td><span class="badge badge-gray">${e.user ? e.user.login : 'Caissier'}</span></td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="CaisseRestaurationModule.openEditExpenseModal('${e.id}', ${Math.abs(e.amount_f)}, '${e.reason.replace(/'/g, "\\'")}')" title="Modifier">✏️</button>
+                    <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteExpense('${e.id}', ${Math.abs(e.amount_f)})" title="Supprimer" style="margin-left: 0.25rem;">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+  },
+
+  openAddExpenseModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Nouvelle Dépense — Caisse Restauration</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="expRestoForm">
+            <div class="form-group">
+              <label>Montant (${KermesseConfig.currency}) *</label>
+              <input type="number" id="expRestoAmount" class="form-control" required min="1" step="50" placeholder="Ex: 3000">
+            </div>
+            <div class="form-group">
+              <label>Motif de la dépense *</label>
+              <input type="text" id="expRestoMotive" class="form-control" required placeholder="Ex: Rachat 5 baguettes, sac de glace, épices...">
+            </div>
+            <div class="form-group">
+              <label>Bénéficiaire / Justificatif (optionnel)</label>
+              <input type="text" id="expRestoRef" class="form-control" placeholder="Ex: Reçu boulangerie...">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="confirmAddExpResto">Enregistrer la dépense</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    modal.querySelector('#confirmAddExpResto').onclick = async () => {
+      const amt = parseInt(document.getElementById('expRestoAmount').value, 10);
+      const motive = document.getElementById('expRestoMotive').value.trim();
+      const ref = document.getElementById('expRestoRef').value.trim();
+
+      if (isNaN(amt) || amt <= 0 || !motive) {
+        Notify.error('Données invalides.');
+        return;
+      }
+
+      await CaissesCore.addExpense(this.register.id, this.register.name, amt, motive, ref);
+      Notify.success('Dépense enregistrée et déduite de la caisse.');
+      close();
+      await this.loadData();
+      this.renderCurrentTab();
+    };
+  },
+
+  openEditExpenseModal(id, currentAmount, currentMotive) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Modifier la Dépense</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Montant (${KermesseConfig.currency}) *</label>
+            <input type="number" id="editExpRestAmt" class="form-control" required min="1" step="50" value="${currentAmount}">
+          </div>
+          <div class="form-group">
+            <label>Motif *</label>
+            <input type="text" id="editExpRestMot" class="form-control" required value="${currentMotive.replace(/"/g, '&quot;')}">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="saveEditExpRestBtn">Enregistrer</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    modal.querySelector('#saveEditExpRestBtn').onclick = async () => {
+      const amt = parseInt(document.getElementById('editExpRestAmt').value, 10);
+      const motive = document.getElementById('editExpRestMot').value.trim();
+      await CaissesCore.editExpense(id, this.register.id, this.register.name, amt, motive);
+      Notify.success('Dépense modifiée.');
+      close();
+      await this.loadData();
+      this.renderCurrentTab();
+    };
+  },
+
+  async deleteExpense(id, amount) {
+    if (!confirm(`Supprimer cette dépense de ${amount} F ?`)) return;
+    await CaissesCore.deleteExpense(id, this.register.id, this.register.name, amount);
+    Notify.success('Dépense supprimée.');
+    await this.loadData();
+    this.renderCurrentTab();
+  },
+
+  // 3. Onglet Journal des Ventes Restauration
+  renderJournalTab(container) {
+    container.innerHTML = `
+      <div style="margin-bottom: 1rem;">
+        <h4 style="margin: 0;">Journal des Ventes — Restauration &amp; Buvette</h4>
+      </div>
+      <div class="table-responsive">
+        ${this.sales.length === 0 ? `
+          <div class="empty-state">
+            <div class="empty-icon">🧾</div>
+            <div class="empty-title">Aucune commande encaissée pour l'instant</div>
+          </div>
+        ` : `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Heure</th>
+                <th>Article / Plat</th>
+                <th>Qté</th>
+                <th>Prix Unitaire</th>
+                <th>Règlement</th>
+                <th>Total Encaissé</th>
+                <th style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${this.sales.map(s => `
+                <tr>
+                  <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td><strong>${s.item_name}</strong></td>
+                  <td>${s.quantity}</td>
+                  <td>${(s.unit_price_f || 0).toLocaleString()} F</td>
+                  <td>${s.payment_mode === 'tokens' ? '<span class="badge badge-warning">🪙 Jetons</span>' : '<span class="badge badge-success">💵 Espèces</span>'}</td>
+                  <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f}, '${s.product_id || ''}', ${s.quantity})" title="Annuler et remettre en stock">🗑️ Enlever</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+  },
+
+  // 4. Onglet Contrôle & Clôture Caisse Restauration
+  renderClosureTab(container) {
+    const initF = this.register.initial_amount_f || 0;
+    const revTotal = this.sales.reduce((s, x) => s + (x.total_amount_f || 0), 0);
+    const revCash = this.sales.filter(s => s.payment_mode !== 'tokens').reduce((s, x) => s + (x.total_amount_f || 0), 0);
+    const revTokens = this.sales.filter(s => s.payment_mode === 'tokens').reduce((s, x) => s + (x.total_amount_f || 0), 0);
+    const expTotal = this.expenses.reduce((s, x) => s + Math.abs(x.amount_f), 0);
+    const expectedCash = initF + revCash - expTotal;
+
+    container.innerHTML = `
+      <div style="max-width: 620px; margin: 0 auto;">
+        <div class="card" style="border: 2px solid #ea580c; padding: 1.25rem;">
+          <h3 style="margin-top: 0; margin-bottom: 1rem; color: #c2410c;">
+            🔒 Contrôle &amp; Clôture — Caisse Restauration
+          </h3>
+
+          <div style="background: var(--gray-50); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; align-items: center;">
+              <span>Fond de caisse initial :</span>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <strong>${initF.toLocaleString()} F</strong>
+                <button class="btn btn-secondary btn-sm" style="padding: 1px 6px; font-size: 0.75rem;" onclick="CaisseRestaurationModule.promptEditInitial(${initF})">Modifier</button>
+              </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: var(--success);">
+              <span>+ Recettes Espèces encaissées :</span>
+              <strong>+${revCash.toLocaleString()} F</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #b45309;">
+              <span>🪙 Recettes encaissées en Jetons :</span>
+              <strong>+${revTokens.toLocaleString()} F</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: var(--danger);">
+              <span>- Dépenses déduites de cette caisse :</span>
+              <strong>-${expTotal.toLocaleString()} F</strong>
+            </div>
+            <hr style="border: none; border-top: 1px solid var(--gray-300); margin: 0.5rem 0;">
+            <div style="display: flex; justify-content: space-between; font-size: 1.15rem;">
+              <span><strong>Espèces Théoriques Attendues :</strong></span>
+              <span style="font-weight: 800; color: #c2410c; font-size: 1.25rem;">
+                ${expectedCash.toLocaleString()} F
+              </span>
+            </div>
+          </div>
+
+          ${this.register.status === 'closed' ? `
+            <div class="alert-banner info" style="margin-bottom: 1rem;">
+              <div>
+                🔒 <strong>Caisse Clôturée :</strong><br>
+                Espèces comptées : <strong>${(this.register.counted_amount_f || 0).toLocaleString()} F</strong> | 
+                Écart : <strong>${(this.register.variance_f || 0).toLocaleString()} F</strong>
+              </div>
+            </div>
+            <button class="btn btn-secondary" style="width: 100%;" onclick="CaisseRestaurationModule.reopen()">
+              🔓 Rouvrir cette caisse
+            </button>
+          ` : `
+            <form onsubmit="event.preventDefault(); CaisseRestaurationModule.submitClosure(${expectedCash});">
+              <div class="form-group">
+                <label>Montant en Espèces Réellement Compté (${KermesseConfig.currency}) *</label>
+                <input type="number" id="caisseRestoCounted" class="form-control" style="font-size: 1.2rem; font-weight: 700;" placeholder="Montant dans le tiroir" required>
+              </div>
+              <div class="form-group">
+                <label>Remarques de clôture (optionnel)</label>
+                <input type="text" id="caisseRestoNotes" class="form-control" placeholder="Observations, état du stock restant...">
+              </div>
+              <button class="btn btn-danger" style="width: 100%; font-size: 1rem; font-weight: 800; background: #dc2626;">
+                🔒 Valider la Clôture Caisse Restauration
+              </button>
+            </form>
+          `}
+        </div>
+      </div>
+    `;
+  },
+
+  async promptEditInitial(current) {
+    const val = prompt('Nouveau fond de caisse initial (FCFA) - Laissez 0 si aucun fond :', current);
+    if (val === null) return;
+    const num = Math.max(0, parseInt(val, 10) || 0);
+    await CaissesCore.updateInitialAmount(this.register.id, num);
+    this.register.initial_amount_f = num;
+    Notify.success(`Fond initial fixé à ${num} F.`);
+    this.renderCurrentTab();
+  },
+
+  async submitClosure(expected) {
+    const counted = parseInt(document.getElementById('caisseRestoCounted')?.value || '0', 10);
+    const notes = document.getElementById('caisseRestoNotes')?.value || '';
+    if (isNaN(counted)) return;
+
+    await CaissesCore.closeRegister(this.register.id, this.register.name, expected, counted, notes);
+    Notify.success('Caisse Restauration clôturée.');
+    this.register.status = 'closed';
+    this.register.counted_amount_f = counted;
+    this.register.variance_f = counted - expected;
+    this.renderCurrentTab();
+  },
+
+  async reopen() {
+    await CaissesCore.reopenRegister(this.register.id, this.register.name);
+    Notify.success('Caisse Restauration réouverte.');
+    this.register.status = 'open';
+    this.renderCurrentTab();
+  }
+};
+
+
+// ==============================================================================
+// 5. MODULE : BILAN FINANCIER GLOBAL KERMESSE (CaisseBilanModule)
 // ==============================================================================
 const CaisseBilanModule = {
   sales: [],
   expenses: [],
+  registers: [],
   registers: [],
 
   async render(container) {
@@ -2858,9 +3749,11 @@ const CaisseBilanModule = {
     // Récupération locale de secours si Supabase vide ou hors ligne
     const storedEntree = localStorage.getItem('kermesse_entry_sales');
     const storedJeux = localStorage.getItem('kermesse_game_sales');
+    const storedFood = localStorage.getItem('kermesse_food_sales');
     let localCombined = [];
     try { if (storedEntree) localCombined = [...localCombined, ...JSON.parse(storedEntree)]; } catch (e) {}
     try { if (storedJeux) localCombined = [...localCombined, ...JSON.parse(storedJeux)]; } catch (e) {}
+    try { if (storedFood) localCombined = [...localCombined, ...JSON.parse(storedFood)]; } catch (e) {}
 
     // Filtrer les ventes annulées du localCombined
     localCombined = localCombined.filter(l => !cancelledIds.includes(l.id));
@@ -2879,12 +3772,15 @@ const CaisseBilanModule = {
 
     let revEntree = 0;
     let revJeux = 0;
+    let revResto = 0;
     const standTotals = {};
 
     this.sales.forEach(s => {
       const amt = s.total_amount_f || 0;
       if (s.category === 'entree') {
         revEntree += amt;
+      } else if (s.category === 'restauration') {
+        revResto += amt;
       } else {
         revJeux += amt;
         const stName = s.stand ? s.stand.name : 'Stand Non Spécifié';
@@ -2893,19 +3789,19 @@ const CaisseBilanModule = {
     });
 
     const totalDépenses = this.expenses.reduce((sum, e) => sum + Math.abs(e.amount_f), 0);
-    const totalRecettes = revEntree + revJeux;
+    const totalRecettes = revEntree + revJeux + revResto;
     const beneficeNet = totalRecettes - totalDépenses;
 
     container.innerHTML = `
       <div style="max-width: 860px; margin: 0 auto;">
         
-        <!-- Cartes synthétiques des 3 Caisses -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <!-- Cartes synthétiques des 4 Caisses -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
           
           <div class="card" style="border: 2px solid #10b981; border-top: 6px solid #10b981;">
             <div class="card-body" style="padding: 1rem;">
               <div style="font-weight: 700; color: #065f46; font-size: 0.95rem;">🎟️ Caisse 1 : Entrée &amp; Accueil</div>
-              <div style="font-size: 1.6rem; font-weight: 800; color: #047857; margin: 0.35rem 0;">
+              <div style="font-size: 1.5rem; font-weight: 800; color: #047857; margin: 0.35rem 0;">
                 ${revEntree.toLocaleString()} F
               </div>
               <div style="font-size: 0.8rem; color: var(--gray-500);">Billets d'entrée encaissés</div>
@@ -2916,7 +3812,7 @@ const CaisseBilanModule = {
           <div class="card" style="border: 2px solid var(--primary); border-top: 6px solid var(--primary);">
             <div class="card-body" style="padding: 1rem;">
               <div style="font-weight: 700; color: #1e40af; font-size: 0.95rem;">🎯 Caisse 2 : Tickets de Jeux</div>
-              <div style="font-size: 1.6rem; font-weight: 800; color: #1d4ed8; margin: 0.35rem 0;">
+              <div style="font-size: 1.5rem; font-weight: 800; color: #1d4ed8; margin: 0.35rem 0;">
                 ${revJeux.toLocaleString()} F
               </div>
               <div style="font-size: 0.8rem; color: var(--gray-500);">Tickets des stands &amp; jeux</div>
@@ -2924,10 +3820,21 @@ const CaisseBilanModule = {
             </div>
           </div>
 
+          <div class="card" style="border: 2px solid #ec4899; border-top: 6px solid #ec4899;">
+            <div class="card-body" style="padding: 1rem;">
+              <div style="font-weight: 700; color: #9d174d; font-size: 0.95rem;">🍔 Caisse 4 : Restauration</div>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #be185d; margin: 0.35rem 0;">
+                ${revResto.toLocaleString()} F
+              </div>
+              <div style="font-size: 0.8rem; color: var(--gray-500);">Plats &amp; boissons vendus</div>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_restauration')">Gérer Caisse Resto</button>
+            </div>
+          </div>
+
           <div class="card" style="border: 2px solid #f59e0b; border-top: 6px solid #f59e0b;">
             <div class="card-body" style="padding: 1rem;">
               <div style="font-weight: 700; color: #92400e; font-size: 0.95rem;">🪙 Caisse 3 : Monnaie &amp; Jetons</div>
-              <div style="font-size: 1.6rem; font-weight: 800; color: #b45309; margin: 0.35rem 0;">
+              <div style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin: 0.35rem 0;">
                 Actif
               </div>
               <div style="font-size: 0.8rem; color: var(--gray-500);">Change &amp; rachat jetons</div>
@@ -3004,4 +3911,5 @@ window.CaissesCore = CaissesCore;
 window.CaisseEntreeModule = CaisseEntreeModule;
 window.CaisseJeuxModule = CaisseJeuxModule;
 window.CaisseJetonsModule = CaisseJetonsModule;
+window.CaisseRestaurationModule = CaisseRestaurationModule;
 window.CaisseBilanModule = CaisseBilanModule;

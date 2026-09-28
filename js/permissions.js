@@ -141,9 +141,10 @@ const Permissions = {
         return role === this.ROLES.ADMIN_DECORATION || role === 'admin_organisation';
 
       // Pôle 4 : Restauration
+      case 'caisse_restauration':
       case 'stocks':
       case 'inventory':
-        return role === this.ROLES.ADMIN_RESTAURATION;
+        return role === this.ROLES.ADMIN_RESTAURATION || role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie';
 
       // Pôle 5 : Stands & Jeux
       case 'stands':
@@ -228,9 +229,9 @@ const Permissions = {
       case 'admin_restauration':
         return [
           { module: 'dashboard', icon: '📊', label: 'Accueil' },
+          { module: 'caisse_restauration', icon: '💰', label: 'Caisse' },
           { module: 'stocks', icon: '🍔', label: 'Stocks' },
-          { module: 'inventory', icon: '📦', label: 'Inventaire' },
-          { module: 'tasks', icon: '📋', label: 'Tâches' },
+          { module: 'inventory', icon: '📦', label: 'Pertes' },
           { module: 'messages', icon: '💬', label: 'Chat', isChat: true }
         ];
 
