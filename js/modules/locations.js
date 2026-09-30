@@ -215,6 +215,21 @@ const LocationsModule = {
   },
 
   async loadItems() {
+    // Purger les anciens faux stands / structures de test des versions précédentes
+    try {
+      const storedLayout = localStorage.getItem('kermesse_stadium_layout_coords');
+      if (storedLayout) {
+        const layout = JSON.parse(storedLayout);
+        const cleaned = {};
+        for (const [k, v] of Object.entries(layout)) {
+          if (!k.includes('std-') && !k.includes('struct-1') && !k.includes('struct-2') && !k.includes('struct-3') && !k.includes('struct-4')) {
+            cleaned[k] = v;
+          }
+        }
+        localStorage.setItem('kermesse_stadium_layout_coords', JSON.stringify(cleaned));
+      }
+    } catch (e) {}
+
     if (typeof DecorationModule !== 'undefined' && DecorationModule.aggregateAllStructures) {
       this.items = await DecorationModule.aggregateAllStructures();
     } else {
@@ -236,13 +251,36 @@ const LocationsModule = {
     const container = document.getElementById('stadiumCatalogList');
     if (!container) return;
 
+    if (!this.items || this.items.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 2rem 1rem; color: var(--gray-600);">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏟️</div>
+          <div style="font-weight: 700; color: var(--gray-900); font-size: 0.95rem; margin-bottom: 0.35rem;">
+            Stade de Mbao prêt à aménager !
+          </div>
+          <p style="font-size: 0.8rem; color: var(--gray-500); margin-bottom: 1.25rem; line-height: 1.5;">
+            Vous n'avez pas encore créé de stands de kermesse. Dès que vous créez un stand dans le <strong>Pôle 5</strong> ou une structure festive dans le <strong>Pôle 3</strong>, il apparaîtra ici prêt à être placé sur le terrain.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <button class="btn btn-primary btn-sm" onclick="App.navigateTo('stands')">
+              🎪 Créer un Stand en Pôle 5
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('decoration')">
+              🏰 Ajouter un Manège / Structure
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     const q = (filterText || '').toLowerCase();
     const filtered = this.items.filter(i => (i.name || '').toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q));
 
     if (filtered.length === 0) {
       container.innerHTML = `
         <div style="text-align: center; padding: 2rem; color: var(--gray-500); font-size: 0.85rem;">
-          Aucun élément trouvé.
+          Aucun élément correspondant à votre recherche.
         </div>
       `;
       return;

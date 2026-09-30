@@ -159,85 +159,25 @@ const DecorationModule = {
       }
     }
 
-    // Fallback custom structures
-    if (!this.customStructures || this.customStructures.length === 0) {
-      const storedStructs = localStorage.getItem('kermesse_stadium_placements');
-      if (storedStructs) {
-        try { this.customStructures = JSON.parse(storedStructs); } catch (e) {}
-      } else {
-        // Pré-remplissage standard avec structures festives typiques pour le Stade de Mbao
-        this.customStructures = [
-          {
-            id: 'struct-1',
-            item_type: 'manege',
-            name: '🏰 Château Gonflable Géant "Jungle"',
-            category: 'maneges',
-            icon: '🏰',
-            color: '#3b82f6',
-            pos_x: -25,
-            pos_y: 0,
-            pos_z: 32,
-            rotation_y: 0,
-            scale_x: 6,
-            scale_z: 6,
-            is_placed: true,
-            zone_code: 'jeux',
-            custom_details: { manager: 'Prestataire Attractions Dakar', dimensions: '6m x 6m' }
-          },
-          {
-            id: 'struct-2',
-            item_type: 'manege',
-            name: '🤸 Trampoline 4 Pistes',
-            category: 'maneges',
-            icon: '🤸',
-            color: '#eab308',
-            pos_x: -12,
-            pos_y: 0,
-            pos_z: 32,
-            rotation_y: 0,
-            scale_x: 5,
-            scale_z: 5,
-            is_placed: true,
-            zone_code: 'jeux',
-            custom_details: { manager: 'Équipe Animation', dimensions: '5m x 5m' }
-          },
-          {
-            id: 'struct-3',
-            item_type: 'scene',
-            name: '🎤 Grande Scène & Sono Podium',
-            category: 'scene',
-            icon: '🎤',
-            color: '#8b5cf6',
-            pos_x: 0,
-            pos_y: 0,
-            pos_z: -35,
-            rotation_y: 180,
-            scale_x: 10,
-            scale_z: 6,
-            is_placed: true,
-            zone_code: 'organisation',
-            custom_details: { manager: 'DJ & Régie Son Mbao', dimensions: '10m x 6m' }
-          },
-          {
-            id: 'struct-4',
-            item_type: 'logistique',
-            name: '🚑 Poste de Secours & Croix-Rouge',
-            category: 'secours',
-            icon: '🚑',
-            color: '#ef4444',
-            pos_x: 35,
-            pos_y: 0,
-            pos_z: -28,
-            rotation_y: 90,
-            scale_x: 4,
-            scale_z: 3,
-            is_placed: true,
-            zone_code: 'organisation',
-            custom_details: { manager: 'Équipe Médicale & Secours', dimensions: '4m x 3m' }
-          }
-        ];
+    // Nettoyage et chargement des structures personnalisées réelles (Manèges, Scènes...)
+    const storedStructs = localStorage.getItem('kermesse_stadium_placements');
+    if (storedStructs) {
+      try {
+        const parsed = JSON.parse(storedStructs);
+        // Purger les anciens faux exemples de test
+        this.customStructures = parsed.filter(s => 
+          !String(s.id).startsWith('struct-1') && 
+          !String(s.id).startsWith('struct-2') && 
+          !String(s.id).startsWith('struct-3') && 
+          !String(s.id).startsWith('struct-4') &&
+          !String(s.id).startsWith('std-')
+        );
         localStorage.setItem('kermesse_stadium_placements', JSON.stringify(this.customStructures));
+      } catch (e) {
+        this.customStructures = [];
       }
+    } else {
+      this.customStructures = [];
     }
 
     await this.aggregateAllStructures();
@@ -247,16 +187,26 @@ const DecorationModule = {
 
   /**
    * Agrège TOUTES les entités réelles pour le Stade 3D :
-   * 1. Les Stands officiels du Pôle 5
+   * 1. Les Stands officiels réellement créés dans le Pôle 5 (zéro fausse donnée)
    * 2. La Caisse Restauration / Buvette du Pôle 4
    * 3. Les Caisses Billetterie du Pôle 2
-   * 4. Les Structures personnalisées créées dans ce module (Manèges, Scènes, Barnums, etc.)
+   * 4. Les Structures personnalisées réellement créées par l'utilisateur
    */
   async aggregateAllStructures() {
     const list = [];
     const client = SupabaseClient.client;
 
-    // 1. Stands réels de jeux (Pôle 5)
+    // Nettoyer les anciennes clés factices dans les coordonnées enregistrées
+    const savedLayout = this.getSavedPlacementsMap();
+    let cleanedLayout = {};
+    for (const [k, v] of Object.entries(savedLayout)) {
+      if (!k.includes('std-') && !k.includes('struct-1') && !k.includes('struct-2') && !k.includes('struct-3') && !k.includes('struct-4')) {
+        cleanedLayout[k] = v;
+      }
+    }
+    this.savePlacementsMap(cleanedLayout);
+
+    // 1. Stands réels de jeux (Pôle 5) — ZÉRO FAUSSE DONNÉE
     let standsList = [];
     try {
       if (client) {
@@ -268,34 +218,20 @@ const DecorationModule = {
     if (standsList.length === 0) {
       const storedStands = localStorage.getItem('kermesse_stands');
       if (storedStands) {
-        try { standsList = JSON.parse(storedStands); } catch (e) {}
+        try {
+          const parsed = JSON.parse(storedStands);
+          standsList = parsed.filter(s => !String(s.id).startsWith('std-'));
+        } catch (e) {}
       }
     }
 
-    if (standsList.length === 0) {
-      // 10 stands officiels par défaut
-      standsList = [
-        { id: 'std-1', number: 1, name: 'Chamboule-Tout', color_name: 'Rouge', color_hex: '#dc2626' },
-        { id: 'std-2', number: 2, name: 'Tir aux Ballons', color_name: 'Bleu', color_hex: '#2563eb' },
-        { id: 'std-3', number: 3, name: 'Pêche aux Canards', color_name: 'Jaune', color_hex: '#ca8a04' },
-        { id: 'std-4', number: 4, name: 'Course en Sacs', color_name: 'Vert', color_hex: '#16a34a' },
-        { id: 'std-5', number: 5, name: 'Maquillage Enfants', color_name: 'Rose', color_hex: '#db2777' },
-        { id: 'std-6', number: 6, name: 'Lancer d\'Anneaux', color_name: 'Orange', color_hex: '#ea580c' },
-        { id: 'std-7', number: 7, name: 'Mini-Bowling Forain', color_name: 'Violet', color_hex: '#7c3aed' },
-        { id: 'std-8', number: 8, name: 'Roulette des Lots', color_name: 'Cyan', color_hex: '#0891b2' },
-        { id: 'std-9', number: 9, name: 'Jeu du Palet', color_name: 'Gris', color_hex: '#475569' },
-        { id: 'std-10', number: 10, name: 'Tombola Géante', color_name: 'Or', color_hex: '#d97706' }
-      ];
-    }
+    // SI AUCUN STAND N'A ÉTÉ CRÉÉ DANS LE PÔLE 5 : ON N'EN INVENTE AUCUN !
+    // standsList reste strictement vide tant que l'utilisateur n'a pas créé ses stands
 
-    // Récupération des positions déjà enregistrées
-    const savedLayout = this.getSavedPlacementsMap();
-
-    // Insertion des Stands
+    // Insertion des Stands réels uniquement
     standsList.forEach((st, idx) => {
       const key = `stand_${st.id || st.number}`;
-      const saved = savedLayout[key];
-      // Par défaut, répartis en allée de kermesse le long de la ligne de touche si non placé
+      const saved = cleanedLayout[key];
       const defaultX = -35 + (idx % 5) * 16;
       const defaultZ = idx < 5 ? 16 : -16;
 
@@ -314,7 +250,7 @@ const DecorationModule = {
         rotation_y: saved ? saved.rotation_y : (idx < 5 ? 180 : 0),
         scale_x: 3.5,
         scale_z: 3,
-        is_placed: saved ? (saved.is_placed !== false) : true,
+        is_placed: saved ? (saved.is_placed === true) : false,
         zone_code: 'jeux',
         custom_details: { number: st.number, stand_name: st.name, color_name: st.color_name }
       });
@@ -338,7 +274,7 @@ const DecorationModule = {
       rotation_y: savedResto ? savedResto.rotation_y : -90,
       scale_x: 8,
       scale_z: 4,
-      is_placed: savedResto ? (savedResto.is_placed !== false) : true,
+      is_placed: savedResto ? (savedResto.is_placed === true) : false,
       zone_code: 'restauration',
       custom_details: { manager: 'Admin Restauration' }
     });
@@ -361,7 +297,7 @@ const DecorationModule = {
       rotation_y: savedCaisse ? savedCaisse.rotation_y : 0,
       scale_x: 4.5,
       scale_z: 2.5,
-      is_placed: savedCaisse ? (savedCaisse.is_placed !== false) : true,
+      is_placed: savedCaisse ? (savedCaisse.is_placed === true) : false,
       zone_code: 'billetterie',
       custom_details: { manager: 'Admin Billetterie' }
     });
@@ -385,7 +321,7 @@ const DecorationModule = {
         rotation_y: saved ? saved.rotation_y : (cs.rotation_y || 0),
         scale_x: cs.scale_x || 4,
         scale_z: cs.scale_z || 4,
-        is_placed: saved ? (saved.is_placed !== false) : (cs.is_placed !== false),
+        is_placed: saved ? (saved.is_placed === true) : Boolean(cs.is_placed),
         zone_code: cs.zone_code || 'jeux',
         custom_details: cs.custom_details || {}
       });
