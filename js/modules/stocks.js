@@ -1,63 +1,55 @@
 /**
  * LOVE AND CHARITY (L&C) — GESTION ET CONTRÔLE DE KERMESSE
- * MODULE : STOCKS / NOURRITURE & BOISSONS
+ * PÔLE 4 : RESTAURATION — CARTE DES PRODUITS & MENU
  * 
- * Traçabilité intégrale des denrées pour éviter les disparitions :
- * - Entrées / Livraisons
- * - Sorties vers les stands
- * - Ventes
- * - Pertes / Casse déclarées
- * - Calcul automatique : Stock Théorique vs Réel
+ * Gestion simplifiée à la demande :
+ * - Nom du produit
+ * - Catégorie (Boisson, Snack, Repas chaud, etc.)
+ * - Prix de vente en Francs
+ * - ZÉRO contrainte de stock : les ventes sont libres et illimitées.
  */
 
 const StocksModule = {
+  products: [],
+
   async render(container) {
     container.innerHTML = `
       <div class="card">
         <div class="card-header">
           <div class="card-title">
-            <span>🍔</span> Stocks de Nourriture & Boissons
+            <span>🍔</span> Pôle 4 : Restauration — Carte &amp; Produits
           </div>
-          <div class="card-actions">
-            <button class="btn btn-secondary btn-sm" onclick="StocksModule.openMovementModal()">
-              <span>📦</span> Enregistrer un Mouvement
+          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('caisse_restauration')">
+              <span>💰</span> Ouvrir la Caisse Restauration
             </button>
-            <button class="btn btn-primary btn-sm" onclick="StocksModule.openCreateProductModal()">
+            <button class="btn btn-primary btn-sm" style="background: #ea580c; border-color: #c2410c;" onclick="StocksModule.openCreateProductModal()">
               <span>➕</span> Nouveau Produit
             </button>
           </div>
         </div>
+
         <div class="card-body">
-          <div class="toolbar">
+          <div style="background: #fff7ed; border: 1px solid #ffedd5; border-radius: var(--radius-md); padding: 0.85rem 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <span style="font-weight: 700; color: #9a3412;">ℹ️ Mode Vente Libre :</span>
+              <span style="font-size: 0.85rem; color: #7c2d12; margin-left: 6px;">
+                Aucune limite de stock imposée. Renseignez uniquement le nom, la catégorie et le prix pour encaisser immédiatement.
+              </span>
+            </div>
+            <div id="stocksTotalCountBadge" style="font-weight: 800; color: #ea580c;">0 article(s)</div>
+          </div>
+
+          <div class="toolbar" style="margin-bottom: 1rem;">
             <div class="search-box">
               <span class="search-icon">🔍</span>
-              <input type="text" id="stockSearch" placeholder="Rechercher un produit alimentaire..." oninput="StocksModule.filterTable()">
+              <input type="text" id="stockSearch" placeholder="Rechercher une boisson, snack, plat..." oninput="StocksModule.filterTable()">
             </div>
           </div>
 
           <div class="table-responsive" id="productsTableContainer">
-            <div class="empty-state">
-              <div class="empty-icon">🍔</div>
-              <div class="empty-title">Aucun produit alimentaire enregistré</div>
-              <div class="empty-desc">Enregistrez les boissons, snacks ou repas vendus ou distribués lors de la kermesse pour assurer le suivi des stocks.</div>
-              <button class="btn btn-primary" onclick="StocksModule.openCreateProductModal()">
-                <span>➕</span> Enregistrer le premier produit
-              </button>
-            </div>
-          </div>
-
-          <div class="card" style="margin-top: 2rem;">
-            <div class="card-header">
-              <div class="card-title"><span>📋</span> Historique Récent des Mouvements de Stock</div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive" id="stockMovementsContainer">
-                <div class="empty-state">
-                  <div class="empty-icon">📦</div>
-                  <div class="empty-title">Aucun mouvement de stock</div>
-                  <div class="empty-desc">Les entrées, sorties vers les stands et pertes déclarées seront listées ici avec horodatage et motif.</div>
-                </div>
-              </div>
+            <div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">
+              Chargement de la carte de restauration...
             </div>
           </div>
         </div>
@@ -69,139 +61,112 @@ const StocksModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
-    if (!client) return;
+    this.products = [];
 
-    try {
-      const { data: products, error } = await client
-        .from('food_products')
-        .select('*')
-        .order('name');
+    if (client) {
+      try {
+        const { data, error } = await client
+          .from('food_products')
+          .select('id, name, category, selling_price_f, is_active, created_at')
+          .eq('is_active', true)
+          .order('name');
 
-      if (error) throw error;
-      this.renderProducts(products || []);
-
-      const { data: movements } = await client
-        .from('stock_movements')
-        .select(`
-          id, type, quantity, reason, created_at,
-          product:food_products(name, unit),
-          stand:stands(name),
-          user:app_users(login, full_name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(15);
-
-      this.renderMovements(movements || []);
-    } catch (e) {
-      console.error('[StocksModule Error]', e);
+        if (!error && data) {
+          this.products = data;
+        }
+      } catch (e) {
+        console.warn('[StocksModule Supabase Warning]', e);
+      }
     }
+
+    if (this.products.length === 0) {
+      const stored = localStorage.getItem('kermesse_food_products');
+      if (stored) {
+        try {
+          this.products = JSON.parse(stored);
+        } catch (e) {}
+      }
+    }
+
+    // Persistance locale
+    localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+    this.renderProducts();
   },
 
-  renderProducts(products) {
+  renderProducts() {
     const container = document.getElementById('productsTableContainer');
+    const badge = document.getElementById('stocksTotalCountBadge');
+    if (badge) badge.textContent = `${this.products.length} article(s) au menu`;
     if (!container) return;
 
-    if (!products || products.length === 0) {
+    if (!this.products || this.products.length === 0) {
       container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">🍔</div>
-          <div class="empty-title">Aucun produit alimentaire enregistré</div>
-          <div class="empty-desc">Enregistrez les boissons, snacks ou repas vendus ou distribués lors de la kermesse pour assurer le suivi des stocks.</div>
-          <button class="btn btn-primary" onclick="StocksModule.openCreateProductModal()">
-            <span>➕</span> Enregistrer le premier produit
+        <div class="empty-state" style="padding: 2.5rem; background: var(--gray-50); border: 2px dashed var(--gray-300); border-radius: var(--radius-md); text-align: center;">
+          <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">🍔</div>
+          <div style="font-weight: 800; font-size: 1.15rem; color: var(--gray-800);">Aucun produit alimentaire enregistré</div>
+          <div style="font-size: 0.85rem; color: var(--gray-500); max-width: 450px; margin: 0.4rem auto 1.25rem;">
+            Ajoutez les boissons, snacks ou repas servis lors de la kermesse avec leur tarif de vente.
+          </div>
+          <button class="btn btn-primary" style="background: #ea580c; border-color: #c2410c;" onclick="StocksModule.openCreateProductModal()">
+            <span>➕</span> Ajouter le premier produit
           </button>
         </div>
       `;
       return;
     }
 
+    const getEmoji = (name, cat) => {
+      const n = (name || '').toLowerCase();
+      const c = (cat || '').toLowerCase();
+      if (n.includes('eau') || n.includes('minérale')) return '💧';
+      if (n.includes('jus') || n.includes('bissap') || n.includes('cocktail')) return '🧃';
+      if (n.includes('coca') || n.includes('soda') || n.includes('fanta') || n.includes('sprite')) return '🥤';
+      if (n.includes('bière') || n.includes('biere')) return '🍺';
+      if (n.includes('burger') || n.includes('hamb')) return '🍔';
+      if (n.includes('sandwich') || n.includes('pain') || n.includes('panini')) return '🥪';
+      if (n.includes('pizza')) return '🍕';
+      if (n.includes('frite')) return '🍟';
+      if (n.includes('poulet') || n.includes('chawarma') || n.includes('brochette')) return '🍗';
+      if (n.includes('glace') || n.includes('cornet')) return '🍦';
+      if (n.includes('crêpe') || n.includes('crepe') || n.includes('gâteau') || n.includes('cake')) return '🍰';
+      if (c.includes('boisson')) return '🥤';
+      if (c.includes('snack')) return '🍿';
+      if (c.includes('repas')) return '🍽️';
+      return '🍴';
+    };
+
     container.innerHTML = `
       <table class="data-table">
         <thead>
           <tr>
-            <th>Produit</th>
+            <th style="width: 50px;">Icon</th>
+            <th>Nom du Produit</th>
             <th>Catégorie</th>
-            <th>Unité</th>
             <th>Prix de Vente</th>
-            <th>Stock Initial</th>
-            <th>Stock Actuel</th>
-            <th style="text-align: right;">Action</th>
+            <th style="text-align: right;">Actions</th>
           </tr>
         </thead>
         <tbody id="productsTableBody">
-          ${products.map(p => `
-            <tr data-name="${p.name}" data-cat="${p.category}">
+          ${this.products.map(p => `
+            <tr data-name="${p.name}" data-cat="${p.category || ''}">
+              <td style="font-size: 1.5rem; text-align: center;">${getEmoji(p.name, p.category)}</td>
               <td><strong>${p.name}</strong></td>
-              <td><span class="badge badge-gray">${p.category}</span></td>
-              <td>${p.unit}</td>
-              <td>${p.selling_price_f ? `${p.selling_price_f.toLocaleString()} ${KermesseConfig.currency}` : 'Gratuit'}</td>
-              <td>${p.initial_stock} ${p.unit}</td>
+              <td><span class="badge badge-gray" style="text-transform: capitalize;">${p.category || 'Général'}</span></td>
               <td>
-                <span class="badge ${p.current_stock < 10 ? 'badge-danger' : 'badge-success'}" style="font-size: 0.85rem;">
-                  ${p.current_stock} ${p.unit}
-                </span>
+                <strong style="color: #c2410c; font-size: 1rem;">
+                  ${(p.selling_price_f || 0).toLocaleString()} ${KermesseConfig.currency}
+                </strong>
               </td>
               <td style="text-align: right;">
-                <button class="btn btn-secondary btn-sm" onclick="StocksModule.openQuickMovementModal('${p.id}', '${p.name}', '${p.unit}')">
-                  Mouvement
+                <button class="btn btn-secondary btn-sm" onclick="StocksModule.openEditProductModal('${p.id}')" title="Modifier le produit">
+                  <span>✏️</span> Modifier
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="StocksModule.deleteProduct('${p.id}', '${p.name.replace(/'/g, "\\'")}')" title="Supprimer du menu" style="margin-left: 0.35rem;">
+                  <span>🗑️</span>
                 </button>
               </td>
             </tr>
           `).join('')}
-        </tbody>
-      </table>
-    `;
-  },
-
-  renderMovements(movements) {
-    const container = document.getElementById('stockMovementsContainer');
-    if (!container) return;
-
-    if (!movements || movements.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">📦</div>
-          <div class="empty-title">Aucun mouvement de stock</div>
-          <div class="empty-desc">Les entrées, sorties vers les stands et pertes déclarées seront listées ici avec horodatage et motif.</div>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = `
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Date & Heure</th>
-            <th>Produit</th>
-            <th>Type de Mouvement</th>
-            <th>Quantité</th>
-            <th>Stand Concerné</th>
-            <th>Motif / Justificatif</th>
-            <th>Auteur</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${movements.map(m => {
-            let badgeClass = 'badge-primary';
-            if (m.type === 'entree') badgeClass = 'badge-success';
-            if (m.type === 'perte' || m.type === 'casse') badgeClass = 'badge-danger';
-            if (m.type === 'sortie_stand') badgeClass = 'badge-warning';
-
-            return `
-              <tr>
-                <td style="font-family: monospace; font-size: 0.8rem; color: var(--gray-500);">
-                  ${new Date(m.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
-                </td>
-                <td><strong>${m.product ? m.product.name : 'Produit'}</strong></td>
-                <td><span class="badge ${badgeClass}">${m.type}</span></td>
-                <td><strong>${m.quantity} ${m.product ? m.product.unit : ''}</strong></td>
-                <td>${m.stand ? m.stand.name : '<span style="color: var(--gray-400);">Stock Central</span>'}</td>
-                <td>${m.reason || '-'}</td>
-                <td><strong>${m.user ? (m.user.full_name || m.user.login) : '-'}</strong></td>
-              </tr>
-            `;
-          }).join('')}
         </tbody>
       </table>
     `;
@@ -221,49 +186,41 @@ const StocksModule = {
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
-      <div class="modal-dialog">
+      <div class="modal-dialog" style="max-width: 480px;">
         <div class="modal-header">
-          <h3>Enregistrer un Produit Alimentaire</h3>
+          <h3>Nouveau Produit — Restauration</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
           <form id="createFoodForm">
             <div class="form-group">
               <label>Nom du produit *</label>
-              <input type="text" id="fpName" class="form-control" required placeholder="Ex: Eau Minérale 50cl, Jus de Bissap, Sandwich...">
+              <input type="text" id="fpName" class="form-control" required placeholder="Ex: Jus de Bissap, Sandwich Poulet, Eau 50cl...">
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label>Catégorie *</label>
-                <select id="fpCategory" class="form-control">
-                  <option value="boisson">Boisson</option>
-                  <option value="snack">Snack / Friandise</option>
-                  <option value="repas">Repas chaud</option>
-                  <option value="ingredient">Ingrédient cuisine</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Unité de mesure *</label>
-                <input type="text" id="fpUnit" class="form-control" value="bouteille" placeholder="bouteille, canette, portion, kg...">
-              </div>
+            <div class="form-group">
+              <label>Catégorie *</label>
+              <select id="fpCategory" class="form-control">
+                <option value="Boisson">🥤 Boisson</option>
+                <option value="Snack / Friandise">🍿 Snack / Friandise</option>
+                <option value="Repas chaud">🍗 Repas chaud / Plat</option>
+                <option value="Dessert & Glace">🍰 Dessert &amp; Douceur</option>
+                <option value="Autre">🍽️ Autre</option>
+              </select>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label>Stock Initial *</label>
-                <input type="number" id="fpStock" class="form-control" value="100" min="0" required>
-              </div>
-              <div class="form-group">
-                <label>Prix de Vente (${KermesseConfig.currency})</label>
-                <input type="number" id="fpPrice" class="form-control" value="500" min="0" step="50">
-              </div>
+            <div class="form-group">
+              <label>Prix de Vente (${KermesseConfig.currency}) *</label>
+              <input type="number" id="fpPrice" class="form-control" value="500" min="0" step="50" required placeholder="Ex: 500">
+              <small style="color: var(--gray-500); font-size: 0.75rem;">
+                Le produit sera immédiatement disponible en caisse avec vente illimitée.
+              </small>
             </div>
           </form>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary close-btn">Annuler</button>
-          <button class="btn btn-primary" id="saveFoodBtn">Créer le produit</button>
+          <button class="btn btn-primary" id="saveFoodBtn" style="background: #ea580c; border-color: #c2410c;">Ajouter au Menu</button>
         </div>
       </div>
     `;
@@ -277,109 +234,92 @@ const StocksModule = {
     modal.querySelector('#saveFoodBtn').onclick = async () => {
       const name = document.getElementById('fpName').value.trim();
       const cat = document.getElementById('fpCategory').value;
-      const unit = document.getElementById('fpUnit').value.trim();
-      const stock = parseInt(document.getElementById('fpStock').value, 10);
-      const price = parseInt(document.getElementById('fpPrice').value, 10) || 0;
+      const priceStr = document.getElementById('fpPrice').value;
 
-      if (!name || isNaN(stock)) {
-        Notify.error('Veuillez remplir les informations requises.');
+      if (!name || priceStr === '') {
+        Notify.error('Veuillez renseigner le nom et le prix de vente.');
         return;
       }
+      const price = Math.max(0, parseInt(priceStr, 10) || 0);
 
       const client = SupabaseClient.client;
+      let newId = 'prod-' + Date.now();
+
       if (client) {
-        const { error } = await client.from('food_products').insert([{
-          name,
-          category: cat,
-          unit,
-          initial_stock: stock,
-          current_stock: stock,
-          selling_price_f: price,
-          is_active: true
-        }]);
+        try {
+          const { data, error } = await client.from('food_products').insert([{
+            name,
+            category: cat,
+            selling_price_f: price,
+            unit: 'portion',
+            initial_stock: 999999,
+            current_stock: 999999,
+            is_active: true
+          }]).select('id');
 
-        if (error) {
-          Notify.error('Erreur: ' + error.message);
-          return;
+          if (!error && data && data[0]) {
+            newId = data[0].id;
+          }
+        } catch (e) {
+          console.warn('[Food Product Insert DB Warning]', e);
         }
-
-        AuditLogger.log('CREATION_PRODUIT_NOURRITURE', 'stock', null, `Création du produit ${name} avec stock initial de ${stock} ${unit}`);
-        Notify.success(`Produit ${name} enregistré.`);
-        close();
-        StocksModule.render(document.getElementById('mainContent'));
       }
+
+      this.products.push({
+        id: newId,
+        name,
+        category: cat,
+        selling_price_f: price,
+        is_active: true
+      });
+
+      localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+      AuditLogger.log('CREATION_PRODUIT_RESTAURATION', 'food_products', newId, `Création ${name} (${price} F)`);
+      Notify.success(`« ${name} » ajouté au menu.`);
+      close();
+      this.renderProducts();
     };
   },
 
-  async openMovementModal() {
-    const client = SupabaseClient.client;
-    let products = [];
-    let stands = [];
-
-    if (client) {
-      const { data: p } = await client.from('food_products').select('id, name, unit, current_stock');
-      const { data: s } = await client.from('stands').select('id, name');
-      products = p || [];
-      stands = s || [];
-    }
-
-    if (products.length === 0) {
-      Notify.warning('Veuillez d\'abord enregistrer un produit alimentaire.');
-      return;
-    }
+  openEditProductModal(productId) {
+    const prod = this.products.find(p => p.id === productId);
+    if (!prod) return;
 
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
-      <div class="modal-dialog">
+      <div class="modal-dialog" style="max-width: 480px;">
         <div class="modal-header">
-          <h3>Enregistrer un Mouvement de Stock</h3>
+          <h3>Modifier le Produit</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
-          <form id="stockMvtForm">
+          <form id="editFoodForm">
             <div class="form-group">
-              <label>Produit Concerné *</label>
-              <select id="smProduct" class="form-control">
-                ${products.map(p => `<option value="${p.id}">${p.name} (En stock : ${p.current_stock} ${p.unit})</option>`).join('')}
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Type de Mouvement *</label>
-                <select id="smType" class="form-control">
-                  <option value="sortie_stand">Sortie vers un Stand</option>
-                  <option value="entree">Entrée / Livraison Réceptionnée</option>
-                  <option value="vente">Vente Réalisée</option>
-                  <option value="perte">Perte / Disparition Déclarée</option>
-                  <option value="casse">Casse / Produit Endommagé</option>
-                  <option value="retour">Retour au Stock Central</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Quantité *</label>
-                <input type="number" id="smQty" class="form-control" value="10" min="1" required>
-              </div>
+              <label>Nom du produit *</label>
+              <input type="text" id="editFpName" class="form-control" required value="${prod.name.replace(/"/g, '&quot;')}">
             </div>
 
             <div class="form-group">
-              <label>Stand Destinataire ou Concerné</label>
-              <select id="smStand" class="form-control">
-                <option value="">Stock Central / Cuisine</option>
-                ${stands.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+              <label>Catégorie *</label>
+              <select id="editFpCategory" class="form-control">
+                <option value="Boisson" ${prod.category === 'Boisson' ? 'selected' : ''}>🥤 Boisson</option>
+                <option value="Snack / Friandise" ${prod.category === 'Snack / Friandise' ? 'selected' : ''}>🍿 Snack / Friandise</option>
+                <option value="Repas chaud" ${prod.category === 'Repas chaud' ? 'selected' : ''}>🍗 Repas chaud / Plat</option>
+                <option value="Dessert & Glace" ${prod.category === 'Dessert & Glace' ? 'selected' : ''}>🍰 Dessert &amp; Douceur</option>
+                <option value="Autre" ${prod.category === 'Autre' ? 'selected' : ''}>🍽️ Autre</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label>Motif / Justification *</label>
-              <input type="text" id="smReason" class="form-control" required placeholder="Ex: Réassort du Stand Rouge 1, Bouteille cassée pendant transport...">
+              <label>Prix de Vente (${KermesseConfig.currency}) *</label>
+              <input type="number" id="editFpPrice" class="form-control" value="${prod.selling_price_f || 0}" min="0" step="50" required>
             </div>
           </form>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary close-btn">Annuler</button>
-          <button class="btn btn-primary" id="saveStockMvtBtn">Valider le mouvement</button>
+          <button class="btn btn-primary" id="saveEditFoodBtn" style="background: #ea580c; border-color: #c2410c;">Enregistrer</button>
         </div>
       </div>
     `;
@@ -390,60 +330,61 @@ const StocksModule = {
     modal.querySelector('.modal-close-btn').onclick = close;
     modal.querySelector('.close-btn').onclick = close;
 
-    modal.querySelector('#saveStockMvtBtn').onclick = async () => {
-      const prodId = document.getElementById('smProduct').value;
-      const type = document.getElementById('smType').value;
-      const qty = parseInt(document.getElementById('smQty').value, 10);
-      const standId = document.getElementById('smStand').value || null;
-      const reason = document.getElementById('smReason').value.trim();
-      const user = Auth.getCurrentUser();
+    modal.querySelector('#saveEditFoodBtn').onclick = async () => {
+      const name = document.getElementById('editFpName').value.trim();
+      const cat = document.getElementById('editFpCategory').value;
+      const priceStr = document.getElementById('editFpPrice').value;
 
-      if (isNaN(qty) || qty <= 0 || !reason) {
-        Notify.error('Veuillez renseigner une quantité valide et un motif.');
+      if (!name || priceStr === '') {
+        Notify.error('Veuillez renseigner le nom et le prix.');
         return;
       }
+      const price = Math.max(0, parseInt(priceStr, 10) || 0);
 
-      if (client) {
-        const { error } = await client.from('stock_movements').insert([{
-          product_id: prodId,
-          type,
-          quantity: qty,
-          stand_id: standId,
-          reason,
-          user_id: user ? user.id : null
-        }]);
+      prod.name = name;
+      prod.category = cat;
+      prod.selling_price_f = price;
 
-        if (error) {
-          Notify.error('Erreur: ' + error.message);
-          return;
+      const client = SupabaseClient.client;
+      if (client && CaissesCore.isUuid(productId)) {
+        try {
+          await client.from('food_products').update({
+            name,
+            category: cat,
+            selling_price_f: price
+          }).eq('id', productId);
+        } catch (e) {
+          console.warn('[Food Product Update DB Warning]', e);
         }
-
-        // Si perte ou casse déclarée, créer automatiquement un incident de stock !
-        if (type === 'perte' || type === 'casse') {
-          await client.from('incidents').insert([{
-            incident_number: 'INC-STOCK-' + Math.floor(1000 + Math.random() * 9000),
-            type: 'disparition_nourriture',
-            title: `Perte/Casse de stock : ${qty} unité(s)`,
-            description: `Déclaration de ${type} par ${user?.full_name || user?.login} sur produit ID ${prodId}. Motif : ${reason}`,
-            severity: 'faible',
-            status: 'ouvert',
-            reported_by: user ? user.id : null
-          }]);
-        }
-
-        AuditLogger.log('MOUVEMENT_STOCK', 'stock', prodId, `${type} de ${qty} unité(s). Motif: ${reason} par ${user?.full_name || user?.login}`);
-        Notify.success('Mouvement de stock enregistré.');
-        close();
-        StocksModule.render(document.getElementById('mainContent'));
       }
+
+      localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+      AuditLogger.log('MODIFICATION_PRODUIT_RESTAURATION', 'food_products', productId, `Modification ${name} (${price} F)`);
+      Notify.success(`« ${name} » modifié.`);
+      close();
+      this.renderProducts();
     };
   },
 
-  openQuickMovementModal(productId, productName, unit) {
-    this.openMovementModal().then(() => {
-      const select = document.getElementById('smProduct');
-      if (select) select.value = productId;
-    });
+  async deleteProduct(productId, name) {
+    if (!confirm(`Supprimer définitivement « ${name} » du menu de restauration ?`)) {
+      return;
+    }
+
+    const client = SupabaseClient.client;
+    if (client && CaissesCore.isUuid(productId)) {
+      try {
+        await client.from('food_products').delete().eq('id', productId);
+      } catch (e) {
+        console.warn('[Food Product Delete DB Warning]', e);
+      }
+    }
+
+    this.products = this.products.filter(p => p.id !== productId);
+    localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+    AuditLogger.log('SUPPRESSION_PRODUIT_RESTAURATION', 'food_products', productId, `Suppression ${name}`);
+    Notify.success(`« ${name} » supprimé du menu.`);
+    this.renderProducts();
   }
 };
 

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pôle 4 : Restauration &amp; Buvette — Kermesse Love and Charity</title>
+  
+  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --active-pole-color: #ea580c;
+    }
+  </style>
+</head>
+<body class="pole-page-body">
+
+  <!-- En-tête Navigation Supérieure Dédiée Pôle 4 -->
+  <header class="pole-nav-header">
+    <div class="pole-nav-left">
+      <a href="index.html" class="btn-hub-back">
+        <span>←</span> Menu Général
+      </a>
+      <div class="pole-title-group">
+        <span class="pole-main-badge-icon">🍔</span>
+        <div>
+          <h2>Pôle 4 : Restauration &amp; Buvette</h2>
+          <span>Vente tactile en direct, carte des prix et encaissements</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pole-nav-right">
+      <div class="portal-user-badge">
+        <span class="portal-avatar" style="background: #ea580c;">R</span>
+        <div class="portal-user-info">
+          <span class="portal-user-name" id="headerUserName">Chargement...</span>
+          <span class="portal-user-role" id="headerUserRole" style="color: #ea580c;">Restauration</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.4rem 0.75rem;">
+        <span>🚪</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Barre d'onglets spacieuse pour les sous-modules de Restauration -->
+  <nav class="pole-tabs-bar">
+    <button class="pole-tab-btn active" data-tab="caisse_restauration" onclick="PoleApp.switchTab('caisse_restauration')">
+      <span>💰</span> Caisse &amp; Vente Tactile
+    </button>
+    <button class="pole-tab-btn" data-tab="stocks" onclick="PoleApp.switchTab('stocks')">
+      <span>📋</span> Carte &amp; Prix des Produits
+    </button>
+    <button class="pole-tab-btn" data-tab="inventory" onclick="PoleApp.switchTab('inventory')">
+      <span>📊</span> Inventaires &amp; Pertes
+    </button>
+  </nav>
+
+  <!-- Zone de Contenu Plein Écran Spacieux -->
+  <main class="pole-content-wrapper" id="poleContainer">
+    <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+      Chargement du Pôle Restauration...
+    </div>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.3"></script>
+  <script src="js/notify.js?v=5.3"></script>
+  <script src="js/supabase.js?v=5.3"></script>
+  <script src="js/audit.js?v=5.3"></script>
+  <script src="js/offline.js?v=5.3"></script>
+  <script src="js/auth.js?v=5.3"></script>
+  <script src="js/permissions.js?v=5.3"></script>
+
+  <!-- Modules Pôle 4 -->
+  <script src="js/modules/caisses.js?v=5.3"></script>
+  <script src="js/modules/stocks.js?v=5.3"></script>
+  <script src="js/modules/inventory.js?v=5.3"></script>
+
+  <!-- Contrôleur de Page Pôle 4 -->
+  <script>
+    const PoleApp = {
+      currentTab: 'caisse_restauration',
+      tabs: {
+        caisse_restauration: { label: 'Caisse Restauration', handler: CaisseRestaurationModule },
+        stocks: { label: 'Carte & Produits', handler: StocksModule },
+        inventory: { label: 'Inventaires & Pertes', handler: InventoryModule }
+      },
+
+      init() {
+        if (!Auth.requireAuth()) return;
+        SupabaseClient.init();
+        OfflineManager.init();
+
+        const user = Auth.getCurrentUser();
+        if (user) {
+          document.getElementById('headerUserName').textContent = user.full_name || user.login;
+          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Restauration';
+        }
+
+        const hash = window.location.hash.replace('#', '');
+        if (hash && this.tabs[hash]) {
+          this.switchTab(hash);
+        } else {
+          this.switchTab('caisse_restauration');
+        }
+
+        window.addEventListener('hashchange', () => {
+          const newHash = window.location.hash.replace('#', '');
+          if (newHash && this.tabs[newHash] && newHash !== this.currentTab) {
+            this.switchTab(newHash);
+          }
+        });
+      },
+
+      switchTab(tabId) {
+        if (!this.tabs[tabId]) return;
+        this.currentTab = tabId;
+        window.location.hash = tabId;
+
+        document.querySelectorAll('.pole-tab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+
+        const container = document.getElementById('poleContainer');
+        container.innerHTML = '<div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">Chargement...</div>';
+        
+        try {
+          this.tabs[tabId].handler.render(container);
+        } catch (e) {
+          console.error('[Pole Tab Render Error]', e);
+          container.innerHTML = `<div class="alert-banner danger">Erreur lors de l\'affichage : ${e.message}</div>`;
+        }
+      },
+
+      navigateTo(moduleName) {
+        if (this.tabs[moduleName]) {
+          this.switchTab(moduleName);
+        } else if (moduleName.startsWith('caisse_') || moduleName === 'tickets' || moduleName === 'cash') {
+          window.location.href = `pole2-caisses.html#${moduleName}`;
+        } else {
+          window.location.href = `index.html#${moduleName}`;
+        }
+      }
+    };
+
+    window.App = PoleApp;
+    window.addEventListener('DOMContentLoaded', () => PoleApp.init());
+  </script>
+</body>
+</html>

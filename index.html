@@ -7,518 +7,315 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Love and Charity (L&amp;C) — Gestion et Contrôle de Kermesse</title>
-  <!-- Stylesheets (v=5.0 Refonte Responsive Complète PC, Tablette, Mobile) -->
-  <link rel="stylesheet" href="css/style.css?v=5.1">
-  <link rel="stylesheet" href="css/responsive.css?v=5.1">
-  <!-- Supabase JS Client CDN -->
+  <title>Love &amp; Charity — Portail Kermesse</title>
+  
+  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/portal.css?v=5.3">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Three.js CDN & OrbitControls for Stade de Mbao 3D View -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
-<body>
+<body class="portal-wrapper">
 
-  <div class="app-container">
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar" id="appSidebar">
-      <div class="sidebar-brand">
-        <img src="assets/logo.svg" alt="L&C Logo" class="sidebar-logo">
-        <div class="brand-text">
-          <h1>Love &amp; Charity</h1>
-          <span class="brand-badge">Contrôle Kermesse</span>
-        </div>
-        <button class="sidebar-close-btn" onclick="App.toggleSidebar()" title="Fermer le menu" aria-label="Fermer">✕</button>
+  <!-- En-tête Supérieur du Portail Hub -->
+  <header class="portal-header">
+    <div class="portal-brand">
+      <img src="assets/logo.svg" alt="L&amp;C Logo" class="portal-logo">
+      <div class="portal-brand-text">
+        <h1>Love &amp; Charity</h1>
+        <span>Portail Kermesse</span>
       </div>
-
-      <nav class="sidebar-nav">
-        <!-- Raccourcis Transversaux -->
-        <div class="nav-group">
-          <ul class="nav-links">
-            <li class="nav-item active" data-module="dashboard" onclick="App.navigateTo('dashboard')">
-              <span class="nav-icon">📊</span>
-              <span>Tableau de Bord</span>
-            </li>
-            <li class="nav-item" data-module="messages" onclick="App.navigateTo('messages')">
-              <span class="nav-icon" style="position: relative; display: inline-flex; align-items: center;">
-                💬
-                <span id="sidebarMessagesIconBadge" class="nav-unread-badge" style="display: none;">0</span>
-              </span>
-              <span>Consignes &amp; Messages</span>
-              <span id="messagesUnreadBadge" class="chip-unread-badge" style="margin-left: auto; display: none;">0</span>
-            </li>
-            <li class="nav-item" data-module="tasks" onclick="App.navigateTo('tasks')">
-              <span class="nav-icon">📝</span>
-              <span>Tâches &amp; Bloc-Notes</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 1 : Communication & Affichage -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 1 : Communication &amp; Affichage</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="communication" onclick="App.navigateTo('communication')">
-              <span class="nav-icon">📢</span>
-              <span>Communication &amp; Affichage</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 2 : Billetterie, Caisses & Comptabilité -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 2 : Billetterie, Caisses &amp; Compta</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="caisse_entree" onclick="App.navigateTo('caisse_entree')">
-              <span class="nav-icon">🎟️</span>
-              <span>Caisse Entrée</span>
-            </li>
-            <li class="nav-item" data-module="caisse_jeux" onclick="App.navigateTo('caisse_jeux')">
-              <span class="nav-icon">🎯</span>
-              <span>Caisse Tickets de Jeux</span>
-            </li>
-            <li class="nav-item" data-module="caisse_jetons" onclick="App.navigateTo('caisse_jetons')">
-              <span class="nav-icon">🪙</span>
-              <span>Caisse Jetons</span>
-            </li>
-            <li class="nav-item" data-module="caisse_bilan" onclick="App.navigateTo('caisse_bilan')">
-              <span class="nav-icon">📊</span>
-              <span>Bilan</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 3 : Organisation & Décoration -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 3 : Organisation &amp; Décoration</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="decoration" onclick="App.navigateTo('decoration')">
-              <span class="nav-icon">🎨</span>
-              <span>Décoration &amp; Structures</span>
-            </li>
-            <li class="nav-item" data-module="locations" onclick="App.navigateTo('locations')">
-              <span class="nav-icon">🏟️</span>
-              <span>Stade 3D de Mbao (Plan)</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 4 : Restauration -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 4 : Restauration</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="caisse_restauration" onclick="App.navigateTo('caisse_restauration')">
-              <span class="nav-icon">💰</span>
-              <span>Caisse Restauration</span>
-            </li>
-            <li class="nav-item" data-module="stocks" onclick="App.navigateTo('stocks')">
-              <span class="nav-icon">🍔</span>
-              <span>Denrées &amp; Boissons</span>
-            </li>
-            <li class="nav-item" data-module="inventory" onclick="App.navigateTo('inventory')">
-              <span class="nav-icon">📊</span>
-              <span>Inventaires &amp; Pertes</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 5 : Stands & Jeux -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 5 : Stands &amp; Jeux</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="stands" onclick="App.navigateTo('stands')">
-              <span class="nav-icon">🎪</span>
-              <span>Stands (Couleur+N°)</span>
-            </li>
-            <li class="nav-item" data-module="games" onclick="App.navigateTo('games')">
-              <span class="nav-icon">🎯</span>
-              <span>Jeux &amp; Tarification</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 6 : Lots à gagner -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 6 : Lots à gagner</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="gifts" onclick="App.navigateTo('gifts')">
-              <span class="nav-icon">🎁</span>
-              <span>Lots (Dons &amp; Achats)</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 7 : Planning & Bénévoles -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 7 : Planning &amp; Bénévoles</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="members" onclick="App.navigateTo('members')">
-              <span class="nav-icon">👥</span>
-              <span>Bénévoles &amp; Planning</span>
-            </li>
-            <li class="nav-item" data-module="teams" onclick="App.navigateTo('teams')">
-              <span class="nav-icon">🏷️</span>
-              <span>Équipes &amp; Couleurs</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 8 : Logistique & Installation -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 8 : Logistique &amp; Installation</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="materials" onclick="App.navigateTo('materials')">
-              <span class="nav-icon">📦</span>
-              <span>Matériel Lourd</span>
-            </li>
-            <li class="nav-item" data-module="loans" onclick="App.navigateTo('loans')">
-              <span class="nav-icon">🤝</span>
-              <span>Emprunts &amp; Restitutions</span>
-            </li>
-            <li class="nav-item" data-module="movements" onclick="App.navigateTo('movements')">
-              <span class="nav-icon">🔄</span>
-              <span>Mouvements Matériel</span>
-            </li>
-            <li class="nav-item" data-module="returns" onclick="App.navigateTo('returns')">
-              <span class="nav-icon">🚚</span>
-              <span>Plan de Restitution</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Pôle 9 : Accueil, Nettoyage & Sécurité -->
-        <div class="nav-group">
-          <div class="nav-group-title">Pôle 9 : Accueil &amp; Sécurité</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="security" onclick="App.navigateTo('security')">
-              <span class="nav-icon">🛡️</span>
-              <span>Sécurité, Nettoyage &amp; Secours</span>
-            </li>
-            <li class="nav-item" data-module="incidents" onclick="App.navigateTo('incidents')">
-              <span class="nav-icon">🚨</span>
-              <span>Registre des Incidents</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Supervision / Direction Générale L&C -->
-        <div class="nav-group">
-          <div class="nav-group-title">Supervision &amp; Direction L&amp;C</div>
-          <ul class="nav-links">
-            <li class="nav-item" data-module="roles" onclick="App.navigateTo('roles')">
-              <span class="nav-icon">👑</span>
-              <span>Rôles &amp; Comptes Admins</span>
-            </li>
-            <li class="nav-item" data-module="history" onclick="App.navigateTo('history')">
-              <span class="nav-icon">📜</span>
-              <span>Journal d'Activité Immuable</span>
-            </li>
-            <li class="nav-item" data-module="reports" onclick="App.navigateTo('reports')">
-              <span class="nav-icon">📑</span>
-              <span>Rapports &amp; Bilans Officiels</span>
-            </li>
-          </ul>
-        </div>
-      </nav>
-
-      <div class="sidebar-footer">
-        <span>Love &amp; Charity &copy; 2026</span>
-        <span>v1.0</span>
-      </div>
-    </aside>
-
-    <!-- Mobile Drawer Backdrop Overlay -->
-    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="App.toggleSidebar()"></div>
-
-    <!-- Main Wrapper -->
-    <div class="main-wrapper">
-      <!-- Top Header -->
-      <header class="top-header">
-        <div class="header-left">
-          <button class="mobile-toggle" onclick="App.toggleSidebar()">☰</button>
-          <div class="header-title-wrapper">
-            <h2 id="pageTitle">Tableau de Bord</h2>
-            <p id="pageSub">Love and Charity (L&amp;C) — Gestion et Contrôle de Kermesse</p>
-          </div>
-        </div>
-
-        <div class="header-right">
-          <!-- Sync Badge (Online/Offline) -->
-          <div id="syncBadge" class="sync-badge online">
-            <span class="sync-dot"></span> En ligne
-          </div>
-
-          <!-- Messages Shortcut avec badge flottant Telegram/WhatsApp -->
-          <button id="headerMessagesBtn" class="btn-header-action header-btn-messages" onclick="App.navigateTo('messages')" title="Consignes &amp; Messages" style="position: relative;">
-            <span class="header-icon-wrapper" style="position: relative; display: inline-flex; align-items: center;">
-              <span>💬</span>
-              <span id="headerMessagesBadge" class="nav-unread-badge" style="display: none;">0</span>
-            </span>
-            <span class="header-action-text">Messages</span>
-          </button>
-
-          <!-- Tâches & Bloc-Notes Shortcut -->
-          <button id="headerTasksBtn" class="btn-header-action header-btn-tasks" onclick="App.navigateTo('tasks')" title="Mes Tâches &amp; Bloc-Notes">
-            <span>📝</span>
-            <span class="header-action-text">Tâches</span>
-          </button>
-
-          <!-- User Info (Cliquable pour SuperAdmin pour modifier ses identifiants) -->
-          <div class="user-profile-header" onclick="RolesModule.openEditProfileModal()" style="cursor: pointer;" title="Compte connecté">
-            <div class="user-avatar" id="headerUserAvatar">M</div>
-            <div class="user-info">
-              <span class="user-name" id="headerUserName">Mounir</span>
-              <span class="user-role-badge" id="headerUserRole">SuperAdministrateur</span>
-            </div>
-          </div>
-
-          <!-- Logout Button -->
-          <button class="btn-header-action danger" onclick="Auth.logout()" title="Se déconnecter">
-            <span>🚪</span>
-            <span>Déconnexion</span>
-          </button>
-        </div>
-      </header>
-
-      <!-- Dynamic Content Body -->
-      <main class="content-body" id="mainContent">
-        <!-- Content will be injected dynamically -->
-      </main>
     </div>
 
-    <!-- Barre de navigation basse pour smartphone (1 pouce) -->
-    <nav class="mobile-bottom-nav" id="mobileBottomNav">
-      <button class="bottom-nav-item active" data-bottom-module="dashboard" onclick="App.navigateTo('dashboard')">
-        <span class="bottom-nav-icon">📊</span>
-        <span class="bottom-nav-label">Accueil</span>
+    <div class="portal-user-actions">
+      <div class="portal-user-badge">
+        <div class="portal-avatar" id="headerUserAvatar">U</div>
+        <div class="portal-user-info">
+          <span class="portal-user-name" id="headerUserName">Chargement...</span>
+          <span class="portal-user-role" id="headerUserRole">Admin</span>
+        </div>
+      </div>
+      <a href="tasks.html" class="btn btn-secondary btn-sm" title="Mes Tâches &amp; Bloc-Notes" style="padding: 0.45rem 0.75rem;">
+        <span>📝</span>
+      </a>
+      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.45rem 0.75rem;">
+        <span>🚪</span>
       </button>
-      <button class="bottom-nav-item" data-bottom-module="stands" onclick="App.navigateTo('stands')">
-        <span class="bottom-nav-icon">🎪</span>
-        <span class="bottom-nav-label">Stands</span>
-      </button>
-      <button class="bottom-nav-item" data-bottom-module="tickets" onclick="App.navigateTo('tickets')">
-        <span class="bottom-nav-icon">🎟️</span>
-        <span class="bottom-nav-label">Tickets</span>
-      </button>
-      <button class="bottom-nav-item" data-bottom-module="cash" onclick="App.navigateTo('cash')">
-        <span class="bottom-nav-icon">💵</span>
-        <span class="bottom-nav-label">Caisses</span>
-      </button>
-      <button class="bottom-nav-item" data-bottom-module="messages" onclick="App.navigateTo('messages')">
-        <span class="bottom-nav-icon-wrapper">
-          <span class="bottom-nav-icon">💬</span>
-          <span id="bottomNavMessagesBadge" class="nav-unread-badge" style="display: none;">0</span>
-        </span>
-        <span class="bottom-nav-label">Chat</span>
-      </button>
-      <button class="bottom-nav-item" onclick="App.toggleSidebar()">
-        <span class="bottom-nav-icon">☰</span>
-        <span class="bottom-nav-label">Menu</span>
-      </button>
-    </nav>
-  </div>
+    </div>
+  </header>
+
+  <!-- Contenu Principal : Hub & Cartes Spacieuses -->
+  <main class="portal-main">
+    
+    <!-- Bannière d'Accueil Spacieuse -->
+    <div class="portal-hero">
+      <div class="portal-hero-text">
+        <h2>👋 Bienvenue sur votre espace Kermesse</h2>
+        <p>
+          Touchez votre pôle pour accéder immédiatement à votre espace dédié, grand format et aéré pour mobile et tablette.
+        </p>
+      </div>
+      <div class="portal-quick-tools">
+        <a href="tasks.html" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+          <span>📝</span> Mon Bloc-Notes &amp; Tâches
+        </a>
+        <a href="supervision.html" id="supervisionHeroBtn" class="btn btn-primary btn-sm" style="display: none; background: #0f172a; border-color: #0f172a; font-weight: 700;">
+          <span>👑</span> Supervision &amp; Bilans
+        </a>
+      </div>
+    </div>
+
+    <!-- Barre de Recherche Rapide de Pôle -->
+    <div style="margin-bottom: 1.5rem; max-width: 480px;">
+      <div class="search-box" style="background: white; border: 1px solid var(--gray-300); border-radius: var(--radius-md); padding: 0.4rem 0.75rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: var(--shadow-sm);">
+        <span style="font-size: 1.1rem;">🔍</span>
+        <input type="text" id="poleSearchInput" placeholder="Rechercher un pôle, une caisse, un stand..." oninput="filterPoles()" style="border: none; outline: none; width: 100%; font-size: 0.95rem;">
+      </div>
+    </div>
+
+    <!-- Grille Spacieuse des 9 Pôles + Supervision -->
+    <div class="portal-poles-grid" id="polesGrid">
+
+      <!-- Pôle 1 : Communication & Affichage -->
+      <a href="pole1-communication.html" class="pole-card pole-p1" data-search="communication affiches signaletique sono messages reseaux">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">📢</div>
+          <span class="pole-card-num">Pôle 1</span>
+        </div>
+        <div class="pole-card-title">Communication &amp; Affichage</div>
+        <div class="pole-card-desc">Affiches, flyers, signalétique du stade, consignes sonores et messages d'équipe.</div>
+        <div class="pole-card-footer">
+          <span>Ouvrir l'espace</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 2 : Billetterie & Caisses -->
+      <a href="pole2-caisses.html" class="pole-card pole-p2" data-search="billetterie caisses billets entree tickets jeux jetons monnaie bilan">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">🎟️</div>
+          <span class="pole-card-num">Pôle 2</span>
+        </div>
+        <div class="pole-card-title">Billetterie &amp; Caisses</div>
+        <div class="pole-card-desc">Caisse Entrée, Tickets de jeux, Jetons de monnaie et Bilan financier consolidé.</div>
+        <div class="pole-card-footer">
+          <span>Ouvrir les caisses</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 3 : Organisation, Déco & Stade 3D -->
+      <a href="pole3-organisation.html" class="pole-card pole-p3" data-search="organisation decoration structures plan 3d stade mbao amenagement">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">🎨</div>
+          <span class="pole-card-num">Pôle 3</span>
+        </div>
+        <div class="pole-card-title">Organisation &amp; Stade 3D</div>
+        <div class="pole-card-desc">Aménagement des 10 zones, structures gonflables et plan 3D interactif du Stade de Mbao.</div>
+        <div class="pole-card-footer">
+          <span>Explorer le plan</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 4 : Restauration & Buvette -->
+      <a href="pole4-restauration.html" class="pole-card pole-p4" data-search="restauration buvette nourriture boissons snacks repas vente libre carte prix">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">🍔</div>
+          <span class="pole-card-num">Pôle 4</span>
+        </div>
+        <div class="pole-card-title">Restauration &amp; Buvette</div>
+        <div class="pole-card-desc">Caisse tactile en vente libre (boissons, repas, snacks) et gestion de la carte des tarifs.</div>
+        <div class="pole-card-footer">
+          <span>Ouvrir la caisse</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 5 : Stands & Jeux -->
+      <a href="pole5-stands.html" class="pole-card pole-p5" data-search="stands jeux attractions couleurs numero regles tarification">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">🎪</div>
+          <span class="pole-card-num">Pôle 5</span>
+        </div>
+        <div class="pole-card-title">Stands &amp; Jeux</div>
+        <div class="pole-card-desc">Identification des stands par couleur &amp; numéro, fiches d'activités et tarification.</div>
+        <div class="pole-card-footer">
+          <span>Gérer les stands</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 6 : Lots à gagner & Cadeaux -->
+      <a href="pole6-lots.html" class="pole-card pole-p6" data-search="lots cadeaux dons achats dotations distribution gagnants">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">🎁</div>
+          <span class="pole-card-num">Pôle 6</span>
+        </div>
+        <div class="pole-card-title">Lots à gagner &amp; Cadeaux</div>
+        <div class="pole-card-desc">Catalogue des lots (achats et dons), dotations par catégorie et registre de distribution.</div>
+        <div class="pole-card-footer">
+          <span>Voir les lots</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 7 : Bénévoles & Planning -->
+      <a href="pole7-benevoles.html" class="pole-card pole-p7" data-search="benevoles planning equipes couleurs contacts whatsapp affectations">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">👥</div>
+          <span class="pole-card-num">Pôle 7</span>
+        </div>
+        <div class="pole-card-title">Bénévoles &amp; Planning</div>
+        <div class="pole-card-desc">Fiches des bénévoles, contacts WhatsApp directs, plannings du jour et codes couleurs.</div>
+        <div class="pole-card-footer">
+          <span>Voir le planning</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 8 : Logistique & Matériel -->
+      <a href="pole8-materiel.html" class="pole-card pole-p8" data-search="logistique materiel tentes sono tables chaises emprunts locations retours">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">📦</div>
+          <span class="pole-card-num">Pôle 8</span>
+        </div>
+        <div class="pole-card-title">Logistique &amp; Matériel</div>
+        <div class="pole-card-desc">Tentes, sono, tables, électricité, chaîne d'emprunts nominatifs et plan de restitution.</div>
+        <div class="pole-card-footer">
+          <span>Gérer le matériel</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Pôle 9 : Accueil, Secours & Sécurité -->
+      <a href="pole9-securite.html" class="pole-card pole-p9" data-search="securite secours urgences incidents registre objets trouves nettoyage proprete">
+        <div class="pole-card-top">
+          <div class="pole-card-icon">🛡️</div>
+          <span class="pole-card-num">Pôle 9</span>
+        </div>
+        <div class="pole-card-title">Accueil, Secours &amp; Sécurité</div>
+        <div class="pole-card-desc">Poste de secours, rondes sanitaires, alerte enfant égaré et registre des incidents.</div>
+        <div class="pole-card-footer">
+          <span>Poste de contrôle</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- Espace Direction / SuperAdmin (Affiché à tous les administrateurs avec droits) -->
+      <a href="supervision.html" class="pole-card pole-supervision" id="supervisionCard" data-search="supervision superadmin direction tableau de bord bilan compta roles comptes journal audit">
+        <div class="pole-card-top">
+          <div class="pole-card-icon" style="background: #1e293b; color: #f8fafc;">👑</div>
+          <span class="pole-card-num" style="background: #1e293b; color: #f8fafc;">Direction</span>
+        </div>
+        <div class="pole-card-title">Supervision &amp; Direction</div>
+        <div class="pole-card-desc">Tableau de bord général en temps réel, bilans comptables officiels, comptes et audit.</div>
+        <div class="pole-card-footer" style="color: #0f172a;">
+          <span>Accéder à la supervision</span>
+          <span class="pole-card-arrow">→</span>
+        </div>
+      </a>
+
+    </div>
+
+  </main>
 
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- Core Scripts (v=5.0 Anti-Cache Purge) -->
-  <script src="js/config.js?v=5.1"></script>
-  <script src="js/notify.js?v=5.1"></script>
-  <script src="js/supabase.js?v=5.1"></script>
-  <script src="js/audit.js?v=5.1"></script>
-  <script src="js/offline.js?v=5.1"></script>
-  <script src="js/auth.js?v=5.1"></script>
-  <script src="js/permissions.js?v=5.1"></script>
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.3"></script>
+  <script src="js/notify.js?v=5.3"></script>
+  <script src="js/supabase.js?v=5.3"></script>
+  <script src="js/audit.js?v=5.3"></script>
+  <script src="js/offline.js?v=5.3"></script>
+  <script src="js/auth.js?v=5.3"></script>
+  <script src="js/permissions.js?v=5.3"></script>
 
-  <!-- Module Scripts (v=5.0 Anti-Cache Purge) -->
-  <script src="js/modules/caisses.js?v=5.1"></script>
-  <script src="js/modules/dashboard.js?v=5.1"></script>
-  <script src="js/modules/communication.js?v=5.1"></script>
-  <script src="js/modules/members.js?v=5.1"></script>
-  <script src="js/modules/teams.js?v=5.1"></script>
-  <script src="js/modules/stands.js?v=5.1"></script>
-  <script src="js/modules/roles.js?v=5.1"></script>
-  <script src="js/modules/tickets.js?v=5.1"></script>
-  <script src="js/modules/cash.js?v=5.1"></script>
-  <script src="js/modules/games.js?v=5.1"></script>
-  <script src="js/modules/decoration.js?v=5.1"></script>
-  <script src="js/modules/stocks.js?v=5.1"></script>
-  <script src="js/modules/gifts.js?v=5.1"></script>
-  <script src="js/modules/inventory.js?v=5.1"></script>
-  <script src="js/modules/locations.js?v=5.1"></script>
-  <script src="js/modules/materials.js?v=5.1"></script>
-  <script src="js/modules/loans.js?v=5.1"></script>
-  <script src="js/modules/movements.js?v=5.1"></script>
-  <script src="js/modules/returns.js?v=5.1"></script>
-  <script src="js/modules/expenses.js?v=5.1"></script>
-  <script src="js/modules/closures.js?v=5.1"></script>
-  <script src="js/modules/security.js?v=5.1"></script>
-  <script src="js/modules/incidents.js?v=5.1"></script>
-  <script src="js/modules/history.js?v=5.1"></script>
-  <script src="js/modules/reports.js?v=5.1"></script>
-  <script src="js/modules/messages.js?v=5.1"></script>
-  <script src="js/modules/tasks.js?v=5.1"></script>
-
-  <!-- Application Controller -->
+  <!-- Routeur & Contrôleur du Hub -->
   <script>
-    const App = {
-      currentModule: 'dashboard',
+    // Routage rétro-compatible des anciens liens (#caisse_restauration, #stands...)
+    const modulePageMap = {
+      communication: 'pole1-communication.html',
+      messages: 'pole1-communication.html#messages',
+      caisse_entree: 'pole2-caisses.html#caisse_entree',
+      caisse_jeux: 'pole2-caisses.html#caisse_jeux',
+      caisse_jetons: 'pole2-caisses.html#caisse_jetons',
+      caisse_bilan: 'pole2-caisses.html#caisse_bilan',
+      tickets: 'pole2-caisses.html#caisse_jeux',
+      cash: 'pole2-caisses.html#caisse_entree',
+      expenses: 'pole2-caisses.html#caisse_jeux',
+      closures: 'pole2-caisses.html#caisse_bilan',
+      decoration: 'pole3-organisation.html#decoration',
+      locations: 'pole3-organisation.html#locations',
+      caisse_restauration: 'pole4-restauration.html#caisse_restauration',
+      stocks: 'pole4-restauration.html#stocks',
+      inventory: 'pole4-restauration.html#inventory',
+      stands: 'pole5-stands.html#stands',
+      games: 'pole5-stands.html#games',
+      gifts: 'pole6-lots.html#gifts',
+      members: 'pole7-benevoles.html#members',
+      teams: 'pole7-benevoles.html#teams',
+      materials: 'pole8-materiel.html#materials',
+      loans: 'pole8-materiel.html#loans',
+      movements: 'pole8-materiel.html#movements',
+      returns: 'pole8-materiel.html#returns',
+      security: 'pole9-securite.html#security',
+      incidents: 'pole9-securite.html#incidents',
+      dashboard: 'supervision.html#dashboard',
+      roles: 'supervision.html#roles',
+      history: 'supervision.html#history',
+      reports: 'supervision.html#reports',
+      tasks: 'tasks.html'
+    };
 
-      modules: {
-        dashboard: { title: 'Tableau de Bord', sub: 'Vue globale et indicateurs transversaux en temps réel', handler: DashboardModule },
-        messages: { title: 'Consignes & Messages', sub: 'Communication interne, directives par stand et alertes', handler: MessagesModule },
-        tasks: { title: 'Mes Tâches & Bloc-Notes', sub: 'Checklist personnelle, suivi de progression et mémos rapides', handler: TasksModule },
-        communication: { title: 'Pôle 1 : Communication & Affichage', sub: 'Affiches, flyers, réseaux sociaux, WhatsApp et signalétique', handler: CommunicationModule },
-        caisse_entree: { title: 'Pôle 2 : Caisse Entrée & Accueil', sub: 'Vente des billets d\'entrée, dépenses de caisse et clôture', handler: CaisseEntreeModule },
-        caisse_jeux: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Vente tactile des tickets liée aux stands & jeux, dépenses et clôture', handler: CaisseJeuxModule },
-        caisse_jetons: { title: 'Pôle 2 : Caisse Jetons & Monnaie', sub: 'Change, émission et remboursement de jetons, dépenses', handler: CaisseJetonsModule },
-        caisse_bilan: { title: 'Pôle 2 : Bilan Financier Kermesse', sub: 'Bilan comptable consolidé des 4 caisses et rentabilité des stands', handler: CaisseBilanModule },
-        tickets: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Vente tactile liée aux stands & jeux', handler: CaisseJeuxModule },
-        cash: { title: 'Pôle 2 : Caisse Entrée & Caisses', sub: 'Gestion des caisses et fonds', handler: CaisseEntreeModule },
-        expenses: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Dépenses et sorties de caisse', handler: CaisseJeuxModule },
-        closures: { title: 'Pôle 2 : Bilan Financier', sub: 'Clôtures et bilan consolidé', handler: CaisseBilanModule },
-        decoration: { title: 'Pôle 3 : Décoration & Structures', sub: 'Aménagement des 10 zones, catalogue des structures, manèges et mobilier', handler: DecorationModule },
-        locations: { title: 'Pôle 3 : Stade 3D de Mbao (Plan)', sub: 'Maquette 3D interactive du Stade de Mbao, placement et plan de masse', handler: LocationsModule },
-        caisse_restauration: { title: 'Pôle 4 : Caisse Restauration & Buvette', sub: 'Vente tactile des plats & boissons liée aux stocks, dépenses et clôture', handler: CaisseRestaurationModule },
-        stocks: { title: 'Pôle 4 : Restauration', sub: 'Denrées, snacks, boissons, emballages, cuisine et réapprovisionnements', handler: StocksModule },
-        inventory: { title: 'Pôle 4 : Inventaires & Pertes', sub: 'Comptages comparatifs, réapprovisionnements et pertes/périmés', handler: InventoryModule },
-        stands: { title: 'Pôle 5 : Stands (Couleur + N°)', sub: 'Identification par couleur & numéro, fiches complètes et équipes dédiées', handler: StandsModule },
-        games: { title: 'Pôle 5 : Jeux & Attractions', sub: 'Catalogue des activités, règles du jeu et tarification en tickets', handler: GamesModule },
-        gifts: { title: 'Pôle 6 : Lots & Cadeaux', sub: 'Catalogue des lots (achats & dons), 4 catégories, dotations et distributions', handler: GiftsModule },
-        members: { title: 'Pôle 7 : Bénévoles & Planning', sub: 'Fiches bénévoles, contacts WhatsApp et planning avec détection anti-conflits', handler: MembersModule },
-        teams: { title: 'Pôle 7 : Équipes & Couleurs', sub: 'Groupes d\'affectation et codes couleurs d\'identification', handler: TeamsModule },
-        materials: { title: 'Pôle 8 : Matériel Lourd', sub: 'Tentes, tables, sono, électricité et propriétaires', handler: MaterialsModule },
-        loans: { title: 'Pôle 8 : Emprunts & Locations', sub: 'Chaîne de prêt nominative, dates de retour et contacts', handler: LoansModule },
-        movements: { title: 'Pôle 8 : Mouvements Matériel', sub: 'Traçabilité des transferts entre lieux et stands', handler: MovementsModule },
-        returns: { title: 'Pôle 8 : Plan de Restitution', sub: 'Checklists de démontage et restitution par bénévole', handler: ReturnsModule },
-        security: { title: 'Pôle 9 : Accueil, Nettoyage & Sécurité', sub: 'Urgences, alerte enfant perdu, rondes sanitaires et objets trouvés', handler: SecurityModule },
-        incidents: { title: 'Pôle 9 : Registre des Incidents', sub: 'Registre officiel des incidents, chutes, pannes et résolutions', handler: IncidentsModule },
-        roles: { title: 'Supervision : Rôles & Comptes', sub: 'Gestion des 9 administrateurs métier et des SuperAdmins', handler: RolesModule },
-        history: { title: 'Supervision : Journal d\'Activité', sub: 'Traçabilité immuable de toutes les opérations de kermesse', handler: HistoryModule },
-        reports: { title: 'Supervision : Rapports & Synthèses', sub: 'Bilans officiels pour l\'association', handler: ReportsModule }
-      },
+    window.addEventListener('DOMContentLoaded', () => {
+      // 1. Contrôle d'authentification
+      if (!Auth.requireAuth()) return;
 
-      init() {
-        // 1. Contrôle d'authentification
-        if (!Auth.requireAuth()) return;
+      // 2. Initialisation des services
+      SupabaseClient.init();
+      OfflineManager.init();
 
-        // 2. Initialisation des services
-        SupabaseClient.init();
-        OfflineManager.init();
+      // 3. Redirection automatique si un hash est présent
+      const hash = window.location.hash.replace('#', '');
+      if (hash && modulePageMap[hash]) {
+        window.location.replace(modulePageMap[hash]);
+        return;
+      }
 
-        // 3. Affichage profil utilisateur
-        const user = Auth.getCurrentUser();
-        if (user) {
-          document.getElementById('headerUserName').textContent = user.full_name || user.login;
-          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Administrateur';
-          document.getElementById('headerUserAvatar').textContent = (user.login || 'U').charAt(0).toUpperCase();
+      // 4. Profil utilisateur
+      const user = Auth.getCurrentUser();
+      if (user) {
+        document.getElementById('headerUserName').textContent = user.full_name || user.login;
+        document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Administrateur';
+        document.getElementById('headerUserAvatar').textContent = (user.login || 'U').charAt(0).toUpperCase();
+
+        const isSuperAdmin = user.is_original_superadmin || user.role_code === 'superadmin';
+        if (isSuperAdmin) {
+          const heroBtn = document.getElementById('supervisionHeroBtn');
+          if (heroBtn) heroBtn.style.display = 'inline-flex';
         }
+      }
+    });
 
-        // 4. Filtrage dynamique du menu selon le rôle
-        Permissions.applyNavFiltering();
+    // Filtrage des cartes par mot-clé
+    function filterPoles() {
+      const q = (document.getElementById('poleSearchInput').value || '').toLowerCase().trim();
+      const cards = document.querySelectorAll('.pole-card');
+      cards.forEach(card => {
+        const text = (card.dataset.search || '' + ' ' + card.innerText).toLowerCase();
+        card.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+    }
 
-        // 5. Surveillance en arrière-plan des consignes et alertes
-        if (typeof MessagesModule !== 'undefined' && MessagesModule.startPolling) {
-          MessagesModule.startPolling();
-        }
-
-        // 6. Routage basé sur l'ancre URL (#stands, #tickets...)
-        const hash = window.location.hash.replace('#', '') || 'dashboard';
-        this.navigateTo(this.modules[hash] ? hash : 'dashboard', false);
-
-        window.addEventListener('hashchange', () => {
-          const newHash = window.location.hash.replace('#', '');
-          if (newHash && this.modules[newHash] && newHash !== this.currentModule) {
-            this.navigateTo(newHash, false);
-          }
-        });
-      },
-
-      navigateTo(moduleName, updateHash = true) {
-        const mod = this.modules[moduleName];
-        if (!mod) return;
-
-        // Protection stricte : l'administrateur ne peut naviguer que dans son pôle ou les modules universels
-        if (typeof Permissions !== 'undefined' && !Permissions.canAccessModule(moduleName)) {
-          Notify.error("Accès réservé : ce module relève d'un autre pôle.");
-          if (this.currentModule !== 'dashboard') {
-            this.navigateTo('dashboard', true);
-          }
-          return;
-        }
-
-        // Nettoyage de l'ancien module si disponible (ex: 3D Three.js)
-        if (this.currentModule && this.modules[this.currentModule] && typeof this.modules[this.currentModule].handler.cleanup === 'function') {
-          try { this.modules[this.currentModule].handler.cleanup(); } catch (e) {}
-        }
-
-        this.currentModule = moduleName;
-        if (updateHash) {
-          window.location.hash = moduleName;
-        }
-
-        // Réinitialiser le mode chat plein écran si on change de page
-        document.body.classList.remove('in-chat-view');
-
-        // Mettre à jour le titre
-        document.getElementById('pageTitle').textContent = mod.title;
-        document.getElementById('pageSub').textContent = mod.sub;
-
-        // Mettre à jour l'élément actif dans la sidebar
-        document.querySelectorAll('.nav-item').forEach(item => {
-          if (item.dataset.module === moduleName) {
-            item.classList.add('active');
-          } else {
-            item.classList.remove('active');
-          }
-        });
-
-        // Fermer la sidebar et le backdrop sur mobile après sélection
-        document.getElementById('appSidebar').classList.remove('open');
-        const backdrop = document.getElementById('sidebarBackdrop');
-        if (backdrop) backdrop.classList.remove('open');
-
-        // Mettre à jour l'élément actif dans la barre de navigation basse
-        document.querySelectorAll('.bottom-nav-item').forEach(btn => {
-          if (btn.dataset.bottomModule === moduleName) {
-            btn.classList.add('active');
-          } else {
-            btn.classList.remove('active');
-          }
-        });
-
-        // Rendu du module
-        const container = document.getElementById('mainContent');
-        container.innerHTML = '<div style="text-align: center; padding: 2rem;"><p style="color: var(--gray-500);">Chargement...</p></div>';
-        
-        try {
-          mod.handler.render(container);
-        } catch (e) {
-          console.error('[Module Render Error]', e);
-          container.innerHTML = `
-            <div class="alert-banner danger">
-              <div>❌ Erreur lors du chargement du module : ${e.message}</div>
-            </div>
-          `;
-        }
-      },
-
-      toggleSidebar() {
-        const sidebar = document.getElementById('appSidebar');
-        const backdrop = document.getElementById('sidebarBackdrop');
-        const isOpen = sidebar.classList.toggle('open');
-        if (backdrop) {
-          if (isOpen) {
-            backdrop.classList.add('open');
-          } else {
-            backdrop.classList.remove('open');
-          }
+    // Objet App pour compatibilité
+    window.App = {
+      navigateTo(moduleName) {
+        if (modulePageMap[moduleName]) {
+          window.location.href = modulePageMap[moduleName];
         }
       }
     };
-
-    window.App = App;
-    window.addEventListener('DOMContentLoaded', () => App.init());
   </script>
 </body>
 </html>

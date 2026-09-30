@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Supervision &amp; Bilans SuperAdmin — Kermesse Love and Charity</title>
+  
+  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --active-pole-color: #0f172a;
+    }
+  </style>
+</head>
+<body class="pole-page-body">
+
+  <!-- En-tête Navigation Supérieure Dédiée Supervision -->
+  <header class="pole-nav-header">
+    <div class="pole-nav-left">
+      <a href="index.html" class="btn-hub-back">
+        <span>←</span> Menu Général
+      </a>
+      <div class="pole-title-group">
+        <span class="pole-main-badge-icon">👑</span>
+        <div>
+          <h2>Supervision &amp; Direction Kermesse</h2>
+          <span>Tableau de bord consolidé, bilans officiels et gestion des accès</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pole-nav-right">
+      <div class="portal-user-badge">
+        <span class="portal-avatar" style="background: #0f172a;">A</span>
+        <div class="portal-user-info">
+          <span class="portal-user-name" id="headerUserName">SuperAdmin</span>
+          <span class="portal-user-role" id="headerUserRole" style="color: #dc2626;">SuperAdmin</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.4rem 0.75rem;">
+        <span>🚪</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Barre d'onglets spacieuse Supervision -->
+  <nav class="pole-tabs-bar">
+    <button class="pole-tab-btn active" data-tab="dashboard" onclick="PoleApp.switchTab('dashboard')">
+      <span>📊</span> Tableau de Bord Global
+    </button>
+    <button class="pole-tab-btn" data-tab="caisse_bilan" onclick="PoleApp.switchTab('caisse_bilan')">
+      <span>💰</span> Bilan Financier Consolidé
+    </button>
+    <button class="pole-tab-btn" data-tab="roles" onclick="PoleApp.switchTab('roles')">
+      <span>👥</span> Rôles &amp; Comptes
+    </button>
+    <button class="pole-tab-btn" data-tab="history" onclick="PoleApp.switchTab('history')">
+      <span>📜</span> Journal d'Activité
+    </button>
+    <button class="pole-tab-btn" data-tab="reports" onclick="PoleApp.switchTab('reports')">
+      <span>📑</span> Rapports Officiels
+    </button>
+  </nav>
+
+  <!-- Zone de Contenu Plein Écran Spacieux -->
+  <main class="pole-content-wrapper" id="poleContainer">
+    <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+      Chargement de l'espace Supervision...
+    </div>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.3"></script>
+  <script src="js/notify.js?v=5.3"></script>
+  <script src="js/supabase.js?v=5.3"></script>
+  <script src="js/audit.js?v=5.3"></script>
+  <script src="js/offline.js?v=5.3"></script>
+  <script src="js/auth.js?v=5.3"></script>
+  <script src="js/permissions.js?v=5.3"></script>
+
+  <!-- Modules Supervision -->
+  <script src="js/modules/dashboard.js?v=5.3"></script>
+  <script src="js/modules/caisses.js?v=5.3"></script>
+  <script src="js/modules/roles.js?v=5.3"></script>
+  <script src="js/modules/history.js?v=5.3"></script>
+  <script src="js/modules/reports.js?v=5.3"></script>
+
+  <!-- Contrôleur de Page Supervision -->
+  <script>
+    const PoleApp = {
+      currentTab: 'dashboard',
+      tabs: {
+        dashboard: { label: 'Tableau de bord', handler: DashboardModule },
+        caisse_bilan: { label: 'Bilan Financier', handler: CaisseBilanModule },
+        roles: { label: 'Rôles & Comptes', handler: RolesModule },
+        history: { label: 'Journal', handler: HistoryModule },
+        reports: { label: 'Rapports', handler: ReportsModule }
+      },
+
+      init() {
+        if (!Auth.requireAuth()) return;
+        SupabaseClient.init();
+        OfflineManager.init();
+
+        const user = Auth.getCurrentUser();
+        if (user) {
+          document.getElementById('headerUserName').textContent = user.full_name || user.login;
+          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'SuperAdmin';
+        }
+
+        const hash = window.location.hash.replace('#', '');
+        if (hash && this.tabs[hash]) {
+          this.switchTab(hash);
+        } else {
+          this.switchTab('dashboard');
+        }
+
+        window.addEventListener('hashchange', () => {
+          const newHash = window.location.hash.replace('#', '');
+          if (newHash && this.tabs[newHash] && newHash !== this.currentTab) {
+            this.switchTab(newHash);
+          }
+        });
+      },
+
+      switchTab(tabId) {
+        if (!this.tabs[tabId]) return;
+        this.currentTab = tabId;
+        window.location.hash = tabId;
+
+        document.querySelectorAll('.pole-tab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+
+        const container = document.getElementById('poleContainer');
+        container.innerHTML = '<div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">Chargement...</div>';
+        
+        try {
+          this.tabs[tabId].handler.render(container);
+        } catch (e) {
+          console.error('[Pole Tab Render Error]', e);
+          container.innerHTML = `<div class="alert-banner danger">Erreur lors de l\'affichage : ${e.message}</div>`;
+        }
+      },
+
+      navigateTo(moduleName) {
+        if (this.tabs[moduleName]) {
+          this.switchTab(moduleName);
+        } else if (moduleName.startsWith('caisse_') || moduleName === 'tickets' || moduleName === 'cash') {
+          window.location.href = `pole2-caisses.html#${moduleName}`;
+        } else if (moduleName === 'stocks' || moduleName === 'caisse_restauration') {
+          window.location.href = `pole4-restauration.html#${moduleName}`;
+        } else {
+          window.location.href = `index.html#${moduleName}`;
+        }
+      }
+    };
+
+    window.App = PoleApp;
+    window.addEventListener('DOMContentLoaded', () => PoleApp.init());
+  </script>
+</body>
+</html>

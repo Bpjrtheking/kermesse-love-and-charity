@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pôle 3 : Organisation &amp; Stade 3D — Kermesse Love and Charity</title>
+  
+  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Three.js CDN & OrbitControls pour le Plan 3D du Stade -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --active-pole-color: #10b981;
+    }
+  </style>
+</head>
+<body class="pole-page-body">
+
+  <!-- En-tête Navigation Supérieure Dédiée Pôle 3 -->
+  <header class="pole-nav-header">
+    <div class="pole-nav-left">
+      <a href="index.html" class="btn-hub-back">
+        <span>←</span> Menu Général
+      </a>
+      <div class="pole-title-group">
+        <span class="pole-main-badge-icon">🎨</span>
+        <div>
+          <h2>Pôle 3 : Organisation, Déco &amp; Plan 3D</h2>
+          <span>Aménagement des 10 zones et maquette 3D interactive du Stade de Mbao</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pole-nav-right">
+      <div class="portal-user-badge">
+        <span class="portal-avatar" style="background: #10b981;">O</span>
+        <div class="portal-user-info">
+          <span class="portal-user-name" id="headerUserName">Chargement...</span>
+          <span class="portal-user-role" id="headerUserRole" style="color: #10b981;">Organisation</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.4rem 0.75rem;">
+        <span>🚪</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Barre d'onglets spacieuse Pôle 3 -->
+  <nav class="pole-tabs-bar">
+    <button class="pole-tab-btn active" data-tab="decoration" onclick="PoleApp.switchTab('decoration')">
+      <span>🎨</span> Décoration &amp; Structures (10 Zones)
+    </button>
+    <button class="pole-tab-btn" data-tab="locations" onclick="PoleApp.switchTab('locations')">
+      <span>🏟️</span> Stade 3D de Mbao (Plan Interactif)
+    </button>
+  </nav>
+
+  <!-- Zone de Contenu Plein Écran Spacieux -->
+  <main class="pole-content-wrapper" id="poleContainer">
+    <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+      Chargement du Pôle Organisation...
+    </div>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.3"></script>
+  <script src="js/notify.js?v=5.3"></script>
+  <script src="js/supabase.js?v=5.3"></script>
+  <script src="js/audit.js?v=5.3"></script>
+  <script src="js/offline.js?v=5.3"></script>
+  <script src="js/auth.js?v=5.3"></script>
+  <script src="js/permissions.js?v=5.3"></script>
+
+  <!-- Modules Pôle 3 -->
+  <script src="js/modules/decoration.js?v=5.3"></script>
+  <script src="js/modules/locations.js?v=5.3"></script>
+
+  <!-- Contrôleur de Page Pôle 3 -->
+  <script>
+    const PoleApp = {
+      currentTab: 'decoration',
+      tabs: {
+        decoration: { label: 'Décoration & Zones', handler: DecorationModule },
+        locations: { label: 'Stade 3D', handler: LocationsModule }
+      },
+
+      init() {
+        if (!Auth.requireAuth()) return;
+        SupabaseClient.init();
+        OfflineManager.init();
+
+        const user = Auth.getCurrentUser();
+        if (user) {
+          document.getElementById('headerUserName').textContent = user.full_name || user.login;
+          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Organisation';
+        }
+
+        const hash = window.location.hash.replace('#', '');
+        if (hash && this.tabs[hash]) {
+          this.switchTab(hash);
+        } else {
+          this.switchTab('decoration');
+        }
+
+        window.addEventListener('hashchange', () => {
+          const newHash = window.location.hash.replace('#', '');
+          if (newHash && this.tabs[newHash] && newHash !== this.currentTab) {
+            this.switchTab(newHash);
+          }
+        });
+      },
+
+      switchTab(tabId) {
+        if (!this.tabs[tabId]) return;
+
+        // Nettoyage de l'ancienne scène 3D si on quitte locations
+        if (this.currentTab === 'locations' && typeof LocationsModule.cleanup === 'function') {
+          try { LocationsModule.cleanup(); } catch(e) {}
+        }
+
+        this.currentTab = tabId;
+        window.location.hash = tabId;
+
+        document.querySelectorAll('.pole-tab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+
+        const container = document.getElementById('poleContainer');
+        container.innerHTML = '<div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">Chargement...</div>';
+        
+        try {
+          this.tabs[tabId].handler.render(container);
+        } catch (e) {
+          console.error('[Pole Tab Render Error]', e);
+          container.innerHTML = `<div class="alert-banner danger">Erreur lors de l\'affichage : ${e.message}</div>`;
+        }
+      },
+
+      navigateTo(moduleName) {
+        if (this.tabs[moduleName]) {
+          this.switchTab(moduleName);
+        } else {
+          window.location.href = `index.html#${moduleName}`;
+        }
+      }
+    };
+
+    window.App = PoleApp;
+    window.addEventListener('DOMContentLoaded', () => PoleApp.init());
+  </script>
+</body>
+</html>

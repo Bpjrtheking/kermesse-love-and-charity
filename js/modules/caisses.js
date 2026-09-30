@@ -3407,34 +3407,21 @@ const CaisseRestaurationModule = {
                 const inCart = this.cart.find(i => i.id === p.id);
                 const qty = inCart ? inCart.qty : 0;
                 const price = p.selling_price_f || 0;
-                const stock = p.current_stock !== undefined ? p.current_stock : 999;
-                const isOutOfStock = stock <= 0;
                 const emoji = this.getProductEmoji(p.name, p.category);
 
                 return `
-                  <div class="card" style="border: 2px solid ${qty > 0 ? '#ea580c' : '#e2e8f0'}; border-top: 5px solid ${isOutOfStock ? 'var(--danger)' : '#ea580c'}; transition: box-shadow 0.15s; background: ${qty > 0 ? '#fff7ed' : 'white'}; opacity: ${isOutOfStock ? '0.7' : '1'};">
+                  <div class="card" style="border: 2px solid ${qty > 0 ? '#ea580c' : '#e2e8f0'}; border-top: 5px solid #ea580c; transition: box-shadow 0.15s; background: ${qty > 0 ? '#fff7ed' : 'white'};">
                     <div class="card-body" style="padding: 1rem;">
                       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">
                         <span style="font-size: 2rem;">${emoji}</span>
                         <div style="text-align: right;">
                           <strong style="font-size: 1.15rem; color: #c2410c;">${price.toLocaleString()} F</strong>
-                          <div>
-                            ${isOutOfStock ? `
-                              <span class="badge badge-danger" style="font-size: 0.68rem;">Épuisé</span>
-                            ` : stock <= 10 ? `
-                              <span class="badge badge-warning" style="font-size: 0.68rem;">Reste ${stock}</span>
-                            ` : `
-                              <span class="badge badge-gray" style="font-size: 0.68rem;">Stock: ${stock}</span>
-                            `}
-                          </div>
+                          <div style="font-size: 0.72rem; color: var(--gray-500);">${p.category || 'Restauration'}</div>
                         </div>
                       </div>
 
-                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; min-height: 2.2em; line-height: 1.2;">
+                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.6rem; min-height: 2.2em; line-height: 1.2;">
                         ${p.name}
-                      </div>
-                      <div style="font-size: 0.72rem; color: var(--gray-500); margin-bottom: 0.6rem;">
-                        ${p.category || 'Restauration'} • ${p.unit || 'portion'}
                       </div>
 
                       <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
@@ -3448,7 +3435,7 @@ const CaisseRestaurationModule = {
                           </span>
                           <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">servi(s)</div>
                         </div>
-                        <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.incrementItem('${p.id}', '${p.name.replace(/'/g, "\\'")}', ${price}, ${stock})" ${isOutOfStock ? 'disabled title="Rupture de stock"' : ''} title="Augmenter">
+                        <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.incrementItem('${p.id}', '${p.name.replace(/'/g, "\\'")}', ${price})" title="Ajouter">
                           +
                         </button>
                       </div>
@@ -3465,7 +3452,7 @@ const CaisseRestaurationModule = {
               <h4 style="margin: 0; font-size: 1rem; color: var(--gray-800); display: flex; align-items: center; gap: 0.4rem;">
                 <span>🧾</span> Dernières commandes restauration validées
               </h4>
-              <span style="font-size: 0.8rem; color: var(--gray-500);">Cliquez sur 🗑️ pour annuler et restituer le stock</span>
+              <span style="font-size: 0.8rem; color: var(--gray-500);">Cliquez sur 🗑️ pour annuler une commande</span>
             </div>
 
             ${this.sales.length === 0 ? `
@@ -3487,7 +3474,7 @@ const CaisseRestaurationModule = {
                       <strong style="color: var(--success); font-size: 1rem;">
                         +${(s.total_amount_f || 0).toLocaleString()} F
                       </strong>
-                      <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f}, '${s.product_id || ''}', ${s.quantity})" title="Annuler et remettre en stock" style="display: flex; align-items: center; gap: 4px;">
+                      <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f}, '${s.product_id || ''}', ${s.quantity})" title="Annuler et enlever de la caisse" style="display: flex; align-items: center; gap: 4px;">
                         <span>🗑️</span> Enlever
                       </button>
                     </div>
@@ -3528,7 +3515,7 @@ const CaisseRestaurationModule = {
                     <div style="display: flex; align-items: center; gap: 0.3rem;">
                       <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseRestaurationModule.decrementItem('${item.id}')">−</button>
                       <strong style="min-width: 24px; text-align: center; font-size: 0.95rem;">${item.qty}</strong>
-                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseRestaurationModule.incrementItem('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, ${item.maxStock})">+</button>
+                      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0; font-weight: 800;" onclick="CaisseRestaurationModule.incrementItem('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})">+</button>
                       <button class="btn btn-danger btn-sm" style="padding: 2px 6px; font-size: 0.75rem; margin-left: 2px;" onclick="CaisseRestaurationModule.removeItem('${item.id}')" title="Retirer">✕</button>
                     </div>
                   </div>
@@ -3571,7 +3558,7 @@ const CaisseRestaurationModule = {
               </div>
 
               <button class="btn btn-primary" style="width: 100%; font-size: 1.05rem; font-weight: 800; background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.checkout()">
-                ⚡ Encaisser &amp; Déstocker (${cartTotal.toLocaleString()} F)
+                ⚡ Valider la commande (${cartTotal.toLocaleString()} F)
               </button>
             `}
           </div>
@@ -3586,20 +3573,12 @@ const CaisseRestaurationModule = {
     this.renderCurrentTab();
   },
 
-  incrementItem(id, name, price, maxStock = 999) {
+  incrementItem(id, name, price) {
     const ex = this.cart.find(i => i.id === id);
     if (ex) {
-      if (maxStock !== null && maxStock !== undefined && ex.qty >= maxStock) {
-        Notify.warning(`Stock maximum atteint pour « ${name} » (${maxStock} dispo).`);
-        return;
-      }
       ex.qty += 1;
     } else {
-      if (maxStock <= 0) {
-        Notify.error(`« ${name} » est en rupture de stock.`);
-        return;
-      }
-      this.cart.push({ id, name, price, qty: 1, maxStock });
+      this.cart.push({ id, name, price, qty: 1 });
     }
     this.renderCurrentTab();
   },
@@ -3659,26 +3638,9 @@ const CaisseRestaurationModule = {
         try {
           const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
           if (data && data[0]) realSaleId = data[0].id;
-
-          // Déstockage automatique dans stock_movements
-          if (CaissesCore.isUuid(item.id)) {
-            await client.from('stock_movements').insert([{
-              product_id: item.id,
-              type: 'vente',
-              quantity: item.qty,
-              reason: `Vente Caisse Restauration (${mode})`,
-              user_id: user ? user.id : null
-            }]);
-          }
         } catch (e) {
           console.warn('[Checkout Resto DB Warning]', e);
         }
-      }
-
-      // Mettre à jour le stock localement aussi
-      const p = this.products.find(prod => prod.id === item.id);
-      if (p && p.current_stock !== undefined) {
-        p.current_stock = Math.max(0, p.current_stock - item.qty);
       }
 
       this.sales.unshift({
@@ -3690,7 +3652,6 @@ const CaisseRestaurationModule = {
 
     // Sauvegarde locale
     localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
-    localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
 
     if (client && CaissesCore.isUuid(regId)) {
       try {
@@ -3706,23 +3667,23 @@ const CaisseRestaurationModule = {
     }
 
     AuditLogger.log('VENTE_RESTAURATION', 'ticket_sales', null, `Vente restauration de ${cartTotal} F (${mode})`);
-    Notify.success(`Commande validée et stock décompté ! Total : ${cartTotal.toLocaleString()} F`);
+    Notify.success(`Commande validée ! Total : ${cartTotal.toLocaleString()} F`);
     this.cart = [];
     this.renderCurrentTab();
   },
 
   async deleteSale(id, name, amount, productId, quantity) {
-    if (!confirm(`Annuler et enlever la commande de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et la quantité (${quantity}) sera remise en stock.`)) {
+    if (!confirm(`Annuler et enlever la commande de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et du bilan.`)) {
       return;
     }
 
     const client = SupabaseClient.client;
     const user = Auth.getCurrentUser();
 
-    // 1. Ajouter à la liste noire des annulations (pour mise à jour Bilan)
-    CaissesCore.addCancelledSaleId(id);
+    // 1. Ajouter à la liste noire cloud/locale des annulations (pour mise à jour Bilan)
+    await CaissesCore.addCancelledSaleId(id, name);
 
-    // 2. Supprimer dans Supabase et réapprovisionner le stock
+    // 2. Supprimer dans Supabase
     if (client) {
       try {
         if (CaissesCore.isUuid(id)) {
@@ -3737,32 +3698,16 @@ const CaisseRestaurationModule = {
             user_id: user ? user.id : null
           }]);
         }
-        if (CaissesCore.isUuid(productId)) {
-          await client.from('stock_movements').insert([{
-            product_id: productId,
-            type: 'livraison_entree',
-            quantity: quantity,
-            reason: `Restitution stock suite annulation vente : ${name}`,
-            user_id: user ? user.id : null
-          }]);
-        }
       } catch (e) {
         console.warn('[Delete Resto Sale DB Warning]', e);
       }
-    }
-
-    // Remettre le stock localement
-    const p = this.products.find(prod => prod.id === productId || prod.name === name);
-    if (p && p.current_stock !== undefined) {
-      p.current_stock += (quantity || 1);
-      localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
     }
 
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
 
     AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Annulation vente resto ${name} (-${amount} F)`);
-    Notify.success(`Commande « ${name} » enlevée. Stock réapprovisionné et bilan synchronisé.`);
+    Notify.success(`Commande « ${name} » enlevée. Caisse et bilan synchronisés.`);
     this.renderCurrentTab();
   },
 

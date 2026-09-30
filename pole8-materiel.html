@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pôle 8 : Logistique &amp; Matériel — Kermesse Love and Charity</title>
+  
+  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --active-pole-color: #4f46e5;
+    }
+  </style>
+</head>
+<body class="pole-page-body">
+
+  <!-- En-tête Navigation Supérieure Dédiée Pôle 8 -->
+  <header class="pole-nav-header">
+    <div class="pole-nav-left">
+      <a href="index.html" class="btn-hub-back">
+        <span>←</span> Menu Général
+      </a>
+      <div class="pole-title-group">
+        <span class="pole-main-badge-icon">📦</span>
+        <div>
+          <h2>Pôle 8 : Logistique &amp; Matériel</h2>
+          <span>Tentes, tables, sono, chaîne d'emprunts et plan de restitution</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pole-nav-right">
+      <div class="portal-user-badge">
+        <span class="portal-avatar" style="background: #4f46e5;">M</span>
+        <div class="portal-user-info">
+          <span class="portal-user-name" id="headerUserName">Chargement...</span>
+          <span class="portal-user-role" id="headerUserRole" style="color: #4f46e5;">Logistique</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.4rem 0.75rem;">
+        <span>🚪</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Barre d'onglets spacieuse Pôle 8 -->
+  <nav class="pole-tabs-bar">
+    <button class="pole-tab-btn active" data-tab="materials" onclick="PoleApp.switchTab('materials')">
+      <span>📦</span> Matériel Lourd
+    </button>
+    <button class="pole-tab-btn" data-tab="loans" onclick="PoleApp.switchTab('loans')">
+      <span>📝</span> Emprunts &amp; Locations
+    </button>
+    <button class="pole-tab-btn" data-tab="movements" onclick="PoleApp.switchTab('movements')">
+      <span>🔄</span> Transferts &amp; Mouvements
+    </button>
+    <button class="pole-tab-btn" data-tab="returns" onclick="PoleApp.switchTab('returns')">
+      <span>✅</span> Plan de Restitution
+    </button>
+  </nav>
+
+  <!-- Zone de Contenu Plein Écran Spacieux -->
+  <main class="pole-content-wrapper" id="poleContainer">
+    <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+      Chargement du Pôle Logistique...
+    </div>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.3"></script>
+  <script src="js/notify.js?v=5.3"></script>
+  <script src="js/supabase.js?v=5.3"></script>
+  <script src="js/audit.js?v=5.3"></script>
+  <script src="js/offline.js?v=5.3"></script>
+  <script src="js/auth.js?v=5.3"></script>
+  <script src="js/permissions.js?v=5.3"></script>
+
+  <!-- Modules Pôle 8 -->
+  <script src="js/modules/materials.js?v=5.3"></script>
+  <script src="js/modules/loans.js?v=5.3"></script>
+  <script src="js/modules/movements.js?v=5.3"></script>
+  <script src="js/modules/returns.js?v=5.3"></script>
+
+  <!-- Contrôleur de Page Pôle 8 -->
+  <script>
+    const PoleApp = {
+      currentTab: 'materials',
+      tabs: {
+        materials: { label: 'Matériel Lourd', handler: MaterialsModule },
+        loans: { label: 'Emprunts & Prêts', handler: LoansModule },
+        movements: { label: 'Transferts', handler: MovementsModule },
+        returns: { label: 'Restitutions', handler: ReturnsModule }
+      },
+
+      init() {
+        if (!Auth.requireAuth()) return;
+        SupabaseClient.init();
+        OfflineManager.init();
+
+        const user = Auth.getCurrentUser();
+        if (user) {
+          document.getElementById('headerUserName').textContent = user.full_name || user.login;
+          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Logistique';
+        }
+
+        const hash = window.location.hash.replace('#', '');
+        if (hash && this.tabs[hash]) {
+          this.switchTab(hash);
+        } else {
+          this.switchTab('materials');
+        }
+
+        window.addEventListener('hashchange', () => {
+          const newHash = window.location.hash.replace('#', '');
+          if (newHash && this.tabs[newHash] && newHash !== this.currentTab) {
+            this.switchTab(newHash);
+          }
+        });
+      },
+
+      switchTab(tabId) {
+        if (!this.tabs[tabId]) return;
+        this.currentTab = tabId;
+        window.location.hash = tabId;
+
+        document.querySelectorAll('.pole-tab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+
+        const container = document.getElementById('poleContainer');
+        container.innerHTML = '<div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">Chargement...</div>';
+        
+        try {
+          this.tabs[tabId].handler.render(container);
+        } catch (e) {
+          console.error('[Pole Tab Render Error]', e);
+          container.innerHTML = `<div class="alert-banner danger">Erreur lors de l\'affichage : ${e.message}</div>`;
+        }
+      },
+
+      navigateTo(moduleName) {
+        if (this.tabs[moduleName]) {
+          this.switchTab(moduleName);
+        } else {
+          window.location.href = `index.html#${moduleName}`;
+        }
+      }
+    };
+
+    window.App = PoleApp;
+    window.addEventListener('DOMContentLoaded', () => PoleApp.init());
+  </script>
+</body>
+</html>

@@ -142,7 +142,7 @@ const DashboardModule = {
       { mod: 'tickets', icon: '🎟️', label: 'P2 : Billetterie', btnClass: 'btn-secondary' },
       { mod: 'cash', icon: '💵', label: 'P2 : Caisses & Compta', btnClass: 'btn-secondary' },
       { mod: 'decoration', icon: '🎨', label: 'P3 : Décoration & Organisation', btnClass: 'btn-secondary' },
-      { mod: 'stocks', icon: '🍔', label: 'P4 : Restauration (Stocks)', btnClass: 'btn-secondary' },
+      { mod: 'stocks', icon: '🍔', label: 'P4 : Restauration (Carte & Vente)', btnClass: 'btn-secondary' },
       { mod: 'inventory', icon: '📦', label: 'P4 : Inventaires & Pertes', btnClass: 'btn-secondary' },
       { mod: 'stands', icon: '🎪', label: 'P5 : Stands & Jeux', btnClass: 'btn-primary' },
       { mod: 'gifts', icon: '🎁', label: 'P6 : Lots à gagner', btnClass: 'btn-secondary' },

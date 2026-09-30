@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Mes Tâches &amp; Bloc-Notes — Kermesse Love and Charity</title>
+  
+  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --active-pole-color: #2563eb;
+    }
+  </style>
+</head>
+<body class="pole-page-body">
+
+  <!-- En-tête Navigation Supérieure -->
+  <header class="pole-nav-header">
+    <div class="pole-nav-left">
+      <a href="index.html" class="btn-hub-back">
+        <span>←</span> Menu Général
+      </a>
+      <div class="pole-title-group">
+        <span class="pole-main-badge-icon">📝</span>
+        <div>
+          <h2>Mes Tâches &amp; Bloc-Notes Perso</h2>
+          <span>To-do list collaborative par pôle et notes confidentielles</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pole-nav-right">
+      <div class="portal-user-badge">
+        <span class="portal-avatar" style="background: #2563eb;">T</span>
+        <div class="portal-user-info">
+          <span class="portal-user-name" id="headerUserName">Chargement...</span>
+          <span class="portal-user-role" id="headerUserRole" style="color: #2563eb;">Utilisateur</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.4rem 0.75rem;">
+        <span>🚪</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Zone de Contenu Plein Écran Spacieux -->
+  <main class="pole-content-wrapper" id="poleContainer">
+    <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+      Chargement de vos tâches et notes...
+    </div>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.3"></script>
+  <script src="js/notify.js?v=5.3"></script>
+  <script src="js/supabase.js?v=5.3"></script>
+  <script src="js/audit.js?v=5.3"></script>
+  <script src="js/offline.js?v=5.3"></script>
+  <script src="js/auth.js?v=5.3"></script>
+  <script src="js/permissions.js?v=5.3"></script>
+
+  <!-- Module Tâches -->
+  <script src="js/modules/tasks.js?v=5.3"></script>
+
+  <!-- Contrôleur -->
+  <script>
+    const App = {
+      init() {
+        if (!Auth.requireAuth()) return;
+        SupabaseClient.init();
+        OfflineManager.init();
+
+        const user = Auth.getCurrentUser();
+        if (user) {
+          document.getElementById('headerUserName').textContent = user.full_name || user.login;
+          document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Admin';
+        }
+
+        const container = document.getElementById('poleContainer');
+        TasksModule.render(container);
+      },
+      navigateTo(moduleName) {
+        window.location.href = `index.html#${moduleName}`;
+      }
+    };
+
+    window.App = App;
+    window.addEventListener('DOMContentLoaded', () => App.init());
+  </script>
+</body>
+</html>
