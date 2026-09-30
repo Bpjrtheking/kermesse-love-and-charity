@@ -31,7 +31,7 @@
         <span class="pole-main-badge-icon">📢</span>
         <div>
           <h2>Pôle 1 : Communication &amp; Affichage</h2>
-          <span>Affiches, signalétique, consignes sonores et messages d'équipe</span>
+          <span>Affiches, flyers, signalétique du stade et promotion des activités</span>
         </div>
       </div>
     </div>
@@ -56,16 +56,6 @@
     </div>
   </header>
 
-  <!-- Barre d'onglets spacieuse Pôle 1 -->
-  <nav class="pole-tabs-bar">
-    <button class="pole-tab-btn active" data-tab="communication" onclick="PoleApp.switchTab('communication')">
-      <span>📢</span> Affiches, Flyers &amp; Signalétique
-    </button>
-    <button class="pole-tab-btn" data-tab="messages" onclick="PoleApp.switchTab('messages')">
-      <span>💬</span> Consignes &amp; Messages d'Équipe
-    </button>
-  </nav>
-
   <!-- Zone de Contenu Plein Écran Spacieux -->
   <main class="pole-content-wrapper" id="poleContainer">
     <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
@@ -85,19 +75,12 @@
   <script src="js/auth.js?v=5.4"></script>
   <script src="js/permissions.js?v=5.4"></script>
 
-  <!-- Modules Pôle 1 -->
+  <!-- Module Pôle 1 : Communication & Affichage uniquement -->
   <script src="js/modules/communication.js?v=5.4"></script>
-  <script src="js/modules/messages.js?v=5.4"></script>
 
   <!-- Contrôleur de Page Pôle 1 -->
   <script>
     const PoleApp = {
-      currentTab: 'communication',
-      tabs: {
-        communication: { label: 'Communication', handler: CommunicationModule },
-        messages: { label: 'Consignes & Messages', handler: MessagesModule }
-      },
-
       async init() {
         if (!Auth.requireAuth()) return;
         SupabaseClient.init();
@@ -112,8 +95,6 @@
         // Contrôle des autorisations d'accès au Pôle
         await Permissions.syncPolesFromCloud();
         if (!Permissions.canAccessPole(1)) {
-          const navTabs = document.querySelector('.pole-tabs-bar');
-          if (navTabs) navTabs.style.display = 'none';
           document.getElementById('poleContainer').innerHTML = `
             <div class="card" style="text-align: center; padding: 3rem 1.5rem; max-width: 520px; margin: 3rem auto; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border-radius: 16px;">
               <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
@@ -130,47 +111,12 @@
           return;
         }
 
-        const hash = window.location.hash.replace('#', '');
-        if (hash && this.tabs[hash]) {
-          this.switchTab(hash);
-        } else {
-          this.switchTab('communication');
-        }
-
-        window.addEventListener('hashchange', () => {
-          const newHash = window.location.hash.replace('#', '');
-          if (newHash && this.tabs[newHash] && newHash !== this.currentTab) {
-            this.switchTab(newHash);
-          }
-        });
-      },
-
-      switchTab(tabId) {
-        if (!this.tabs[tabId]) return;
-        this.currentTab = tabId;
-        window.location.hash = tabId;
-
-        document.querySelectorAll('.pole-tab-btn').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.tab === tabId);
-        });
-
         const container = document.getElementById('poleContainer');
-        container.innerHTML = '<div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">Chargement...</div>';
-        
-        try {
-          this.tabs[tabId].handler.render(container);
-        } catch (e) {
-          console.error('[Pole Tab Render Error]', e);
-          container.innerHTML = `<div class="alert-banner danger">Erreur lors de l\'affichage : ${e.message}</div>`;
-        }
+        CommunicationModule.render(container);
       },
 
       navigateTo(moduleName) {
-        if (this.tabs[moduleName]) {
-          this.switchTab(moduleName);
-        } else {
-          window.location.href = `index.html#${moduleName}`;
-        }
+        window.location.href = `index.html#${moduleName}`;
       }
     };
 

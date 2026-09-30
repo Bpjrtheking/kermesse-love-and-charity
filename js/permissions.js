@@ -245,8 +245,8 @@ const Permissions = {
 
     if (this.isSuperAdmin(user)) return true;
 
-    // Modules universels
-    if (['dashboard', 'messages', 'tasks'].includes(moduleName)) {
+    // Modules universels (accessibles à tous les administrateurs)
+    if (['messages', 'tasks'].includes(moduleName)) {
       return true;
     }
 
@@ -305,6 +305,8 @@ const Permissions = {
         return this.canAccessPole(9, user);
 
       // Supervision réservée au SuperAdmin
+      case 'supervision':
+      case 'dashboard':
       case 'roles':
       case 'history':
       case 'reports':

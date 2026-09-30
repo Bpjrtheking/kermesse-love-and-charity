@@ -207,8 +207,8 @@
         </div>
       </a>
 
-      <!-- Espace Direction / SuperAdmin -->
-      <a href="supervision.html" class="pole-card pole-supervision" id="supervisionCard" data-pole="supervision" data-search="supervision superadmin direction tableau de bord bilan compta roles comptes journal audit">
+      <!-- Espace Direction / SuperAdmin (Strictement réservé et invisible aux administrateurs réguliers) -->
+      <a href="supervision.html" class="pole-card pole-supervision" id="supervisionCard" data-pole="supervision" style="display: none;" data-search="supervision superadmin direction tableau de bord bilan compta roles comptes journal audit">
         <div class="pole-card-top">
           <div class="pole-card-icon" style="background: #1e293b; color: #f8fafc;">👑</div>
           <span class="pole-card-num" style="background: #1e293b; color: #f8fafc;">Direction</span>
@@ -277,6 +277,7 @@
     window.addEventListener('DOMContentLoaded', async () => {
       // 1. Contrôle d'authentification
       if (!Auth.requireAuth()) return;
+      const user = Auth.getCurrentUser();
 
       // 2. Initialisation des services
       SupabaseClient.init();
@@ -285,12 +286,18 @@
       // 3. Redirection automatique si un hash est présent
       const hash = window.location.hash.replace('#', '');
       if (hash && modulePageMap[hash]) {
-        window.location.replace(modulePageMap[hash]);
-        return;
+        const isSuper = Permissions.isSuperAdmin(user);
+        const supervisionModules = ['dashboard', 'roles', 'history', 'reports', 'supervision'];
+        if (supervisionModules.includes(hash) && !isSuper) {
+          window.location.hash = '';
+          Notify.warning("🔒 Accès Restreint : Cet espace est strictement réservé au SuperAdministrateur.");
+        } else {
+          window.location.replace(modulePageMap[hash]);
+          return;
+        }
       }
 
       // 4. Profil utilisateur
-      const user = Auth.getCurrentUser();
       if (user) {
         document.getElementById('headerUserName').textContent = user.full_name || user.login;
         document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Administrateur';
@@ -312,17 +319,23 @@
       const user = Auth.getCurrentUser();
       const isSuper = Permissions.isSuperAdmin(user);
 
+      // Supervision & Direction : TOTALEMENT INVISIBLE pour tous les admins non-superadmin
+      const supCard = document.getElementById('supervisionCard');
+      if (supCard) {
+        supCard.style.display = isSuper ? 'flex' : 'none';
+      }
+
       document.querySelectorAll('.pole-card').forEach(card => {
         const poleAttr = card.dataset.pole;
         if (!poleAttr) return;
 
-        let hasAccess = false;
+        // Supervision est gérée à part et strictement masquée pour les réguliers
         if (poleAttr === 'supervision') {
-          hasAccess = isSuper;
-        } else {
-          hasAccess = Permissions.canAccessPole(poleAttr, user);
+          card.style.display = isSuper ? 'flex' : 'none';
+          return;
         }
 
+        const hasAccess = Permissions.canAccessPole(poleAttr, user);
         const numBadge = card.querySelector('.pole-card-num');
         const footerText = card.querySelector('.pole-card-footer span:first-child');
         const arrow = card.querySelector('.pole-card-arrow');
@@ -343,11 +356,7 @@
           card.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (poleAttr === 'supervision') {
-              Notify.warning("🔒 Accès Restreint : Cet espace est strictement réservé à la Direction et aux SuperAdministrateurs.");
-            } else {
-              Notify.warning(`🔒 Accès Verrouillé : Vous n'avez pas la permission pour le Pôle ${poleAttr}. Veuillez contacter un SuperAdministrateur pour vous l'attribuer.`);
-            }
+            Notify.warning(`🔒 Accès Verrouillé : Vous n'avez pas la permission pour le Pôle ${poleAttr}. Veuillez contacter un SuperAdministrateur pour vous l'attribuer.`);
           };
         } else {
           card.classList.remove('locked');
@@ -356,11 +365,17 @@
       });
     }
 
-    // Filtrage des cartes par mot-clé
+    // Filtrage des cartes par mot-clé (sans jamais révéler la supervision aux non-superadmins)
     function filterPoles() {
       const q = (document.getElementById('poleSearchInput').value || '').toLowerCase().trim();
+      const user = Auth.getCurrentUser();
+      const isSuper = Permissions.isSuperAdmin(user);
       const cards = document.querySelectorAll('.pole-card');
       cards.forEach(card => {
+        if (card.dataset.pole === 'supervision' && !isSuper) {
+          card.style.display = 'none';
+          return;
+        }
         const text = (card.dataset.search || '' + ' ' + card.innerText).toLowerCase();
         card.style.display = text.includes(q) ? 'flex' : 'none';
       });
