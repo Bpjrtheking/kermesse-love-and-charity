@@ -1022,7 +1022,15 @@ const CaisseEntreeModule = {
               </div>
 
               <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label style="font-size: 0.8rem;">Espèces reçues :</label>
+                <label style="font-size: 0.8rem; font-weight: 700; color: var(--gray-700);">Espèces reçues :</label>
+                <div class="quick-cash-chips">
+                  <button type="button" class="quick-cash-chip" onclick="CaisseEntreeModule.setCashGiven(${cartTotal})">Exact</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseEntreeModule.setCashGiven(500)">500 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseEntreeModule.setCashGiven(1000)">1 000 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseEntreeModule.setCashGiven(2000)">2 000 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseEntreeModule.setCashGiven(5000)">5 000 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseEntreeModule.setCashGiven(10000)">10 000 F</button>
+                </div>
                 <input type="number" id="caisseEntreeCashGiven" class="form-control" placeholder="Montant remis" oninput="CaisseEntreeModule.calcChange(${cartTotal})">
                 <div id="caisseEntreeChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.85rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
               </div>
@@ -1035,7 +1043,32 @@ const CaisseEntreeModule = {
         </div>
 
       </div>
+
+      ${cartTotal > 0 ? `
+        <div class="pos-mobile-cart-bar" onclick="document.querySelector('.pos-cart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <span class="mobile-cart-badge">${this.cart.reduce((s, i) => s + i.qty, 0)}</span>
+            <div style="text-align: left; line-height: 1.2;">
+              <div style="font-size: 0.7rem; opacity: 0.85;">Total Panier</div>
+              <strong style="font-size: 1.05rem;">${cartTotal.toLocaleString()} F</strong>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; font-weight: 800;">
+            <span>Encaisser</span>
+            <span>↓</span>
+          </div>
+        </div>
+      ` : ''}
     `;
+  },
+
+  setCashGiven(amt) {
+    const input = document.getElementById('caisseEntreeCashGiven');
+    if (input) {
+      input.value = amt;
+      const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+      this.calcChange(cartTotal);
+    }
   },
 
   incrementItem(id, name, price) {
@@ -2230,7 +2263,15 @@ const CaisseJeuxModule = {
               </div>
 
               <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label style="font-size: 0.8rem;">Espèces remises par le client :</label>
+                <label style="font-size: 0.8rem; font-weight: 700; color: var(--gray-700);">Espèces remises par le client :</label>
+                <div class="quick-cash-chips">
+                  <button type="button" class="quick-cash-chip" onclick="CaisseJeuxModule.setCashGiven(${cartTotal})">Exact</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseJeuxModule.setCashGiven(500)">500 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseJeuxModule.setCashGiven(1000)">1 000 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseJeuxModule.setCashGiven(2000)">2 000 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseJeuxModule.setCashGiven(5000)">5 000 F</button>
+                  <button type="button" class="quick-cash-chip" onclick="CaisseJeuxModule.setCashGiven(10000)">10 000 F</button>
+                </div>
                 <input type="number" id="caisseJeuxCashGiven" class="form-control" placeholder="Montant reçu" oninput="CaisseJeuxModule.calcChange(${cartTotal})">
                 <div id="caisseJeuxChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.85rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
               </div>
@@ -2243,7 +2284,32 @@ const CaisseJeuxModule = {
         </div>
 
       </div>
+
+      ${cartTotal > 0 ? `
+        <div class="pos-mobile-cart-bar" onclick="document.querySelector('.pos-cart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <span class="mobile-cart-badge">${this.cart.reduce((s, i) => s + i.qty, 0)}</span>
+            <div style="text-align: left; line-height: 1.2;">
+              <div style="font-size: 0.7rem; opacity: 0.85;">Total Panier Jeux</div>
+              <strong style="font-size: 1.05rem;">${cartTotal.toLocaleString()} F</strong>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; font-weight: 800;">
+            <span>Encaisser</span>
+            <span>↓</span>
+          </div>
+        </div>
+      ` : ''}
     `;
+  },
+
+  setCashGiven(amt) {
+    const input = document.getElementById('caisseJeuxCashGiven');
+    if (input) {
+      input.value = amt;
+      const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+      this.calcChange(cartTotal);
+    }
   },
 
   incrementGame(gameId, name, price, standName, standColor, standId) {
@@ -3647,8 +3713,16 @@ const CaisseRestaurationModule = {
 
                 ${this.paymentMethod === 'cash' ? `
                   <div style="margin-top: 0.6rem;">
-                    <input type="number" id="caisseRestoCashGiven" class="form-control form-control-sm" placeholder="Espèces reçues (FCFA)" oninput="CaisseRestaurationModule.calcChange(${cartTotal})">
-                    <div id="caisseRestoChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.8rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
+                    <div class="quick-cash-chips">
+                      <button type="button" class="quick-cash-chip" onclick="CaisseRestaurationModule.setCashGiven(${cartTotal})">Exact</button>
+                      <button type="button" class="quick-cash-chip" onclick="CaisseRestaurationModule.setCashGiven(500)">500 F</button>
+                      <button type="button" class="quick-cash-chip" onclick="CaisseRestaurationModule.setCashGiven(1000)">1 000 F</button>
+                      <button type="button" class="quick-cash-chip" onclick="CaisseRestaurationModule.setCashGiven(2000)">2 000 F</button>
+                      <button type="button" class="quick-cash-chip" onclick="CaisseRestaurationModule.setCashGiven(5000)">5 000 F</button>
+                      <button type="button" class="quick-cash-chip" onclick="CaisseRestaurationModule.setCashGiven(10000)">10 000 F</button>
+                    </div>
+                    <input type="number" id="caisseRestoCashGiven" class="form-control" style="font-size: 1.15rem; font-weight: 700; height: 44px;" placeholder="Espèces reçues (FCFA)" oninput="CaisseRestaurationModule.calcChange(${cartTotal})">
+                    <div id="caisseRestoChangeDisp" style="margin-top: 4px; font-weight: 700; font-size: 0.85rem; color: #1e40af;">Monnaie à rendre : 0 F</div>
                   </div>
                 ` : `
                   <div style="margin-top: 0.6rem; padding: 0.5rem; background: #fef3c7; border: 1px solid #fde68a; border-radius: var(--radius-sm); font-size: 0.78rem; color: #92400e;">
@@ -3669,7 +3743,32 @@ const CaisseRestaurationModule = {
         </div>
 
       </div>
+
+      ${cartTotal > 0 ? `
+        <div class="pos-mobile-cart-bar" onclick="document.querySelector('.pos-cart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <span class="mobile-cart-badge" style="background: #ea580c;">${this.cart.reduce((s, i) => s + i.qty, 0)}</span>
+            <div style="text-align: left; line-height: 1.2;">
+              <div style="font-size: 0.7rem; opacity: 0.85;">Total Commande</div>
+              <strong style="font-size: 1.05rem;">${cartTotal.toLocaleString()} F</strong>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; font-weight: 800;">
+            <span>Encaisser</span>
+            <span>↓</span>
+          </div>
+        </div>
+      ` : ''}
     `;
+  },
+
+  setCashGiven(amt) {
+    const input = document.getElementById('caisseRestoCashGiven');
+    if (input) {
+      input.value = amt;
+      const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
+      this.calcChange(cartTotal);
+    }
   },
 
   setPaymentMethod(method) {
