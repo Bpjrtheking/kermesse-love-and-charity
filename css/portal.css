@@ -537,3 +537,108 @@
   white-space: nowrap;
 }
 
+/* ==============================================================================
+ * SOUS-NAVIGATION DES CAISSES (SEGMENTED PILL CONTROL STYLE MODERNE)
+ * ============================================================================== */
+.caisse-subtabs-nav,
+.tabs-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.caisse-subtab-btn,
+.tab-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.caisse-subtab-btn:hover,
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.65);
+  color: #0f172a;
+}
+
+.caisse-subtab-btn.active,
+.tab-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.caisse-subtab-btn.active.resto-theme {
+  color: #c2410c;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.18);
+}
+.caisse-subtab-btn.active.entree-theme {
+  color: #1d4ed8;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.18);
+}
+.caisse-subtab-btn.active.jeux-theme {
+  color: #6d28d9;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.18);
+}
+.caisse-subtab-btn.active.jetons-theme {
+  color: #b45309;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.18);
+}
+
+.subtab-count {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  transition: all 0.18s ease;
+}
+
+.caisse-subtab-btn.active .subtab-count,
+.tab-btn.active .subtab-count {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.caisse-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+@media (max-width: 768px) {
+  .caisse-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .caisse-subtabs-nav,
+  .tabs-nav {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+

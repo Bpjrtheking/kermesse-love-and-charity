@@ -738,37 +738,37 @@ const CaisseEntreeModule = {
 
     container.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>🎟️</span> Caisse 1 : Entrée &amp; Accueil Visiteurs
-          </div>
-          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+        <div class="card-header caisse-card-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div class="card-title" style="margin: 0;">
+              <span>🎟️</span> Caisse 1 : Entrée &amp; Accueil Visiteurs
+            </div>
             <span class="badge ${this.register.status === 'open' ? 'badge-success' : 'badge-gray'}">
-              ${this.register.status === 'open' ? '🟢 Caisse Ouverte' : '🔴 Caisse Clôturée'}
+              ${this.register.status === 'open' ? '🟢 Ouverte' : '🔴 Clôturée'}
             </span>
+          </div>
+
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <div class="caisse-subtabs-nav" id="caisseEntreeTabsNav">
+            <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('pos')">
+              🎟️ <span>Vente Entrées</span>
+            </button>
+            <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'config' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('config')">
+              ⚙️ <span>Tarifs &amp; Billets</span> <span class="subtab-count" data-tab-count="config">${this.entryCatalog.length}</span>
+            </button>
+            <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('expenses')">
+              💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
+            </button>
+            <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('journal')">
+              🧾 <span>Journal</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
+            </button>
+            <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('closure')">
+              🔒 <span>Clôture</span>
+            </button>
           </div>
         </div>
 
         <div class="card-body">
-          <!-- Navigation des onglets -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem; overflow-x: auto;">
-            <button class="tab-btn ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('pos')">
-              🎟️ Vente Entrées
-            </button>
-            <button class="tab-btn ${this.currentTab === 'config' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('config')">
-              ⚙️ Tarifs &amp; Billets (${this.entryCatalog.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('expenses')">
-              💸 Dépenses (${this.expenses.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('journal')">
-              🧾 Journal des Entrées (${this.sales.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('closure')">
-              🔒 Contrôle &amp; Clôture
-            </button>
-          </div>
-
           <div id="caisseEntreeTabContainer"></div>
         </div>
       </div>
@@ -779,7 +779,30 @@ const CaisseEntreeModule = {
 
   switchTab(tab) {
     this.currentTab = tab;
-    this.render(document.getElementById('mainContent'));
+    const container = document.getElementById('caisseEntreeTabContainer');
+    if (container) {
+      const nav = document.getElementById('caisseEntreeTabsNav');
+      if (nav) {
+        nav.querySelectorAll('.caisse-subtab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${tab}'`));
+        });
+      }
+      this.renderCurrentTab();
+    } else {
+      const pole = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (pole) this.render(pole);
+    }
+  },
+
+  updateBadgeCounts() {
+    const nav = document.getElementById('caisseEntreeTabsNav');
+    if (!nav) return;
+    const cfgBadge = nav.querySelector('[data-tab-count="config"]');
+    if (cfgBadge) cfgBadge.textContent = this.entryCatalog.length;
+    const expBadge = nav.querySelector('[data-tab-count="expenses"]');
+    if (expBadge) expBadge.textContent = this.expenses.length;
+    const journalBadge = nav.querySelector('[data-tab-count="journal"]');
+    if (journalBadge) journalBadge.textContent = this.sales.length;
   },
 
   async loadData() {
@@ -823,6 +846,7 @@ const CaisseEntreeModule = {
   renderCurrentTab() {
     const container = document.getElementById('caisseEntreeTabContainer');
     if (!container) return;
+    this.updateBadgeCounts();
 
     if (this.currentTab === 'pos') this.renderPosTab(container);
     else if (this.currentTab === 'config') this.renderConfigTab(container);
@@ -1858,34 +1882,34 @@ const CaisseJeuxModule = {
 
     container.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>🎯</span> Caisse 2 : Vente Tickets de Jeux (Reliée aux Stands)
-          </div>
-          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+        <div class="card-header caisse-card-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div class="card-title" style="margin: 0;">
+              <span>🎯</span> Caisse 2 : Vente Tickets de Jeux (Stands)
+            </div>
             <span class="badge ${this.register.status === 'open' ? 'badge-success' : 'badge-gray'}">
-              ${this.register.status === 'open' ? '🟢 Caisse Ouverte' : '🔴 Caisse Clôturée'}
+              ${this.register.status === 'open' ? '🟢 Ouverte' : '🔴 Clôturée'}
             </span>
+          </div>
+
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <div class="caisse-subtabs-nav" id="caisseJeuxTabsNav">
+            <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('pos')">
+              🎯 <span>Vente Tactile</span>
+            </button>
+            <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('expenses')">
+              💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
+            </button>
+            <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('journal')">
+              🧾 <span>Journal Ventes</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
+            </button>
+            <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('closure')">
+              🔒 <span>Clôture</span>
+            </button>
           </div>
         </div>
 
         <div class="card-body">
-          <!-- Onglets du module -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem; overflow-x: auto;">
-            <button class="tab-btn ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('pos')">
-              🎯 Vente Tactile des Jeux
-            </button>
-            <button class="tab-btn ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('expenses')">
-              💸 Dépenses de cette Caisse (${this.expenses.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('journal')">
-              🧾 Journal des Ventes Jeux (${this.sales.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('closure')">
-              🔒 Contrôle &amp; Clôture
-            </button>
-          </div>
-
           <div id="caisseJeuxTabContainer"></div>
         </div>
       </div>
@@ -1896,7 +1920,28 @@ const CaisseJeuxModule = {
 
   switchTab(tab) {
     this.currentTab = tab;
-    this.render(document.getElementById('mainContent'));
+    const container = document.getElementById('caisseJeuxTabContainer');
+    if (container) {
+      const nav = document.getElementById('caisseJeuxTabsNav');
+      if (nav) {
+        nav.querySelectorAll('.caisse-subtab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${tab}'`));
+        });
+      }
+      this.renderCurrentTab();
+    } else {
+      const pole = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (pole) this.render(pole);
+    }
+  },
+
+  updateBadgeCounts() {
+    const nav = document.getElementById('caisseJeuxTabsNav');
+    if (!nav) return;
+    const expBadge = nav.querySelector('[data-tab-count="expenses"]');
+    if (expBadge) expBadge.textContent = this.expenses.length;
+    const journalBadge = nav.querySelector('[data-tab-count="journal"]');
+    if (journalBadge) journalBadge.textContent = this.sales.length;
   },
 
   async loadData() {
@@ -1975,6 +2020,7 @@ const CaisseJeuxModule = {
   renderCurrentTab() {
     const container = document.getElementById('caisseJeuxTabContainer');
     if (!container) return;
+    this.updateBadgeCounts();
 
     if (this.currentTab === 'pos') this.renderPosTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
@@ -2709,33 +2755,34 @@ const CaisseJetonsModule = {
 
     container.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>🪙</span> Caisse 3 : Change &amp; Jetons de Monnaie
-          </div>
-          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+        <div class="card-header caisse-card-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div class="card-title" style="margin: 0;">
+              <span>🪙</span> Caisse 3 : Change &amp; Jetons de Monnaie
+            </div>
             <span class="badge ${this.register.status === 'open' ? 'badge-success' : 'badge-gray'}">
-              ${this.register.status === 'open' ? '🟢 Caisse Ouverte' : '🔴 Caisse Clôturée'}
+              ${this.register.status === 'open' ? '🟢 Ouverte' : '🔴 Clôturée'}
             </span>
+          </div>
+
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <div class="caisse-subtabs-nav" id="caisseJetonsTabsNav">
+            <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'change' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('change')">
+              🪙 <span>Émission &amp; Remboursement</span>
+            </button>
+            <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('expenses')">
+              💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
+            </button>
+            <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'movements' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('movements')">
+              📋 <span>Mouvements</span>
+            </button>
+            <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('closure')">
+              🔒 <span>Clôture</span>
+            </button>
           </div>
         </div>
 
         <div class="card-body">
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem; overflow-x: auto;">
-            <button class="tab-btn ${this.currentTab === 'change' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('change')">
-              🪙 Émission &amp; Remboursement
-            </button>
-            <button class="tab-btn ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('expenses')">
-              💸 Dépenses de cette Caisse (${this.expenses.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'movements' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('movements')">
-              📋 Mouvements de Monnaie
-            </button>
-            <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('closure')">
-              🔒 Contrôle &amp; Clôture
-            </button>
-          </div>
-
           <div id="caisseJetonsTabContainer"></div>
         </div>
       </div>
@@ -2746,7 +2793,26 @@ const CaisseJetonsModule = {
 
   switchTab(tab) {
     this.currentTab = tab;
-    this.render(document.getElementById('mainContent'));
+    const container = document.getElementById('caisseJetonsTabContainer');
+    if (container) {
+      const nav = document.getElementById('caisseJetonsTabsNav');
+      if (nav) {
+        nav.querySelectorAll('.caisse-subtab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${tab}'`));
+        });
+      }
+      this.renderCurrentTab();
+    } else {
+      const pole = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (pole) this.render(pole);
+    }
+  },
+
+  updateBadgeCounts() {
+    const nav = document.getElementById('caisseJetonsTabsNav');
+    if (!nav) return;
+    const expBadge = nav.querySelector('[data-tab-count="expenses"]');
+    if (expBadge) expBadge.textContent = this.expenses.length;
   },
 
   async loadData() {
@@ -2773,6 +2839,7 @@ const CaisseJetonsModule = {
   renderCurrentTab() {
     const container = document.getElementById('caisseJetonsTabContainer');
     if (!container) return;
+    this.updateBadgeCounts();
 
     if (this.currentTab === 'change') this.renderChangeTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
@@ -3228,34 +3295,34 @@ const CaisseRestaurationModule = {
 
     container.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>🍔</span> Pôle 4 : Caisse Restauration &amp; Buvette
-          </div>
-          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+        <div class="card-header caisse-card-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div class="card-title" style="margin: 0;">
+              <span>🍔</span> Pôle 4 : Caisse Restauration &amp; Buvette
+            </div>
             <span class="badge ${this.register.status === 'open' ? 'badge-success' : 'badge-gray'}">
-              ${this.register.status === 'open' ? '🟢 Caisse Ouverte' : '🔴 Caisse Clôturée'}
+              ${this.register.status === 'open' ? '🟢 Ouverte' : '🔴 Clôturée'}
             </span>
+          </div>
+
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <div class="caisse-subtabs-nav" id="caisseRestoTabsNav">
+            <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('pos')">
+              🍔 <span>Vente Tactile</span>
+            </button>
+            <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('expenses')">
+              💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
+            </button>
+            <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('journal')">
+              🧾 <span>Journal Ventes</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
+            </button>
+            <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('closure')">
+              🔒 <span>Clôture</span>
+            </button>
           </div>
         </div>
 
         <div class="card-body">
-          <!-- Onglets de la caisse Restauration -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem; overflow-x: auto;">
-            <button class="tab-btn ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('pos')">
-              🍔 Vente Tactile Restauration
-            </button>
-            <button class="tab-btn ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('expenses')">
-              💸 Dépenses de cette Caisse (${this.expenses.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('journal')">
-              🧾 Journal des Ventes (${this.sales.length})
-            </button>
-            <button class="tab-btn ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('closure')">
-              🔒 Contrôle &amp; Clôture
-            </button>
-          </div>
-
           <div id="caisseRestaurationTabContainer"></div>
         </div>
       </div>
@@ -3266,7 +3333,28 @@ const CaisseRestaurationModule = {
 
   switchTab(tab) {
     this.currentTab = tab;
-    this.render(document.getElementById('mainContent'));
+    const container = document.getElementById('caisseRestaurationTabContainer');
+    if (container) {
+      const nav = document.getElementById('caisseRestoTabsNav');
+      if (nav) {
+        nav.querySelectorAll('.caisse-subtab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${tab}'`));
+        });
+      }
+      this.renderCurrentTab();
+    } else {
+      const pole = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (pole) this.render(pole);
+    }
+  },
+
+  updateBadgeCounts() {
+    const nav = document.getElementById('caisseRestoTabsNav');
+    if (!nav) return;
+    const expBadge = nav.querySelector('[data-tab-count="expenses"]');
+    if (expBadge) expBadge.textContent = this.expenses.length;
+    const journalBadge = nav.querySelector('[data-tab-count="journal"]');
+    if (journalBadge) journalBadge.textContent = this.sales.length;
   },
 
   async loadData() {
@@ -3334,6 +3422,7 @@ const CaisseRestaurationModule = {
   renderCurrentTab() {
     const container = document.getElementById('caisseRestaurationTabContainer');
     if (!container) return;
+    this.updateBadgeCounts();
 
     if (this.currentTab === 'pos') this.renderPosTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
@@ -4069,10 +4158,10 @@ const CaisseBilanModule = {
             <span>📊</span> Pôle 2 : Bilan Financier Consolidé de la Kermesse
           </div>
           <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
-            <button class="btn btn-secondary btn-sm" onclick="CaisseBilanModule.render(document.getElementById('mainContent'))">
+            <button class="btn btn-secondary btn-sm" onclick="CaisseBilanModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent'))">
               <span>🔄</span> Actualiser
             </button>
-            <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) CaisseBilanModule.render(document.getElementById('mainContent')); })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
+            <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) CaisseBilanModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent')); })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
               <span>🧹</span> Remettre à 0 F
             </button>
           </div>
