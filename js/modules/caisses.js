@@ -605,6 +605,11 @@ const CaissesCore = {
   },
 
   async deleteExpense(movementId, registerId, registerName, amount) {
+    if (!Permissions.isSuperAdmin()) {
+      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à supprimer une dépense de caisse. Veuillez vous adresser au SuperAdmin.");
+      return;
+    }
+
     const client = SupabaseClient.client;
     if (client && this.isUuid(movementId)) {
       try {
@@ -1105,6 +1110,11 @@ const CaisseEntreeModule = {
   },
 
   async deleteSale(id, name, amount) {
+    if (!Permissions.isSuperAdmin()) {
+      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à annuler un billet ou une vente validée. Veuillez vous adresser au SuperAdmin.");
+      return;
+    }
+
     if (!confirm(`Annuler et enlever le billet « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et le visiteur sera décompté.`)) {
       return;
     }
@@ -2288,6 +2298,11 @@ const CaisseJeuxModule = {
   },
 
   async deleteSale(id, name, amount) {
+    if (!Permissions.isSuperAdmin()) {
+      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à annuler une vente de ticket de jeu. Veuillez vous adresser au SuperAdmin.");
+      return;
+    }
+
     if (!confirm(`Annuler et enlever la vente de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et déduit du bilan du stand.`)) {
       return;
     }
@@ -3673,6 +3688,11 @@ const CaisseRestaurationModule = {
   },
 
   async deleteSale(id, name, amount, productId, quantity) {
+    if (!Permissions.isSuperAdmin()) {
+      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à annuler une commande ou vente validée. Veuillez vous adresser au SuperAdmin.");
+      return;
+    }
+
     if (!confirm(`Annuler et enlever la commande de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et du bilan.`)) {
       return;
     }

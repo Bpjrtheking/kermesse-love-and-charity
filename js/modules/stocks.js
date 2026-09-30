@@ -367,6 +367,11 @@ const StocksModule = {
   },
 
   async deleteProduct(productId, name) {
+    if (!Permissions.isSuperAdmin()) {
+      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à supprimer un produit du menu.");
+      return;
+    }
+
     if (!confirm(`Supprimer définitivement « ${name} » du menu de restauration ?`)) {
       return;
     }

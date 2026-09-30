@@ -9,9 +9,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Love &amp; Charity — Portail Kermesse</title>
   
-  <link rel="stylesheet" href="css/style.css?v=5.3">
-  <link rel="stylesheet" href="css/responsive.css?v=5.3">
-  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  <link rel="stylesheet" href="css/style.css?v=5.4">
+  <link rel="stylesheet" href="css/responsive.css?v=5.4">
+  <link rel="stylesheet" href="css/portal.css?v=5.4">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="portal-wrapper">
@@ -76,7 +76,7 @@
     <div class="portal-poles-grid" id="polesGrid">
 
       <!-- Pôle 1 : Communication & Affichage -->
-      <a href="pole1-communication.html" class="pole-card pole-p1" data-search="communication affiches signaletique sono messages reseaux">
+      <a href="pole1-communication.html" class="pole-card pole-p1" data-pole="1" data-search="communication affiches signaletique sono messages reseaux">
         <div class="pole-card-top">
           <div class="pole-card-icon">📢</div>
           <span class="pole-card-num">Pôle 1</span>
@@ -90,7 +90,7 @@
       </a>
 
       <!-- Pôle 2 : Billetterie & Caisses -->
-      <a href="pole2-caisses.html" class="pole-card pole-p2" data-search="billetterie caisses billets entree tickets jeux jetons monnaie bilan">
+      <a href="pole2-caisses.html" class="pole-card pole-p2" data-pole="2" data-search="billetterie caisses billets entree tickets jeux jetons monnaie bilan">
         <div class="pole-card-top">
           <div class="pole-card-icon">🎟️</div>
           <span class="pole-card-num">Pôle 2</span>
@@ -104,7 +104,7 @@
       </a>
 
       <!-- Pôle 3 : Organisation, Déco & Stade 3D -->
-      <a href="pole3-organisation.html" class="pole-card pole-p3" data-search="organisation decoration structures plan 3d stade mbao amenagement">
+      <a href="pole3-organisation.html" class="pole-card pole-p3" data-pole="3" data-search="organisation decoration structures plan 3d stade mbao amenagement">
         <div class="pole-card-top">
           <div class="pole-card-icon">🎨</div>
           <span class="pole-card-num">Pôle 3</span>
@@ -118,7 +118,7 @@
       </a>
 
       <!-- Pôle 4 : Restauration & Buvette -->
-      <a href="pole4-restauration.html" class="pole-card pole-p4" data-search="restauration buvette nourriture boissons snacks repas vente libre carte prix">
+      <a href="pole4-restauration.html" class="pole-card pole-p4" data-pole="4" data-search="restauration buvette nourriture boissons snacks repas vente libre carte prix">
         <div class="pole-card-top">
           <div class="pole-card-icon">🍔</div>
           <span class="pole-card-num">Pôle 4</span>
@@ -132,7 +132,7 @@
       </a>
 
       <!-- Pôle 5 : Stands & Jeux -->
-      <a href="pole5-stands.html" class="pole-card pole-p5" data-search="stands jeux attractions couleurs numero regles tarification">
+      <a href="pole5-stands.html" class="pole-card pole-p5" data-pole="5" data-search="stands jeux attractions couleurs numero regles tarification">
         <div class="pole-card-top">
           <div class="pole-card-icon">🎪</div>
           <span class="pole-card-num">Pôle 5</span>
@@ -146,7 +146,7 @@
       </a>
 
       <!-- Pôle 6 : Lots à gagner & Cadeaux -->
-      <a href="pole6-lots.html" class="pole-card pole-p6" data-search="lots cadeaux dons achats dotations distribution gagnants">
+      <a href="pole6-lots.html" class="pole-card pole-p6" data-pole="6" data-search="lots cadeaux dons achats dotations distribution gagnants">
         <div class="pole-card-top">
           <div class="pole-card-icon">🎁</div>
           <span class="pole-card-num">Pôle 6</span>
@@ -160,7 +160,7 @@
       </a>
 
       <!-- Pôle 7 : Bénévoles & Planning -->
-      <a href="pole7-benevoles.html" class="pole-card pole-p7" data-search="benevoles planning equipes couleurs contacts whatsapp affectations">
+      <a href="pole7-benevoles.html" class="pole-card pole-p7" data-pole="7" data-search="benevoles planning equipes couleurs contacts whatsapp affectations">
         <div class="pole-card-top">
           <div class="pole-card-icon">👥</div>
           <span class="pole-card-num">Pôle 7</span>
@@ -174,7 +174,7 @@
       </a>
 
       <!-- Pôle 8 : Logistique & Matériel -->
-      <a href="pole8-materiel.html" class="pole-card pole-p8" data-search="logistique materiel tentes sono tables chaises emprunts locations retours">
+      <a href="pole8-materiel.html" class="pole-card pole-p8" data-pole="8" data-search="logistique materiel tentes sono tables chaises emprunts locations retours">
         <div class="pole-card-top">
           <div class="pole-card-icon">📦</div>
           <span class="pole-card-num">Pôle 8</span>
@@ -188,7 +188,7 @@
       </a>
 
       <!-- Pôle 9 : Accueil, Secours & Sécurité -->
-      <a href="pole9-securite.html" class="pole-card pole-p9" data-search="securite secours urgences incidents registre objets trouves nettoyage proprete">
+      <a href="pole9-securite.html" class="pole-card pole-p9" data-pole="9" data-search="securite secours urgences incidents registre objets trouves nettoyage proprete">
         <div class="pole-card-top">
           <div class="pole-card-icon">🛡️</div>
           <span class="pole-card-num">Pôle 9</span>
@@ -201,8 +201,8 @@
         </div>
       </a>
 
-      <!-- Espace Direction / SuperAdmin (Affiché à tous les administrateurs avec droits) -->
-      <a href="supervision.html" class="pole-card pole-supervision" id="supervisionCard" data-search="supervision superadmin direction tableau de bord bilan compta roles comptes journal audit">
+      <!-- Espace Direction / SuperAdmin -->
+      <a href="supervision.html" class="pole-card pole-supervision" id="supervisionCard" data-pole="supervision" data-search="supervision superadmin direction tableau de bord bilan compta roles comptes journal audit">
         <div class="pole-card-top">
           <div class="pole-card-icon" style="background: #1e293b; color: #f8fafc;">👑</div>
           <span class="pole-card-num" style="background: #1e293b; color: #f8fafc;">Direction</span>
@@ -223,13 +223,13 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=5.3"></script>
-  <script src="js/notify.js?v=5.3"></script>
-  <script src="js/supabase.js?v=5.3"></script>
-  <script src="js/audit.js?v=5.3"></script>
-  <script src="js/offline.js?v=5.3"></script>
-  <script src="js/auth.js?v=5.3"></script>
-  <script src="js/permissions.js?v=5.3"></script>
+  <script src="js/config.js?v=5.4"></script>
+  <script src="js/notify.js?v=5.4"></script>
+  <script src="js/supabase.js?v=5.4"></script>
+  <script src="js/audit.js?v=5.4"></script>
+  <script src="js/offline.js?v=5.4"></script>
+  <script src="js/auth.js?v=5.4"></script>
+  <script src="js/permissions.js?v=5.4"></script>
 
   <!-- Routeur & Contrôleur du Hub -->
   <script>
@@ -268,7 +268,7 @@
       tasks: 'tasks.html'
     };
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       // 1. Contrôle d'authentification
       if (!Auth.requireAuth()) return;
 
@@ -290,13 +290,65 @@
         document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Administrateur';
         document.getElementById('headerUserAvatar').textContent = (user.login || 'U').charAt(0).toUpperCase();
 
-        const isSuperAdmin = user.is_original_superadmin || user.role_code === 'superadmin';
+        const isSuperAdmin = Permissions.isSuperAdmin(user);
         if (isSuperAdmin) {
           const heroBtn = document.getElementById('supervisionHeroBtn');
           if (heroBtn) heroBtn.style.display = 'inline-flex';
         }
       }
+
+      // 5. Application des permissions multi-pôles et verrouillage visuel (Locked)
+      await applyPolePermissionsUI();
     });
+
+    async function applyPolePermissionsUI() {
+      await Permissions.syncPolesFromCloud();
+      const user = Auth.getCurrentUser();
+      const isSuper = Permissions.isSuperAdmin(user);
+
+      document.querySelectorAll('.pole-card').forEach(card => {
+        const poleAttr = card.dataset.pole;
+        if (!poleAttr) return;
+
+        let hasAccess = false;
+        if (poleAttr === 'supervision') {
+          hasAccess = isSuper;
+        } else {
+          hasAccess = Permissions.canAccessPole(poleAttr, user);
+        }
+
+        const numBadge = card.querySelector('.pole-card-num');
+        const footerText = card.querySelector('.pole-card-footer span:first-child');
+        const arrow = card.querySelector('.pole-card-arrow');
+
+        if (!hasAccess) {
+          card.classList.add('locked');
+          if (numBadge) {
+            numBadge.className = 'pole-locked-badge';
+            numBadge.innerHTML = '🔒 Verrouillé';
+          }
+          if (footerText) {
+            footerText.textContent = 'Accès restreint';
+          }
+          if (arrow) {
+            arrow.textContent = '🔒';
+          }
+
+          card.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (poleAttr === 'supervision') {
+              Notify.warning("🔒 Accès Restreint : Cet espace est strictement réservé à la Direction et aux SuperAdministrateurs.");
+            } else {
+              Notify.warning(`🔒 Accès Verrouillé : Vous n'avez pas la permission pour le Pôle ${poleAttr}. Veuillez contacter un SuperAdministrateur pour vous l'attribuer.`);
+            }
+          };
+        } else {
+          card.classList.remove('locked');
+          card.onclick = null;
+        }
+      });
+    }
 
     // Filtrage des cartes par mot-clé
     function filterPoles() {

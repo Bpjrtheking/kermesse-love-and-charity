@@ -444,3 +444,96 @@
     padding: 1rem 0.85rem;
   }
 }
+
+/* ==========================================================================
+   ÉTAT VERROUILLÉ (LOCKED) & GESTION MULTI-PÔLES DANS PORTAL.CSS
+   ========================================================================== */
+
+.pole-card.locked {
+  cursor: pointer;
+  background: #f8fafc;
+  border-color: #cbd5e1 !important;
+  opacity: 0.65;
+  box-shadow: none;
+}
+
+.pole-card.locked:hover {
+  transform: none;
+  opacity: 0.85;
+  border-color: #94a3b8 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.pole-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pole-card.locked .pole-card-footer {
+  color: #94a3b8 !important;
+}
+
+.pole-card.locked .pole-card-arrow {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+/* Grille de sélection des Pôles dans les formulaires et modals */
+.pole-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.4rem;
+}
+
+.pole-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pole-checkbox-item:hover {
+  background: white;
+  border-color: var(--primary);
+}
+
+.pole-checkbox-item.checked {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.pole-checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.pole-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin: 2px;
+  white-space: nowrap;
+}
+

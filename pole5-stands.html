@@ -8,9 +8,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Pôle 5 : Stands &amp; Jeux — Kermesse Love and Charity</title>
   
-  <link rel="stylesheet" href="css/style.css?v=5.3">
-  <link rel="stylesheet" href="css/responsive.css?v=5.3">
-  <link rel="stylesheet" href="css/portal.css?v=5.3">
+  <link rel="stylesheet" href="css/style.css?v=5.4">
+  <link rel="stylesheet" href="css/responsive.css?v=5.4">
+  <link rel="stylesheet" href="css/portal.css?v=5.4">
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -71,17 +71,17 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=5.3"></script>
-  <script src="js/notify.js?v=5.3"></script>
-  <script src="js/supabase.js?v=5.3"></script>
-  <script src="js/audit.js?v=5.3"></script>
-  <script src="js/offline.js?v=5.3"></script>
-  <script src="js/auth.js?v=5.3"></script>
-  <script src="js/permissions.js?v=5.3"></script>
+  <script src="js/config.js?v=5.4"></script>
+  <script src="js/notify.js?v=5.4"></script>
+  <script src="js/supabase.js?v=5.4"></script>
+  <script src="js/audit.js?v=5.4"></script>
+  <script src="js/offline.js?v=5.4"></script>
+  <script src="js/auth.js?v=5.4"></script>
+  <script src="js/permissions.js?v=5.4"></script>
 
   <!-- Modules Pôle 5 -->
-  <script src="js/modules/stands.js?v=5.3"></script>
-  <script src="js/modules/games.js?v=5.3"></script>
+  <script src="js/modules/stands.js?v=5.4"></script>
+  <script src="js/modules/games.js?v=5.4"></script>
 
   <!-- Contrôleur de Page Pôle 5 -->
   <script>
@@ -92,7 +92,7 @@
         games: { label: 'Jeux & Tarifs', handler: GamesModule }
       },
 
-      init() {
+      async init() {
         if (!Auth.requireAuth()) return;
         SupabaseClient.init();
         OfflineManager.init();
@@ -101,6 +101,27 @@
         if (user) {
           document.getElementById('headerUserName').textContent = user.full_name || user.login;
           document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Stands';
+        }
+
+        // Contrôle des autorisations d'accès au Pôle
+        await Permissions.syncPolesFromCloud();
+        if (!Permissions.canAccessPole(5)) {
+          const navTabs = document.querySelector('.pole-tabs-bar');
+          if (navTabs) navTabs.style.display = 'none';
+          document.getElementById('poleContainer').innerHTML = `
+            <div class="card" style="text-align: center; padding: 3rem 1.5rem; max-width: 520px; margin: 3rem auto; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border-radius: 16px;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
+              <h3 style="font-weight: 800; color: #1e293b; font-size: 1.35rem; margin-bottom: 0.75rem;">Accès Non Autorisé</h3>
+              <p style="color: #64748b; margin-bottom: 1.5rem; line-height: 1.6; font-size: 0.95rem;">
+                Votre compte n'a pas reçu la permission d'accéder au <strong>Pôle 5 : Stands &amp; Jeux</strong>.
+                <br>Pour obtenir l'accès, veuillez demander à un <strong>SuperAdministrateur</strong> d'ajouter ce pôle à votre profil.
+              </p>
+              <a href="index.html" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-weight: 600;">
+                <span>←</span> Retour au Menu Général
+              </a>
+            </div>
+          `;
+          return;
         }
 
         const hash = window.location.hash.replace('#', '');

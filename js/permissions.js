@@ -102,27 +102,158 @@ const Permissions = {
     }
   },
 
-  // Vérifie l'accès à un module spécifique (strictement cloisonné par pôle)
+  // Métadonnées officielles des 9 Pôles
+  POLES_CONFIG: [
+    { num: 1, name: 'Communication & Affichage', icon: '📢', color: '#f97316', page: 'pole1-communication.html', role_default: 'admin_communication' },
+    { num: 2, name: 'Billetterie & Caisses', icon: '🎟️', color: '#2563eb', page: 'pole2-caisses.html', role_default: 'admin_finances' },
+    { num: 3, name: 'Organisation, Déco & Stade 3D', icon: '🎨', color: '#10b981', page: 'pole3-organisation.html', role_default: 'admin_decoration' },
+    { num: 4, name: 'Restauration & Buvette', icon: '🍔', color: '#ea580c', page: 'pole4-restauration.html', role_default: 'admin_restauration' },
+    { num: 5, name: 'Stands & Jeux', icon: '🎪', color: '#8b5cf6', page: 'pole5-stands.html', role_default: 'admin_stands' },
+    { num: 6, name: 'Lots à gagner & Cadeaux', icon: '🎁', color: '#f59e0b', page: 'pole6-lots.html', role_default: 'admin_lots' },
+    { num: 7, name: 'Bénévoles & Planning', icon: '👥', color: '#06b6d4', page: 'pole7-benevoles.html', role_default: 'admin_benevoles' },
+    { num: 8, name: 'Logistique & Matériel', icon: '📦', color: '#4f46e5', page: 'pole8-materiel.html', role_default: 'admin_logistique' },
+    { num: 9, name: 'Accueil, Secours & Sécurité', icon: '🛡️', color: '#e11d48', page: 'pole9-securite.html', role_default: 'admin_securite' }
+  ],
+
+  isSuperAdmin(user = Auth.getCurrentUser()) {
+    if (!user) return false;
+    return Boolean(user.is_original_superadmin || user.login?.toLowerCase() === 'mounir' || user.role_code === this.ROLES.SUPERADMIN);
+  },
+
+  getCustomPolesMap() {
+    try {
+      const data = localStorage.getItem('lc_user_poles_map');
+      return data ? JSON.parse(data) : {};
+    } catch {
+      return {};
+    }
+  },
+
+  // Synchronisation des permissions de pôles depuis Supabase (audit logs)
+  async syncPolesFromCloud() {
+    const client = SupabaseClient.client;
+    if (!client) return;
+
+    try {
+      const { data, error } = await client
+        .from('activity_logs')
+        .select('new_values, created_at')
+        .eq('action', 'UPDATE_POLE_PERMISSIONS')
+        .order('created_at', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const map = this.getCustomPolesMap();
+        data.forEach(log => {
+          if (log.new_values && log.new_values.poles) {
+            const { userId, login, poles } = log.new_values;
+            if (userId) map[userId] = poles;
+            if (login) map[login.toLowerCase()] = poles;
+          }
+        });
+        localStorage.setItem('lc_user_poles_map', JSON.stringify(map));
+      }
+    } catch (e) {
+      console.warn('[Permissions Cloud Sync Warning]', e);
+    }
+  },
+
+  // Renvoie la liste des numéros de pôles autorisés pour un utilisateur
+  getAllowedPoles(user = Auth.getCurrentUser()) {
+    if (!user) return [];
+
+    // SuperAdmin a accès à tous les 9 pôles + supervision
+    if (this.isSuperAdmin(user)) {
+      return [1, 2, 3, 4, 5, 6, 7, 8, 9, 'supervision'];
+    }
+
+    // 1. Vérifier si des permissions personnalisées multi-pôles ont été enregistrées
+    const map = this.getCustomPolesMap();
+    const custom = (user.id && map[user.id]) || (user.login && map[user.login.toLowerCase()]);
+    if (Array.isArray(custom) && custom.length > 0) {
+      return custom.map(n => Number(n));
+    }
+
+    // 2. Si l'utilisateur a allowed_poles en session
+    if (Array.isArray(user.allowed_poles) && user.allowed_poles.length > 0) {
+      return user.allowed_poles.map(n => Number(n));
+    }
+
+    // 3. Rétro-compatibilité : Déduction automatique selon le rôle de création
+    switch (user.role_code) {
+      case this.ROLES.ADMIN_COMMUNICATION: return [1];
+      case this.ROLES.ADMIN_FINANCES:
+      case 'admin_billetterie': return [2];
+      case this.ROLES.ADMIN_DECORATION:
+      case 'admin_organisation': return [3];
+      case this.ROLES.ADMIN_RESTAURATION: return [4];
+      case this.ROLES.ADMIN_STANDS: return [5];
+      case this.ROLES.ADMIN_LOTS: return [6];
+      case this.ROLES.ADMIN_BENEVOLES: return [7];
+      case this.ROLES.ADMIN_LOGISTIQUE: return [8];
+      case this.ROLES.ADMIN_SECURITE: return [9];
+      default: return [];
+    }
+  },
+
+  // Vérifie si un utilisateur a le droit d'entrer dans un pôle spécifique (1 à 9)
+  canAccessPole(poleNum, user = Auth.getCurrentUser()) {
+    if (!user) return false;
+    if (this.isSuperAdmin(user)) return true;
+    if (poleNum === 'supervision') return false;
+
+    const allowed = this.getAllowedPoles(user);
+    const target = Number(poleNum);
+    return allowed.includes(target);
+  },
+
+  // Enregistre les pôles autorisés pour un utilisateur (local + cloud Supabase)
+  async setAllowedPoles(userId, login, polesArray) {
+    const cleanPoles = polesArray.map(n => Number(n)).filter(n => n >= 1 && n <= 9);
+    const map = this.getCustomPolesMap();
+    if (userId) map[userId] = cleanPoles;
+    if (login) map[login.toLowerCase()] = cleanPoles;
+    localStorage.setItem('lc_user_poles_map', JSON.stringify(map));
+
+    const currentUser = Auth.getCurrentUser();
+    if (currentUser && (currentUser.id === userId || currentUser.login?.toLowerCase() === login?.toLowerCase())) {
+      currentUser.allowed_poles = cleanPoles;
+      Auth.setCurrentUser(currentUser);
+    }
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        await client.from('activity_logs').insert([{
+          action: 'UPDATE_POLE_PERMISSIONS',
+          entity_type: 'user',
+          entity_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId || '')) ? userId : null,
+          login: currentUser?.login || 'SuperAdmin',
+          details: `Attribution des pôles [${cleanPoles.join(', ')}] à ${login}`,
+          new_values: { userId, login, poles: cleanPoles }
+        }]);
+      } catch (e) {
+        console.warn('[Set Allowed Poles DB Warning]', e);
+      }
+    }
+    AuditLogger.log('ATTRIBUTION_POLES', 'user', userId, `Permissions de pôles modifiées pour ${login} : [${cleanPoles.join(', ')}]`);
+  },
+
+  // Vérifie l'accès à un module spécifique selon les pôles autorisés
   canAccessModule(moduleName) {
     const user = Auth.getCurrentUser();
     if (!user) return false;
 
-    // SuperAdmin a accès à tous les modules
-    if (user.is_original_superadmin || user.role_code === this.ROLES.SUPERADMIN) {
-      return true;
-    }
+    if (this.isSuperAdmin(user)) return true;
 
-    // Modules universels accessibles à tous les administrateurs
+    // Modules universels
     if (['dashboard', 'messages', 'tasks'].includes(moduleName)) {
       return true;
     }
 
-    const role = user.role_code;
-
     switch (moduleName) {
       // Pôle 1 : Communication & Affichage
       case 'communication':
-        return role === this.ROLES.ADMIN_COMMUNICATION;
+        return this.canAccessPole(1, user);
 
       // Pôle 2 : Billetterie, Tickets, Caisse & Comptabilité
       case 'caisse_entree':
@@ -133,52 +264,52 @@ const Permissions = {
       case 'cash':
       case 'expenses':
       case 'closures':
-        return role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie';
+        return this.canAccessPole(2, user);
 
       // Pôle 3 : Organisation & Décoration
       case 'decoration':
       case 'locations':
-        return role === this.ROLES.ADMIN_DECORATION || role === 'admin_organisation';
+        return this.canAccessPole(3, user);
 
       // Pôle 4 : Restauration
       case 'caisse_restauration':
       case 'stocks':
       case 'inventory':
-        return role === this.ROLES.ADMIN_RESTAURATION || role === this.ROLES.ADMIN_FINANCES || role === 'admin_billetterie';
+        return this.canAccessPole(4, user);
 
       // Pôle 5 : Stands & Jeux
       case 'stands':
       case 'games':
-        return role === this.ROLES.ADMIN_STANDS;
+        return this.canAccessPole(5, user);
 
       // Pôle 6 : Lots à gagner
       case 'gifts':
-        return role === this.ROLES.ADMIN_LOTS;
+        return this.canAccessPole(6, user);
 
       // Pôle 7 : Planning & Bénévoles
       case 'members':
       case 'teams':
       case 'planning':
-        return role === this.ROLES.ADMIN_BENEVOLES;
+        return this.canAccessPole(7, user);
 
       // Pôle 8 : Logistique & Installation
       case 'materials':
       case 'loans':
       case 'movements':
       case 'returns':
-        return role === this.ROLES.ADMIN_LOGISTIQUE;
+        return this.canAccessPole(8, user);
 
       // Pôle 9 : Accueil & Sécurité
       case 'security':
       case 'incidents':
-        return role === this.ROLES.ADMIN_SECURITE;
+        return this.canAccessPole(9, user);
 
       // Supervision réservée au SuperAdmin
       case 'roles':
       case 'history':
       case 'reports':
       case 'settings':
-        return user.is_original_superadmin || role === this.ROLES.SUPERADMIN;
+        return this.isSuperAdmin(user);
 
       default:
         return false;
