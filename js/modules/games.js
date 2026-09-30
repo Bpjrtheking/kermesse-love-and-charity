@@ -74,16 +74,39 @@ const GamesModule = {
           .order('number');
         if (sData) this.stands = sData;
 
-        // Chargement des jeux avec stand associé
-        const { data: gData, error: gError } = await client
-          .from('games')
-          .select(`
-            id, name, ticket_price_f, rules_summary, prizes_description, materials_needed, is_active,
-            stand:stands(id, name, number, color_name, color_hex)
-          `)
-          .order('name', { ascending: true });
+        // Chargement des jeux avec stand associé et image
+        let gData = null;
+        let gError = null;
 
-        if (!gError && gData) {
+        try {
+          const res = await client
+            .from('games')
+            .select(`
+              id, name, ticket_price_f, rules_summary, prizes_description, materials_needed, is_active, image_url,
+              stand:stands(id, name, number, color_name, color_hex)
+            `)
+            .order('name', { ascending: true });
+          gData = res.data;
+          gError = res.error;
+        } catch (e) {
+          gError = e;
+        }
+
+        if (gError) {
+          // Si image_url n'est pas encore créée en DB, fallback sans cette colonne
+          try {
+            const fallback = await client
+              .from('games')
+              .select(`
+                id, name, ticket_price_f, rules_summary, prizes_description, materials_needed, is_active,
+                stand:stands(id, name, number, color_name, color_hex)
+              `)
+              .order('name', { ascending: true });
+            if (!fallback.error && fallback.data) gData = fallback.data;
+          } catch (e) {}
+        }
+
+        if (gData) {
           this.games = gData;
         }
 
@@ -99,12 +122,25 @@ const GamesModule = {
       console.warn('[GamesModule Load Warning]', e);
     }
 
-    // Fallbacks locaux
+    // Fallbacks locaux et synchronisation des images locales
+    const storedG = localStorage.getItem('kermesse_games_cache');
+    let localGames = [];
+    if (storedG) {
+      try { localGames = JSON.parse(storedG); } catch (e) {}
+    }
+
     if (!this.games || this.games.length === 0) {
-      const storedG = localStorage.getItem('kermesse_games_cache');
-      if (storedG) {
-        try { this.games = JSON.parse(storedG); } catch (e) {}
-      }
+      this.games = localGames;
+    } else {
+      // Si une image a été mise en cache localement pour un jeu, la préserver
+      this.games.forEach(g => {
+        if (!g.image_url) {
+          const localMatch = localGames.find(lg => lg.id === g.id);
+          if (localMatch && localMatch.image_url) {
+            g.image_url = localMatch.image_url;
+          }
+        }
+      });
     }
 
     const storedReq = localStorage.getItem('kermesse_stand_material_requests');
@@ -116,6 +152,47 @@ const GamesModule = {
     }
 
     this.renderTable(this.games || []);
+  },
+
+  // Compression et conversion d'une image locale en DataURL léger
+  compressAndLoadImage(file, callback) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      Notify.error('Le fichier sélectionné doit être une image (JPG, PNG, WebP...).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Redimensionnement max 480x480 pour garder une taille plume (~30-50 Ko)
+        const maxDim = 480;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        callback(dataUrl);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   },
 
   renderTable(games) {
@@ -157,8 +234,17 @@ const GamesModule = {
             return `
               <tr data-name="${g.name}" data-stand="${hasStand ? g.stand.name : ''}" data-assigned="${hasStand ? 'true' : 'false'}" data-mat="${g.materials_needed || ''}">
                 <td>
-                  <strong>${g.name}</strong>
-                  ${!hasStand ? '<div style="font-size: 0.75rem; color: var(--warning, #eab308);">⏳ Non rattaché à un stand</div>' : ''}
+                  <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    ${g.image_url ? `
+                      <img src="${g.image_url}" alt="${g.name}" style="width: 44px; height: 44px; border-radius: var(--radius-md); object-fit: cover; border: 1px solid var(--gray-200); flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    ` : `
+                      <div style="width: 44px; height: 44px; border-radius: var(--radius-md); background: #eff6ff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; border: 1px dashed #93c5fd;">🎯</div>
+                    `}
+                    <div>
+                      <strong style="font-size: 0.95rem;">${g.name}</strong>
+                      ${!hasStand ? '<div style="font-size: 0.75rem; color: var(--warning, #eab308);">⏳ Non rattaché à un stand</div>' : ''}
+                    </div>
+                  </div>
                 </td>
                 <td>
                   ${hasStand ? `
@@ -254,6 +340,27 @@ const GamesModule = {
               <input type="text" id="gName" class="form-control" required placeholder="Ex: Tir à la corde, Lancer d'anneaux, Pêche aux canards, Manège...">
             </div>
 
+            <!-- Image de l'attraction (Parcourir sur PC) -->
+            <div class="form-group">
+              <label style="display: flex; justify-content: space-between; align-items: center;">
+                <span>📸 Photo / Image du jeu</span>
+                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Affichée sur l'écran tactile des caisses</span>
+              </label>
+              <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="cgImageInput" accept="image/*" style="display: none;">
+                <button type="button" class="btn btn-secondary btn-sm" id="cgBrowseBtn" style="display: flex; align-items: center; gap: 6px;">
+                  <span>📁</span> Parcourir une image sur mon PC...
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" id="cgRemoveImgBtn" style="display: none; padding: 4px 8px;">
+                  <span>🗑️</span> Enlever la photo
+                </button>
+              </div>
+              <div id="cgImagePreviewBox" style="display: none; margin-top: 0.6rem;">
+                <img id="cgImagePreview" src="" alt="Aperçu jeu" style="max-width: 160px; max-height: 100px; object-fit: cover; border-radius: var(--radius-md); border: 2px solid var(--primary); box-shadow: var(--shadow-sm);">
+                <div style="font-size: 0.75rem; color: var(--success); margin-top: 2px;">✅ Image prête (optimisée pour la caisse)</div>
+              </div>
+            </div>
+
             <div class="form-row">
               <div class="form-group">
                 <label>Stand associé (Optionnel)</label>
@@ -307,6 +414,35 @@ const GamesModule = {
     modal.querySelector('.modal-close-btn').onclick = close;
     modal.querySelector('.close-btn').onclick = close;
 
+    // Gestion de la sélection d'image depuis le PC
+    let currentImageDataUrl = null;
+    const fileInput = modal.querySelector('#cgImageInput');
+    const browseBtn = modal.querySelector('#cgBrowseBtn');
+    const removeBtn = modal.querySelector('#cgRemoveImgBtn');
+    const previewBox = modal.querySelector('#cgImagePreviewBox');
+    const previewImg = modal.querySelector('#cgImagePreview');
+
+    browseBtn.onclick = () => fileInput.click();
+
+    fileInput.onchange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      GamesModule.compressAndLoadImage(file, (dataUrl) => {
+        currentImageDataUrl = dataUrl;
+        previewImg.src = dataUrl;
+        previewBox.style.display = 'block';
+        removeBtn.style.display = 'inline-flex';
+      });
+    };
+
+    removeBtn.onclick = () => {
+      currentImageDataUrl = null;
+      fileInput.value = '';
+      previewImg.src = '';
+      previewBox.style.display = 'none';
+      removeBtn.style.display = 'none';
+    };
+
     modal.querySelector('#saveGameBtn').onclick = async () => {
       const standId = document.getElementById('gStand').value || null;
       const name = document.getElementById('gName').value.trim();
@@ -334,14 +470,18 @@ const GamesModule = {
             rules_summary: rules,
             prizes_description: prizes,
             materials_needed: materials,
+            image_url: currentImageDataUrl || null,
             is_active: true
           };
 
           const { data, error } = await client.from('games').insert([insertPayload]).select();
           if (error) {
-            // Si la colonne materials_needed n'existe pas encore en DB, réessayer sans
             delete insertPayload.materials_needed;
-            const retry = await client.from('games').insert([insertPayload]).select();
+            let retry = await client.from('games').insert([insertPayload]).select();
+            if (retry.error) {
+              delete insertPayload.image_url;
+              retry = await client.from('games').insert([insertPayload]).select();
+            }
             if (retry.error) throw retry.error;
             if (retry.data && retry.data[0]) newGameId = retry.data[0].id;
           } else if (data && data[0]) {
@@ -371,6 +511,23 @@ const GamesModule = {
           requested_by_name: requesterName
         });
       }
+
+      // Sauvegarde dans le cache local
+      const newGameObject = {
+        id: newGameId,
+        name,
+        ticket_price_f: isNaN(price) ? 0 : price,
+        rules_summary: rules,
+        prizes_description: prizes,
+        materials_needed: materials,
+        image_url: currentImageDataUrl || null,
+        is_active: true,
+        stand: standId ? stands.find(s => s.id === standId) : null
+      };
+
+      const cachedGames = JSON.parse(localStorage.getItem('kermesse_games_cache') || '[]');
+      cachedGames.unshift(newGameObject);
+      localStorage.setItem('kermesse_games_cache', JSON.stringify(cachedGames));
 
       AuditLogger.log('CREATION_JEU', 'game', newGameId, `Création du jeu ${name}`);
       Notify.success(`Jeu "${name}" enregistré avec succès.`);
@@ -404,6 +561,27 @@ const GamesModule = {
             <div class="form-group">
               <label>Nom du jeu *</label>
               <input type="text" id="egName" class="form-control" value="${game.name}" required>
+            </div>
+
+            <!-- Image de l'attraction (Parcourir sur PC) -->
+            <div class="form-group">
+              <label style="display: flex; justify-content: space-between; align-items: center;">
+                <span>📸 Photo / Image du jeu</span>
+                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Affichée sur l'écran tactile des caisses</span>
+              </label>
+              <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="egImageInput" accept="image/*" style="display: none;">
+                <button type="button" class="btn btn-secondary btn-sm" id="egBrowseBtn" style="display: flex; align-items: center; gap: 6px;">
+                  <span>📁</span> Parcourir une image sur mon PC...
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" id="egRemoveImgBtn" style="${game.image_url ? 'display: inline-flex;' : 'display: none;'} padding: 4px 8px;">
+                  <span>🗑️</span> Enlever la photo
+                </button>
+              </div>
+              <div id="egImagePreviewBox" style="${game.image_url ? 'display: block;' : 'display: none;'} margin-top: 0.6rem;">
+                <img id="egImagePreview" src="${game.image_url || ''}" alt="Aperçu jeu" style="max-width: 160px; max-height: 100px; object-fit: cover; border-radius: var(--radius-md); border: 2px solid var(--primary); box-shadow: var(--shadow-sm);">
+                <div style="font-size: 0.75rem; color: var(--success); margin-top: 2px;">✅ Image actuelle configurée</div>
+              </div>
             </div>
 
             <div class="form-row">
@@ -454,6 +632,35 @@ const GamesModule = {
     modal.querySelector('.modal-close-btn').onclick = close;
     modal.querySelector('.close-btn').onclick = close;
 
+    // Gestion de la photo depuis le PC
+    let currentImageDataUrl = game.image_url || null;
+    const fileInput = modal.querySelector('#egImageInput');
+    const browseBtn = modal.querySelector('#egBrowseBtn');
+    const removeBtn = modal.querySelector('#egRemoveImgBtn');
+    const previewBox = modal.querySelector('#egImagePreviewBox');
+    const previewImg = modal.querySelector('#egImagePreview');
+
+    browseBtn.onclick = () => fileInput.click();
+
+    fileInput.onchange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      GamesModule.compressAndLoadImage(file, (dataUrl) => {
+        currentImageDataUrl = dataUrl;
+        previewImg.src = dataUrl;
+        previewBox.style.display = 'block';
+        removeBtn.style.display = 'inline-flex';
+      });
+    };
+
+    removeBtn.onclick = () => {
+      currentImageDataUrl = null;
+      fileInput.value = '';
+      previewImg.src = '';
+      previewBox.style.display = 'none';
+      removeBtn.style.display = 'none';
+    };
+
     modal.querySelector('#saveEditGameBtn').onclick = async () => {
       const standId = document.getElementById('egStand').value || null;
       const name = document.getElementById('egName').value.trim();
@@ -475,16 +682,37 @@ const GamesModule = {
             ticket_price_f: isNaN(price) ? 0 : price,
             rules_summary: rules,
             prizes_description: prizes,
-            materials_needed: materials
+            materials_needed: materials,
+            image_url: currentImageDataUrl
           };
           const { error } = await client.from('games').update(updatePayload).eq('id', gameId);
           if (error) {
             delete updatePayload.materials_needed;
-            await client.from('games').update(updatePayload).eq('id', gameId);
+            let retry = await client.from('games').update(updatePayload).eq('id', gameId);
+            if (retry.error) {
+              delete updatePayload.image_url;
+              await client.from('games').update(updatePayload).eq('id', gameId);
+            }
           }
         } catch (e) {
           console.warn('[Game Update Error]', e);
         }
+      }
+
+      // Mettre à jour l'objet local
+      game.name = name;
+      game.ticket_price_f = isNaN(price) ? 0 : price;
+      game.rules_summary = rules;
+      game.prizes_description = prizes;
+      game.materials_needed = materials;
+      game.image_url = currentImageDataUrl;
+      game.stand = standId ? stands.find(s => s.id === standId) : null;
+
+      const cachedGames = JSON.parse(localStorage.getItem('kermesse_games_cache') || '[]');
+      const idx = cachedGames.findIndex(g => g.id === gameId);
+      if (idx >= 0) {
+        cachedGames[idx] = { ...cachedGames[idx], ...game };
+        localStorage.setItem('kermesse_games_cache', JSON.stringify(cachedGames));
       }
 
       Notify.success(`Jeu "${name}" mis à jour.`);

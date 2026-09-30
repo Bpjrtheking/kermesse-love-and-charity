@@ -173,29 +173,91 @@ const DashboardModule = {
         document.getElementById('kpiMembersSub').textContent = memberCount === 0 ? 'Aucun membre enregistré' : `${memberCount} bénévole(s)`;
       }
 
-      // 3. Tickets et Ventes
-      const { data: sales } = await client.from('ticket_sales').select('quantity, total_amount_f');
+      // 3. Tickets et Ventes (Filtrage strict des annulations et synchronisation totale)
+      let cancelledIds = [];
+      try {
+        const storedC = localStorage.getItem('kermesse_cancelled_sale_ids');
+        if (storedC) cancelledIds = JSON.parse(storedC);
+      } catch (e) {}
+
+      let salesList = [];
+      if (client) {
+        try {
+          const { data: sales } = await client.from('ticket_sales').select('id, quantity, total_amount_f, category');
+          if (sales) {
+            salesList = sales.filter(s => !cancelledIds.includes(s.id));
+          }
+        } catch (e) {
+          console.warn('[Dashboard Sales Error]', e);
+        }
+      }
+
+      // Fusion avec les ventes locales (Entrée, Jeux, Restauration)
+      const storedEntree = localStorage.getItem('kermesse_entry_sales');
+      const storedJeux = localStorage.getItem('kermesse_game_sales');
+      const storedFood = localStorage.getItem('kermesse_food_sales');
+      let localSales = [];
+      try { if (storedEntree) localSales = [...localSales, ...JSON.parse(storedEntree)]; } catch (e) {}
+      try { if (storedJeux) localSales = [...localSales, ...JSON.parse(storedJeux)]; } catch (e) {}
+      try { if (storedFood) localSales = [...localSales, ...JSON.parse(storedFood)]; } catch (e) {}
+      localSales = localSales.filter(l => !cancelledIds.includes(l.id));
+
+      localSales.forEach(ls => {
+        if (!salesList.some(s => s.id === ls.id)) {
+          salesList.push(ls);
+        }
+      });
+
       let totalTickets = 0;
       let totalRevenue = 0;
-      if (sales) {
-        sales.forEach(s => {
-          totalTickets += s.quantity || 0;
-          totalRevenue += s.total_amount_f || 0;
-        });
-      }
+      salesList.forEach(s => {
+        totalTickets += (s.quantity || 1);
+        totalRevenue += (s.total_amount_f || 0);
+      });
+
       if (document.getElementById('kpiTickets')) {
-        document.getElementById('kpiTickets').textContent = totalTickets;
+        document.getElementById('kpiTickets').textContent = totalTickets.toLocaleString();
         document.getElementById('kpiTicketsSub').textContent = `${totalRevenue.toLocaleString()} ${KermesseConfig.currency} encaissés`;
       }
 
-      // 4. Dépenses et Solde
-      const { data: expenses } = await client.from('expenses').select('amount_f, status');
+      // 4. Dépenses et Solde (Dépenses validées + Sorties enregistrées dans les Caisses)
       let totalExpenses = 0;
-      if (expenses) {
-        expenses.filter(e => e.status === 'approuve').forEach(e => {
-          totalExpenses += e.amount_f || 0;
-        });
+
+      if (client) {
+        try {
+          const { data: expenses } = await client.from('expenses').select('amount_f, status');
+          if (expenses) {
+            expenses.filter(e => e.status === 'approuve').forEach(e => {
+              totalExpenses += Math.abs(e.amount_f || 0);
+            });
+          }
+        } catch (e) {}
+
+        try {
+          const { data: caisseExps } = await client.from('cash_movements').select('amount_f, type').eq('type', 'depense_autorisee');
+          if (caisseExps) {
+            caisseExps.forEach(ce => {
+              totalExpenses += Math.abs(ce.amount_f || 0);
+            });
+          }
+        } catch (e) {}
       }
+
+      // Dépenses locales de caisses non encore synchronisées
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('kermesse_caisse_expenses_')) {
+            const locExps = JSON.parse(localStorage.getItem(key) || '[]');
+            locExps.forEach(le => {
+              if (!client || !le.id || (typeof CaissesCore !== 'undefined' && !CaissesCore.isUuid(le.id))) {
+                totalExpenses += Math.abs(le.amount_f || 0);
+              }
+            });
+          }
+        }
+      } catch (e) {}
+
       const balance = totalRevenue - totalExpenses;
       if (document.getElementById('kpiBalance')) {
         document.getElementById('kpiBalance').textContent = `${balance.toLocaleString()} ${KermesseConfig.currency}`;

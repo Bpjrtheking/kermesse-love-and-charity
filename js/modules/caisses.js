@@ -1544,11 +1544,36 @@ const CaisseJeuxModule = {
 
     if (client) {
       try {
-        const { data: gData } = await client
-          .from('games')
-          .select('id, name, ticket_price_f, stand_id, is_active, stand:stands(id, name, number, color_name, color_hex)')
-          .order('name');
+        let gData = null;
+        try {
+          const res = await client
+            .from('games')
+            .select('id, name, ticket_price_f, stand_id, is_active, image_url, stand:stands(id, name, number, color_name, color_hex)')
+            .order('name');
+          if (!res.error && res.data) gData = res.data;
+        } catch (e) {}
+
+        if (!gData) {
+          try {
+            const fallback = await client
+              .from('games')
+              .select('id, name, ticket_price_f, stand_id, is_active, stand:stands(id, name, number, color_name, color_hex)')
+              .order('name');
+            if (fallback.data) gData = fallback.data;
+          } catch (e) {}
+        }
         if (gData) this.games = gData;
+
+        // Synchroniser avec les images du cache local
+        try {
+          const cachedGames = JSON.parse(localStorage.getItem('kermesse_games_cache') || '[]');
+          this.games.forEach(g => {
+            if (!g.image_url) {
+              const match = cachedGames.find(cg => cg.id === g.id || cg.name === g.name);
+              if (match && match.image_url) g.image_url = match.image_url;
+            }
+          });
+        } catch (e) {}
 
         const { data: sData } = await client.from('stands').select('id, name, number, color_name, color_hex').order('number');
         if (sData) this.stands = sData;
@@ -1654,9 +1679,25 @@ const CaisseJeuxModule = {
                 const qty = inCart ? inCart.qty : 0;
 
                 return `
-                  <div class="card" style="border: 2px solid ${qty > 0 ? standColor : `${standColor}40`}; border-top: 5px solid ${standColor}; transition: box-shadow 0.15s; background: ${qty > 0 ? `${standColor}08` : 'white'};">
-                    <div class="card-body" style="padding: 0.85rem;">
-                      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.35rem;">
+                  <div class="card" style="border: 2px solid ${qty > 0 ? standColor : `${standColor}40`}; border-top: 5px solid ${standColor}; transition: transform 0.15s, box-shadow 0.15s; background: ${qty > 0 ? `${standColor}08` : 'white'}; overflow: hidden;">
+                    
+                    <!-- 1. PHOTO DU JEU AU-DESSUS (CLIQUABLE POUR AJOUTER UN TICKET) -->
+                    <div style="position: relative; width: 100%; height: 115px; cursor: pointer; background: ${standColor}15; overflow: hidden; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Cliquer sur la photo pour ajouter un ticket">
+                      ${g.image_url ? `
+                        <img src="${g.image_url}" alt="${g.name}" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">
+                      ` : `
+                        <div style="font-size: 2.5rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">🎯</div>
+                      `}
+                      ${qty > 0 ? `
+                        <div style="position: absolute; top: 6px; right: 6px; background: var(--primary); color: white; border-radius: 999px; padding: 2px 8px; font-weight: 800; font-size: 0.8rem; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border: 2px solid white;">
+                          ×${qty}
+                        </div>
+                      ` : ''}
+                    </div>
+
+                    <!-- 2. DÉTAILS ET NOM DU JEU EN-DESSOUS -->
+                    <div class="card-body" style="padding: 0.75rem 0.85rem;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
                         <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.72rem; padding: 1px 6px;">
                           ${standName}
                         </span>
@@ -1664,11 +1705,12 @@ const CaisseJeuxModule = {
                           ${price.toLocaleString()} F
                         </strong>
                       </div>
-                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.65rem; min-height: 2.2em; line-height: 1.2;">
+
+                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.65rem; min-height: 2.4em; line-height: 1.25; cursor: pointer;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Cliquer pour ajouter un ticket">
                         ${g.name}
                       </div>
 
-                      <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
+                      <!-- 3. DEUX BOUTONS : AUGMENTER (+) ET DIMINUER (-) EN-DESSOUS DU NOM -->
                       <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
                         <button class="btn btn-secondary btn-sm" style="width: 36px; height: 36px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.decrementGame('${g.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
                           −
