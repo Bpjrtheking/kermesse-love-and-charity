@@ -34,6 +34,9 @@
           <span class="portal-user-role" id="headerUserRole">Admin</span>
         </div>
       </div>
+      <a href="messages.html" class="btn btn-secondary btn-sm" title="Messagerie &amp; Consignes d'Équipe" style="padding: 0.45rem 0.75rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;">
+        <span>💬</span>
+      </a>
       <a href="tasks.html" class="btn btn-secondary btn-sm" title="Mes Tâches &amp; Bloc-Notes" style="padding: 0.45rem 0.75rem;">
         <span>📝</span>
       </a>
@@ -55,6 +58,9 @@
         </p>
       </div>
       <div class="portal-quick-tools">
+        <a href="messages.html" class="btn btn-secondary btn-sm" style="font-weight: 700; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;">
+          <span>💬</span> Messagerie &amp; Consignes
+        </a>
         <a href="tasks.html" class="btn btn-secondary btn-sm" style="font-weight: 700;">
           <span>📝</span> Mon Bloc-Notes &amp; Tâches
         </a>
@@ -82,7 +88,7 @@
           <span class="pole-card-num">Pôle 1</span>
         </div>
         <div class="pole-card-title">Communication &amp; Affichage</div>
-        <div class="pole-card-desc">Affiches, flyers, signalétique du stade, consignes sonores et messages d'équipe.</div>
+        <div class="pole-card-desc">Affiches, flyers, signalétique du stade, annonces micro et promotion des activités.</div>
         <div class="pole-card-footer">
           <span>Ouvrir l'espace</span>
           <span class="pole-card-arrow">→</span>
@@ -236,7 +242,7 @@
     // Routage rétro-compatible des anciens liens (#caisse_restauration, #stands...)
     const modulePageMap = {
       communication: 'pole1-communication.html',
-      messages: 'pole1-communication.html#messages',
+      messages: 'messages.html',
       caisse_entree: 'pole2-caisses.html#caisse_entree',
       caisse_jeux: 'pole2-caisses.html#caisse_jeux',
       caisse_jetons: 'pole2-caisses.html#caisse_jetons',

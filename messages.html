@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Mes Tâches &amp; Bloc-Notes — Kermesse Love and Charity</title>
+  <title>Messagerie &amp; Consignes d'Équipe — Kermesse Love and Charity</title>
   
   <link rel="stylesheet" href="css/style.css?v=5.4">
   <link rel="stylesheet" href="css/responsive.css?v=5.4">
@@ -15,7 +15,22 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
-      --active-pole-color: #2563eb;
+      --active-pole-color: #0284c7;
+    }
+    .pole-content-wrapper.messages-wrapper {
+      padding: 0.5rem 1rem 1rem 1rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      height: calc(100vh - 75px);
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    @media (max-width: 768px) {
+      .pole-content-wrapper.messages-wrapper {
+        padding: 0;
+        height: calc(100vh - 65px);
+      }
     }
   </style>
 </head>
@@ -28,24 +43,24 @@
         <span>←</span> Menu Général
       </a>
       <div class="pole-title-group">
-        <span class="pole-main-badge-icon">📝</span>
+        <span class="pole-main-badge-icon" style="background: #e0f2fe; color: #0284c7;">💬</span>
         <div>
-          <h2>Mes Tâches &amp; Bloc-Notes Perso</h2>
-          <span>To-do list collaborative par pôle et notes confidentielles</span>
+          <h2>Messagerie &amp; Consignes d'Équipe</h2>
+          <span>Canal Général, Alertes Urgentes &amp; Discussions directes (Accessible à tous)</span>
         </div>
       </div>
     </div>
 
     <div class="pole-nav-right">
       <div class="portal-user-badge">
-        <span class="portal-avatar" style="background: #2563eb;">T</span>
+        <span class="portal-avatar" style="background: #0284c7;" id="headerUserAvatar">U</span>
         <div class="portal-user-info">
           <span class="portal-user-name" id="headerUserName">Chargement...</span>
-          <span class="portal-user-role" id="headerUserRole" style="color: #2563eb;">Utilisateur</span>
+          <span class="portal-user-role" id="headerUserRole" style="color: #0284c7;">Admin</span>
         </div>
       </div>
-      <a href="messages.html" class="btn btn-secondary btn-sm" title="Messagerie &amp; Consignes" style="padding: 0.4rem 0.75rem;">
-        <span>💬</span>
+      <a href="tasks.html" class="btn btn-secondary btn-sm" title="Mes Tâches &amp; Bloc-Notes" style="padding: 0.4rem 0.75rem;">
+        <span>📝</span>
       </a>
       <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.4rem 0.75rem;">
         <span>🚪</span>
@@ -53,10 +68,10 @@
     </div>
   </header>
 
-  <!-- Zone de Contenu Plein Écran Spacieux -->
-  <main class="pole-content-wrapper" id="poleContainer">
+  <!-- Zone de Contenu Plein Écran Spacieux pour la Messagerie -->
+  <main class="pole-content-wrapper messages-wrapper" id="poleContainer">
     <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
-      Chargement de vos tâches et notes...
+      Chargement de la messagerie instantanée...
     </div>
   </main>
 
@@ -72,12 +87,13 @@
   <script src="js/auth.js?v=5.4"></script>
   <script src="js/permissions.js?v=5.4"></script>
 
-  <!-- Module Tâches -->
-  <script src="js/modules/tasks.js?v=5.4"></script>
+  <!-- Module Messagerie -->
+  <script src="js/modules/messages.js?v=5.4"></script>
 
   <!-- Contrôleur -->
   <script>
     const App = {
+      currentModule: 'messages',
       init() {
         if (!Auth.requireAuth()) return;
         SupabaseClient.init();
@@ -87,10 +103,12 @@
         if (user) {
           document.getElementById('headerUserName').textContent = user.full_name || user.login;
           document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Admin';
+          document.getElementById('headerUserAvatar').textContent = (user.login || 'U').charAt(0).toUpperCase();
         }
 
         const container = document.getElementById('poleContainer');
-        TasksModule.render(container);
+        MessagesModule.render(container);
+        MessagesModule.startPolling();
       },
       navigateTo(moduleName) {
         window.location.href = `index.html#${moduleName}`;
