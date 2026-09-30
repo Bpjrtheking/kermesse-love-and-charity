@@ -26,13 +26,109 @@ const CaissesCore = {
     }
   },
 
-  addCancelledSaleId(id) {
+  getCancelledTicketNames() {
+    try {
+      const stored = localStorage.getItem('kermesse_cancelled_ticket_names');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async syncCancellationsFromDb() {
+    const client = SupabaseClient.client;
+    const cancelledIds = this.getCancelledSaleIds();
+    const cancelledNames = this.getCancelledTicketNames();
+    let purgeBefore = localStorage.getItem('kermesse_purge_all_sales_before') || null;
+
+    if (client) {
+      try {
+        const { data } = await client
+          .from('tickets_catalog')
+          .select('name, type, created_at')
+          .in('type', ['cancelled_sale', 'cancelled_ticket_name', 'purge_all_sales']);
+
+        if (data && data.length > 0) {
+          data.forEach(item => {
+            if (item.type === 'cancelled_sale' && item.name && !cancelledIds.includes(item.name)) {
+              cancelledIds.push(item.name);
+            } else if (item.type === 'cancelled_ticket_name' && item.name && !cancelledNames.includes(item.name)) {
+              cancelledNames.push(item.name);
+            } else if (item.type === 'purge_all_sales') {
+              if (!purgeBefore || item.created_at > purgeBefore) {
+                purgeBefore = item.created_at;
+              }
+            }
+          });
+          localStorage.setItem('kermesse_cancelled_sale_ids', JSON.stringify(cancelledIds));
+          localStorage.setItem('kermesse_cancelled_ticket_names', JSON.stringify(cancelledNames));
+          if (purgeBefore) {
+            localStorage.setItem('kermesse_purge_all_sales_before', purgeBefore);
+          }
+        }
+      } catch (e) {
+        console.warn('[Sync Cancellations Warning]', e);
+      }
+    }
+
+    return {
+      cancelledIds,
+      cancelledNames,
+      purgeBefore: purgeBefore ? new Date(purgeBefore) : null
+    };
+  },
+
+  async addCancelledSaleId(id, itemName = '') {
     if (!id) return;
     const ids = this.getCancelledSaleIds();
     if (!ids.includes(id)) {
       ids.push(id);
       localStorage.setItem('kermesse_cancelled_sale_ids', JSON.stringify(ids));
     }
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        await client.from('tickets_catalog').insert([{
+          type: 'cancelled_sale',
+          name: id,
+          value_f: 0,
+          is_active: false,
+          description: itemName || 'Vente annulée'
+        }]);
+      } catch (e) {}
+    }
+  },
+
+  async addCancelledTicketName(ticketName) {
+    if (!ticketName) return;
+    const names = this.getCancelledTicketNames();
+    if (!names.includes(ticketName)) {
+      names.push(ticketName);
+      localStorage.setItem('kermesse_cancelled_ticket_names', JSON.stringify(names));
+    }
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        await client.from('tickets_catalog').insert([{
+          type: 'cancelled_ticket_name',
+          name: ticketName,
+          value_f: 0,
+          is_active: false,
+          description: `Ventes associées au billet ${ticketName} supprimées`
+        }]);
+      } catch (e) {}
+    }
+  },
+
+  filterActiveSales(salesList, cancelledIds, cancelledNames, purgeDate) {
+    if (!Array.isArray(salesList)) return [];
+    return salesList.filter(s => {
+      if (!s) return false;
+      if (cancelledIds && cancelledIds.includes(s.id)) return false;
+      if (cancelledNames && s.item_name && cancelledNames.includes(s.item_name)) return false;
+      if (purgeDate && s.created_at && new Date(s.created_at) <= purgeDate) return false;
+      return true;
+    });
   },
 
   // Réinitialisation complète des ventes et tests (Remise à 0 F avant la kermesse)
@@ -41,6 +137,7 @@ const CaissesCore = {
       return false;
     }
 
+    const nowIso = new Date().toISOString();
     const client = SupabaseClient.client;
     if (client) {
       try {
@@ -49,12 +146,22 @@ const CaissesCore = {
       } catch (e) {
         console.warn('[Reset All Sales DB Warning]', e);
       }
+      try {
+        await client.from('tickets_catalog').insert([{
+          type: 'purge_all_sales',
+          name: 'Purge avant kermesse du ' + nowIso,
+          value_f: 0,
+          is_active: false
+        }]);
+      } catch (e) {}
     }
 
+    localStorage.setItem('kermesse_purge_all_sales_before', nowIso);
     localStorage.removeItem('kermesse_entry_sales');
     localStorage.removeItem('kermesse_game_sales');
     localStorage.removeItem('kermesse_food_sales');
     localStorage.removeItem('kermesse_cancelled_sale_ids');
+    localStorage.removeItem('kermesse_cancelled_ticket_names');
 
     AuditLogger.log('REMISE_A_ZERO_VENTES', 'ticket_sales', null, 'Remise à zéro complète des ventes de test avant kermesse');
     Notify.success('Toutes les ventes et chiffres de test ont été effacés. Tableau de bord et Bilan sont à 0 F.');
@@ -64,7 +171,10 @@ const CaissesCore = {
   // MOTEUR FINANCIER CENTRALISÉ & CONSOLIDÉ (Utilisé par Caisses, Bilan, Dashboard et Rapports Officiels)
   async calculateConsolidatedFinances() {
     const client = SupabaseClient.client;
-    const cancelledIds = this.getCancelledSaleIds();
+    const sync = await this.syncCancellationsFromDb();
+    const cancelledIds = sync.cancelledIds;
+    const cancelledNames = sync.cancelledNames;
+    const purgeDate = sync.purgeBefore;
 
     let allSales = [];
     let allRegisters = [];
@@ -79,7 +189,7 @@ const CaissesCore = {
           .select('id, quantity, total_amount_f, category, item_name, created_at, stand:stands(id, name, color_name, color_hex)');
         if (!sErr && s) {
           isDbOnline = true;
-          allSales = s.filter(item => !cancelledIds.includes(item.id));
+          allSales = this.filterActiveSales(s, cancelledIds, cancelledNames, purgeDate);
         }
 
         const { data: r } = await client.from('cash_registers').select('*').order('name');
@@ -99,7 +209,7 @@ const CaissesCore = {
     try { if (storedFood) localSales = [...localSales, ...JSON.parse(storedFood)]; } catch (e) {}
 
     // Filtrer les annulations de la sauvegarde locale
-    localSales = localSales.filter(l => !cancelledIds.includes(l.id));
+    localSales = this.filterActiveSales(localSales, cancelledIds, cancelledNames, purgeDate);
 
     // Dédoublonnage : si la base Supabase est connectée, elle fait foi.
     // On n'injecte des ventes locales que celles générées hors-ligne (id temporaire non-UUID)
@@ -671,8 +781,11 @@ const CaisseEntreeModule = {
     const client = SupabaseClient.client;
     this.sales = [];
 
-    // Liste des ventes annulées
-    const cancelledIds = CaissesCore.getCancelledSaleIds();
+    // Synchronisation cloud des annulations
+    const sync = await CaissesCore.syncCancellationsFromDb();
+    const cancelledIds = sync.cancelledIds;
+    const cancelledNames = sync.cancelledNames;
+    const purgeDate = sync.purgeBefore;
 
     if (client) {
       try {
@@ -682,7 +795,7 @@ const CaisseEntreeModule = {
           .eq('category', 'entree')
           .order('created_at', { ascending: false });
         if (vData) {
-          this.sales = vData.filter(s => !cancelledIds.includes(s.id));
+          this.sales = CaissesCore.filterActiveSales(vData, cancelledIds, cancelledNames, purgeDate);
         }
       } catch (e) {}
     }
@@ -692,7 +805,7 @@ const CaisseEntreeModule = {
     if (stored) {
       try {
         const local = JSON.parse(stored);
-        const filteredLocal = local.filter(l => !cancelledIds.includes(l.id));
+        const filteredLocal = CaissesCore.filterActiveSales(local, cancelledIds, cancelledNames, purgeDate);
         this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
       } catch (e) {}
     }
@@ -1326,6 +1439,9 @@ const CaisseEntreeModule = {
       return;
     }
 
+    // 1. Enregistrer le nom du billet dans les exclusions partagées (Garantie 100% cloud multi-appareils)
+    await CaissesCore.addCancelledTicketName(ticket.name);
+
     const client = SupabaseClient.client;
     if (client) {
       try {
@@ -1813,14 +1929,18 @@ const CaisseJeuxModule = {
         const { data: sData } = await client.from('stands').select('id, name, number, color_name, color_hex').order('number');
         if (sData) this.stands = sData;
 
-        const cancelledIds = CaissesCore.getCancelledSaleIds();
+        const sync = await CaissesCore.syncCancellationsFromDb();
+        const cancelledIds = sync.cancelledIds;
+        const cancelledNames = sync.cancelledNames;
+        const purgeDate = sync.purgeBefore;
+
         const { data: vData } = await client
           .from('ticket_sales')
           .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, stand:stands(name, color_name, color_hex), seller:app_users(login)')
           .eq('category', 'jeu')
           .order('created_at', { ascending: false });
         if (vData) {
-          this.sales = vData.filter(s => !cancelledIds.includes(s.id));
+          this.sales = CaissesCore.filterActiveSales(vData, cancelledIds, cancelledNames, purgeDate);
         }
       } catch (e) {
         console.warn('[CaisseJeux DB Error]', e);
@@ -1832,8 +1952,7 @@ const CaisseJeuxModule = {
     if (stored) {
       try {
         const local = JSON.parse(stored);
-        const cancelledIds = CaissesCore.getCancelledSaleIds();
-        const filteredLocal = local.filter(l => !cancelledIds.includes(l.id));
+        const filteredLocal = CaissesCore.filterActiveSales(local, cancelledIds, cancelledNames, purgeDate);
         this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
       } catch (e) {}
     }
@@ -3163,7 +3282,11 @@ const CaisseRestaurationModule = {
     }
 
     // Ventes Restauration
-    const cancelledIds = CaissesCore.getCancelledSaleIds();
+    const sync = await CaissesCore.syncCancellationsFromDb();
+    const cancelledIds = sync.cancelledIds;
+    const cancelledNames = sync.cancelledNames;
+    const purgeDate = sync.purgeBefore;
+
     if (client) {
       try {
         const { data: vData } = await client
@@ -3172,7 +3295,7 @@ const CaisseRestaurationModule = {
           .eq('category', 'restauration')
           .order('created_at', { ascending: false });
         if (vData) {
-          this.sales = vData.filter(s => !cancelledIds.includes(s.id));
+          this.sales = CaissesCore.filterActiveSales(vData, cancelledIds, cancelledNames, purgeDate);
         }
       } catch (e) {
         console.warn('[CaisseRestauration Load Sales DB]', e);
@@ -3183,7 +3306,7 @@ const CaisseRestaurationModule = {
     if (storedSales) {
       try {
         const local = JSON.parse(storedSales);
-        const filteredLocal = local.filter(l => !cancelledIds.includes(l.id));
+        const filteredLocal = CaissesCore.filterActiveSales(local, cancelledIds, cancelledNames, purgeDate);
         this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
       } catch (e) {}
     }
