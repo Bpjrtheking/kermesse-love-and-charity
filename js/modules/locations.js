@@ -4,8 +4,10 @@
  * 
  * MAQUETTE 3D INTERACTIVE DU STADE DE MBAO (DAKAR)
  * - Modélisation proportionnelle du terrain central, piste d'athlétisme, tribune couverte et portail
+ * - Éléments spécifiques Mbao : Abris de touche, main courante de sécurité, tableau d'affichage des scores
  * - Placement interactif des stands de jeux, restauration, manèges gonflables, scène et caisses
- * - Déplacement fluide au sol, rotation à 360°, bascule vues 2D/3D et export imprimable
+ * - Mode Plein Écran Immersif (100% plein écran avec tiroir rétractable et touches de raccourci)
+ * - Gestion des ambiances (Plein Jour, Coucher de soleil doré, Nocturne avec projecteurs de stade allumés)
  */
 
 const LocationsModule = {
@@ -21,6 +23,15 @@ const LocationsModule = {
   selectedItemId: null,
   itemMeshes: new Map(), // id -> THREE.Group
   showLabels: true,
+  isFullscreen: false,
+  isDrawerCollapsed: false,
+  currentAtmosphere: 'day', // 'day', 'sunset', 'night'
+
+  // Éléments de scène spécifiques
+  ambientLight: null,
+  sunLight: null,
+  hemiLight: null,
+  stadiumSpotlights: [],
 
   // Gestion du Drag au sol
   raycaster: null,
@@ -35,16 +46,16 @@ const LocationsModule = {
     this.cleanup();
 
     container.innerHTML = `
-      <div class="stadium-workspace">
+      <div class="stadium-workspace" id="stadiumWorkspaceRoot">
         <!-- Barre supérieure de KPI -->
         <div class="stadium-kpi-bar">
           <div class="stat-card">
             <div class="stat-label">Site Officiel</div>
-            <div class="stat-value" style="font-size: 1.15rem; color: var(--primary);">🏟️ Stade de Mbao</div>
+            <div class="stat-value" style="font-size: 1.15rem; color: var(--primary);">🏟️ Stade de Mbao (Dakar)</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Dimensions Aire de Jeu</div>
-            <div class="stat-value" style="font-size: 1.15rem; color: #16a34a;">105m × 68m (Pelouse)</div>
+            <div class="stat-value" style="font-size: 1.15rem; color: #16a34a;">105m × 68m (Pelouse Mbao)</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Structures Implantées</div>
@@ -52,7 +63,7 @@ const LocationsModule = {
           </div>
           <div class="stat-card">
             <div class="stat-label">Mode d'Aménagement</div>
-            <div class="stat-value" style="font-size: 1.15rem; color: #2563eb;">3D Interactif &amp; Tactile</div>
+            <div class="stat-value" style="font-size: 1.15rem; color: #2563eb;">3D Tactile &amp; Plein Écran</div>
           </div>
         </div>
 
@@ -60,13 +71,18 @@ const LocationsModule = {
         <div class="stadium-main-layout">
           
           <!-- Tiroir / Catalogue des Éléments -->
-          <div class="stadium-catalog-card">
+          <div class="stadium-catalog-card" id="stadiumCatalogCard">
             <div class="stadium-catalog-header">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                 <h4 style="margin: 0; font-size: 1rem; color: var(--gray-900);">📦 Éléments à Implanter</h4>
-                <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('decoration')" title="Ajouter d'autres structures ou manèges">
-                  ➕ Créer
-                </button>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('decoration')" title="Ajouter d'autres structures ou manèges">
+                    ➕ Créer
+                  </button>
+                  <button class="btn-icon" id="btnCloseDrawer" style="display: none;" onclick="LocationsModule.toggleCatalogDrawer()" title="Replier le tiroir">
+                    ◀️
+                  </button>
+                </div>
               </div>
               <input type="text" id="stadiumSearchInput" class="form-control" style="font-size: 0.82rem; padding: 0.4rem 0.6rem;" placeholder="Filtrer stand, manège, resto..." oninput="LocationsModule.filterCatalog()">
             </div>
@@ -91,25 +107,47 @@ const LocationsModule = {
           </div>
 
           <!-- Fenêtre de Rendu 3D du Stade -->
-          <div class="stadium-viewport-card">
+          <div class="stadium-viewport-card" id="stadiumViewportCard">
             <!-- Barre d'outils supérieure du viewer -->
             <div class="stadium-viewport-header">
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <span style="font-weight: 600; font-size: 0.92rem;">🏟️ Maquette 3D — Stade de Mbao</span>
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <span style="font-weight: 600; font-size: 0.92rem;">🏟️ Maquette 3D — Stade Municipal de Mbao</span>
                 <span class="badge badge-success" style="font-size: 0.72rem;">Pelouse + Piste + Tribune</span>
+                
+                <!-- Sélecteur d'Ambiance Mbao -->
+                <div style="display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.5rem;">
+                  <button class="stadium-tool-btn" id="btnAtmoDay" onclick="LocationsModule.setAtmosphere('day')" title="Plein Soleil de Dakar">
+                    ☀️ Jour
+                  </button>
+                  <button class="stadium-tool-btn" id="btnAtmoSunset" onclick="LocationsModule.setAtmosphere('sunset')" title="Coucher de soleil sur Mbao">
+                    🌅 Couchant
+                  </button>
+                  <button class="stadium-tool-btn" id="btnAtmoNight" onclick="LocationsModule.setAtmosphere('night')" title="Nocturne kermesse avec projecteurs allumés">
+                    🌙 Nuit (Projecteurs)
+                  </button>
+                </div>
               </div>
-              <div style="display: flex; gap: 0.4rem; align-items: center;">
+
+              <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
                 <button class="stadium-tool-btn" id="btnToggleLabels" onclick="LocationsModule.toggleLabels()">
                   🏷️ Étiquettes : ON
                 </button>
                 <button class="stadium-tool-btn" onclick="LocationsModule.centerView()">
                   🎯 Recadrer
                 </button>
+                <button class="stadium-tool-btn btn-fullscreen-toggle" id="btnToggleFullscreen" onclick="LocationsModule.toggleFullscreen()">
+                  ⛶ Plein Écran
+                </button>
               </div>
             </div>
 
             <!-- Conteneur WebGL Three.js -->
             <div class="stadium-canvas-container" id="stadiumCanvasContainer">
+              <!-- Bouton Tiroir pour mode plein écran -->
+              <button class="stadium-drawer-toggle-btn has-drawer-open" id="btnDrawerToggle" onclick="LocationsModule.toggleCatalogDrawer()">
+                📦 Éléments du Stade
+              </button>
+
               <!-- Caméras Préréglées Flottantes -->
               <div class="stadium-camera-tools">
                 <button class="stadium-tool-btn active" id="camView3D" onclick="LocationsModule.setCameraView('perspective')">
@@ -119,13 +157,16 @@ const LocationsModule = {
                   🛰️ Vue Ciel (Plan 2D)
                 </button>
                 <button class="stadium-tool-btn" id="camViewGate" onclick="LocationsModule.setCameraView('entrance')">
-                  🚶 Vue Visiteur (Entrée)
+                  🚶 Vue Entrée Mbao
+                </button>
+                <button class="stadium-tool-btn" id="camViewBenches" onclick="LocationsModule.setCameraView('benches')">
+                  🪑 Vue Bancs de Touche
                 </button>
               </div>
 
               <!-- Boussole / Indicateur d'orientation -->
               <div class="stadium-compass-badge">
-                Nord ⬆️ | Tribune Ouest ⬅️
+                Nord ⬆️ | Tribune Mbao ⬅️ | Entrée Sud ⬇️
               </div>
 
               <!-- Dock flottant de l'élément sélectionné -->
@@ -255,6 +296,60 @@ const LocationsModule = {
   },
 
   // =========================================================================
+  // GESTION DU PLEIN ÉCRAN (FULLSCREEN) & TIROIR RÉTRACTABLE
+  // =========================================================================
+  toggleFullscreen() {
+    const root = document.getElementById('stadiumWorkspaceRoot');
+    const btn = document.getElementById('btnToggleFullscreen');
+    const closeBtn = document.getElementById('btnCloseDrawer');
+
+    this.isFullscreen = !this.isFullscreen;
+
+    if (this.isFullscreen) {
+      root?.classList.add('is-fullscreen');
+      if (btn) btn.innerHTML = '⛶ Quitter (Échap)';
+      if (closeBtn) closeBtn.style.display = 'inline-flex';
+
+      // Tenter le vrai plein écran navigateur si permis
+      try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } catch (e) {}
+    } else {
+      root?.classList.remove('is-fullscreen');
+      if (btn) btn.innerHTML = '⛶ Plein Écran';
+      if (closeBtn) closeBtn.style.display = 'none';
+
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } catch (e) {}
+    }
+
+    // Réajuster immédiatement la caméra Three.js
+    setTimeout(() => {
+      if (this.resizeHandler) this.resizeHandler();
+    }, 100);
+  },
+
+  toggleCatalogDrawer() {
+    const card = document.getElementById('stadiumCatalogCard');
+    const toggleBtn = document.getElementById('btnDrawerToggle');
+    if (!card) return;
+
+    this.isDrawerCollapsed = !this.isDrawerCollapsed;
+    if (this.isDrawerCollapsed) {
+      card.classList.add('drawer-collapsed');
+      toggleBtn?.classList.remove('has-drawer-open');
+    } else {
+      card.classList.remove('drawer-collapsed');
+      toggleBtn?.classList.add('has-drawer-open');
+    }
+  },
+
+  // =========================================================================
   // INITIALISATION DU MOTEUR 3D THREE.JS
   // =========================================================================
   initThreeJS() {
@@ -289,16 +384,16 @@ const LocationsModule = {
       this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
       this.controls.dampingFactor = 0.08;
-      this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // Empêche de passer sous le sol
-      this.controls.minDistance = 10;
-      this.controls.maxDistance = 250;
+      this.controls.maxPolarAngle = Math.PI / 2 - 0.04;
+      this.controls.minDistance = 8;
+      this.controls.maxDistance = 280;
       this.controls.target.set(0, 0, 0);
     }
 
     // 5. Éclairage
     this.setupLighting();
 
-    // 6. Construction géométrique réaliste du Stade de Mbao
+    // 6. Construction géométrique adaptée au Stade de Mbao
     this.buildMbaoStadium();
 
     // 7. Raycaster et plan virtuel Y=0 pour glisser-déposer au sol
@@ -310,7 +405,7 @@ const LocationsModule = {
     // 8. Génération des structures 3D placées
     this.spawnAllPlacedMeshes();
 
-    // 9. Événements souris et redimensionnement
+    // 9. Événements souris, clavier et redimensionnement
     this.bindEvents(container);
 
     // 10. Boucle d'animation
@@ -318,40 +413,70 @@ const LocationsModule = {
   },
 
   setupLighting() {
+    this.stadiumSpotlights = [];
+
     // Lumière d'ambiance chaude
-    const ambientLight = new THREE.AmbientLight(0xfff7ed, 0.65);
-    this.scene.add(ambientLight);
+    this.ambientLight = new THREE.AmbientLight(0xfff7ed, 0.65);
+    this.scene.add(this.ambientLight);
 
     // Lumière solaire zénithale avec ombres
-    const sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    sunLight.position.set(60, 100, 50);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 300;
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    this.sunLight.position.set(60, 100, 50);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.camera.near = 10;
+    this.sunLight.shadow.camera.far = 300;
     const d = 90;
-    sunLight.shadow.camera.left = -d;
-    sunLight.shadow.camera.right = d;
-    sunLight.shadow.camera.top = d;
-    sunLight.shadow.camera.bottom = -d;
-    sunLight.shadow.bias = -0.0005;
-    this.scene.add(sunLight);
+    this.sunLight.shadow.camera.left = -d;
+    this.sunLight.shadow.camera.right = d;
+    this.sunLight.shadow.camera.top = d;
+    this.sunLight.shadow.camera.bottom = -d;
+    this.sunLight.shadow.bias = -0.0005;
+    this.scene.add(this.sunLight);
 
     // Lumière d'appoint douce
-    const hemiLight = new THREE.HemisphereLight(0xbfdbfe, 0xd97706, 0.35);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0xbfdbfe, 0xd97706, 0.35);
+    this.scene.add(this.hemiLight);
+  },
+
+  setAtmosphere(mode) {
+    this.currentAtmosphere = mode;
+    document.querySelectorAll('#btnAtmoDay, #btnAtmoSunset, #btnAtmoNight').forEach(b => b.classList.remove('active'));
+
+    if (mode === 'day') {
+      document.getElementById('btnAtmoDay')?.classList.add('active');
+      this.scene.background = new THREE.Color(0x93c5fd);
+      this.scene.fog.color.set(0x93c5fd);
+      if (this.ambientLight) this.ambientLight.color.set(0xfff7ed), this.ambientLight.intensity = 0.65;
+      if (this.sunLight) this.sunLight.color.set(0xffffff), this.sunLight.intensity = 0.9, this.sunLight.position.set(60, 100, 50);
+      this.stadiumSpotlights.forEach(spot => spot.intensity = 0);
+    } else if (mode === 'sunset') {
+      document.getElementById('btnAtmoSunset')?.classList.add('active');
+      this.scene.background = new THREE.Color(0xfb923c);
+      this.scene.fog.color.set(0xfb923c);
+      if (this.ambientLight) this.ambientLight.color.set(0xfed7aa), this.ambientLight.intensity = 0.55;
+      if (this.sunLight) this.sunLight.color.set(0xea580c), this.sunLight.intensity = 0.85, this.sunLight.position.set(100, 30, 20);
+      this.stadiumSpotlights.forEach(spot => spot.intensity = 0.8);
+    } else if (mode === 'night') {
+      document.getElementById('btnAtmoNight')?.classList.add('active');
+      this.scene.background = new THREE.Color(0x090d16);
+      this.scene.fog.color.set(0x090d16);
+      if (this.ambientLight) this.ambientLight.color.set(0x1e293b), this.ambientLight.intensity = 0.3;
+      if (this.sunLight) this.sunLight.color.set(0x38bdf8), this.sunLight.intensity = 0.2, this.sunLight.position.set(-40, 60, -40);
+      this.stadiumSpotlights.forEach(spot => spot.intensity = 2.5); // Pleine puissance des projecteurs !
+    }
   },
 
   // =========================================================================
-  // MODÉLISATION GÉOMÉTRIQUE : STADE DE MBAO
+  // MODÉLISATION GÉOMÉTRIQUE : STADE DE MBAO ADAPTÉ
   // =========================================================================
   buildMbaoStadium() {
     const stadiumGroup = new THREE.Group();
 
-    // A. Sol d'enceinte / Sable Dakarois & Esplanade (220m x 160m)
+    // A. Sol d'enceinte / Sable Dakarois & Esplanade (240m x 180m)
     const groundGeo = new THREE.PlaneGeometry(240, 180);
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0xe2d9cc }); // Sol sable / stabilisé
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0xdec8a9 }); // Sol sable / stabilisé Mbao
     const groundMesh = new THREE.Mesh(groundGeo, groundMat);
     groundMesh.rotation.x = -Math.PI / 2;
     groundMesh.position.y = -0.08;
@@ -402,13 +527,23 @@ const LocationsModule = {
     this.addGoalPost(stadiumGroup, -pitchWidth / 2, 0, Math.PI / 2);
     this.addGoalPost(stadiumGroup, pitchWidth / 2, 0, -Math.PI / 2);
 
-    // F. Grande Tribune Couverte Officielle du Stade de Mbao (Côté Nord Z = -45)
+    // F. Spécifique Mbao : Bancs de Touche Officiels (Abris Remplaçants)
+    this.addTeamBenches(stadiumGroup, -14, -36);
+    this.addTeamBenches(stadiumGroup, 14, -36);
+
+    // G. Spécifique Mbao : Main courante tubulaire de protection autour de la pelouse
+    this.addPitchFencing(stadiumGroup, 110, 72);
+
+    // H. Spécifique Mbao : Panneau d'Affichage Électronique des Scores
+    this.addScoreBoard(stadiumGroup, -59, 0);
+
+    // I. Grande Tribune Couverte Officielle du Stade de Mbao (Côté Nord Z = -48)
     this.buildGrandstand(stadiumGroup, 0, -48, 85, 12);
 
-    // G. Murs d'enceinte et Grand Portail d'Entrée Sud (Z = +60)
+    // J. Murs d'enceinte, Grand Portail d'Entrée Sud (Z = +60) et Accès Logistique Nord-Est
     this.buildPerimeterWalls(stadiumGroup, 180, 130);
 
-    // H. 4 Pylônes d'éclairage de stade aux 4 angles
+    // K. 4 Pylônes d'éclairage de stade aux 4 angles
     this.addLightPylon(stadiumGroup, -68, -48);
     this.addLightPylon(stadiumGroup, 68, -48);
     this.addLightPylon(stadiumGroup, -68, 48);
@@ -431,7 +566,7 @@ const LocationsModule = {
       ctx.fillRect(0, i * stripeH, 512, stripeH);
     }
 
-    // Bruit subtil
+    // Bruit subtil de fibres synthétiques
     ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
     for (let j = 0; j < 3000; j++) {
       const rx = Math.random() * 512;
@@ -448,7 +583,7 @@ const LocationsModule = {
 
   addPitchMarkings(group, w, h) {
     const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
-    const y = 0.02; // Juste au-dessus du gazon pour éviter le z-fighting
+    const y = 0.02;
 
     const hw = w / 2;
     const hh = h / 2;
@@ -548,7 +683,7 @@ const LocationsModule = {
     bar.rotation.z = Math.PI / 2;
     bar.position.set(0, goalHeight, 0);
 
-    // Filet arrière en filaire transparent
+    // Filet arrière
     const netGeo = new THREE.BoxGeometry(goalWidth, goalHeight, goalDepth);
     const netMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.25 });
     const net = new THREE.Mesh(netGeo, netMat);
@@ -558,6 +693,107 @@ const LocationsModule = {
     goal.position.set(x, 0, z);
     goal.rotation.y = rotY;
     group.add(goal);
+  },
+
+  // Spécifique Mbao : Abris de touche remplaçants
+  addTeamBenches(group, x, z) {
+    const benchGroup = new THREE.Group();
+    const w = 6.5; const d = 1.6; const h = 2.1;
+
+    // Structure métallique
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6 });
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, transparent: true, opacity: 0.65, side: THREE.DoubleSide });
+
+    // Coque courbée en polycarbonate bleu
+    const shellGeo = new THREE.CylinderGeometry(w / 2, w / 2, d, 16, 1, false, 0, Math.PI);
+    const shell = new THREE.Mesh(shellGeo, shellMat);
+    shell.rotation.z = Math.PI / 2;
+    shell.position.set(0, h * 0.75, 0);
+
+    // Banc avec 8 sièges
+    const benchSeatMat = new THREE.MeshLambertMaterial({ color: 0xdc2626 });
+    const benchFloor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.45, 0.5), benchSeatMat);
+    benchFloor.position.set(0, 0.25, 0);
+
+    benchGroup.add(shell, benchFloor);
+    benchGroup.position.set(x, 0, z);
+    benchGroup.rotation.y = Math.PI; // Face au terrain
+    group.add(benchGroup);
+  },
+
+  // Spécifique Mbao : Main courante blanche de sécurité autour de la pelouse
+  addPitchFencing(group, w, d) {
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.4 });
+    const fenceH = 1.05;
+    const r = 0.04;
+
+    const hw = w / 2; const hd = d / 2;
+
+    // 4 sections tubulaires avec espacements pour portillons
+    const addRail = (x1, z1, x2, z2) => {
+      const length = Math.hypot(x2 - x1, z2 - z1);
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(r, r, length, 8), fenceMat);
+      rail.position.set((x1 + x2) / 2, fenceH, (z1 + z2) / 2);
+      rail.rotation.z = Math.PI / 2;
+      rail.rotation.y = Math.atan2(x2 - x1, z2 - z1) - Math.PI / 2;
+      group.add(rail);
+
+      // Piliers verticaux réguliers
+      const steps = Math.floor(length / 5);
+      for (let s = 0; s <= steps; s++) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fenceH, 8), fenceMat);
+        const px = x1 + (x2 - x1) * (s / steps);
+        const pz = z1 + (z2 - z1) * (s / steps);
+        post.position.set(px, fenceH / 2, pz);
+        group.add(post);
+      }
+    };
+
+    // Lignes avec ouvertures de passage pour kermesse
+    addRail(-hw, -hd, -15, -hd);
+    addRail(15, -hd, hw, -hd);
+    addRail(-hw, hd, -12, hd);
+    addRail(12, hd, hw, hd);
+    addRail(-hw, -hd, -hw, hd);
+    addRail(hw, -hd, hw, hd);
+  },
+
+  // Spécifique Mbao : Tableau d'affichage du score
+  addScoreBoard(group, x, z) {
+    const sb = new THREE.Group();
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8 });
+
+    // 2 Piliers treillis hauts
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 9, 0.5), frameMat);
+    p1.position.set(0, 4.5, -3);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 9, 0.5), frameMat);
+    p2.position.set(0, 4.5, 3);
+
+    // Grand panneau LED
+    const boardMat = new THREE.MeshLambertMaterial({ color: 0x020617 });
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.8, 6.5), boardMat);
+    board.position.set(0, 8, 0);
+
+    // Texture d'affichage Kermesse Mbao
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = '#22c55e'; ctx.font = 'bold 32px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('STADE DE MBAO', 256, 50);
+    ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 42px monospace';
+    ctx.fillText('KERMESSE L&C 2026', 256, 115);
+    ctx.fillStyle = '#ef4444'; ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('BIENVENUE À TOUS !', 256, 175);
+
+    const txtMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas) });
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 3.5), txtMat);
+    screen.rotation.y = Math.PI / 2;
+    screen.position.set(0.32, 8, 0);
+
+    sb.add(p1, p2, board, screen);
+    sb.position.set(x, 0, z);
+    group.add(sb);
   },
 
   buildGrandstand(group, x, z, length, depth) {
@@ -664,7 +900,7 @@ const LocationsModule = {
     bannerCanvas.width = 512; bannerCanvas.height = 64;
     const bctx = bannerCanvas.getContext('2d');
     bctx.fillStyle = '#dc2626'; bctx.fillRect(0, 0, 512, 64);
-    bctx.fillStyle = '#ffffff'; bctx.font = 'bold 26px sans-serif';
+    bctx.fillStyle = '#ffffff'; bctx.font = 'bold 24px sans-serif';
     bctx.textAlign = 'center'; bctx.textBaseline = 'middle';
     bctx.fillText('⭐ STADE DE MBAO — KERMESSE LOVE & CHARITY 2026 ⭐', 256, 32);
 
@@ -673,6 +909,12 @@ const LocationsModule = {
     banner.position.set(0, 5, hh + 0.75);
 
     wallGroup.add(pLeft, pRight, beam, banner);
+
+    // Portail secondaire Nord-Est (Accès Logistique & Pompiers)
+    const techGate = new THREE.Mesh(new THREE.BoxGeometry(8, 2.5, 0.2), new THREE.MeshStandardMaterial({ color: 0x475569, wireframe: true }));
+    techGate.position.set(hw - 10, 1.25, -hh + 0.1);
+    wallGroup.add(techGate);
+
     group.add(wallGroup);
   },
 
@@ -691,6 +933,14 @@ const LocationsModule = {
     const lights = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.9), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
     lights.position.set(0, h, 0.22);
 
+    // Projecteur SpotLight dynamique pour le mode nocturne
+    const spot = new THREE.SpotLight(0xfef9c3, 0, 120, Math.PI / 4, 0.5, 1);
+    spot.position.set(0, h, 0.5);
+    spot.target.position.set(-x * 0.4, 0, -z * 0.4);
+    pylon.add(spot.target);
+    pylon.add(spot);
+    this.stadiumSpotlights.push(spot);
+
     pylon.add(pole, head, lights);
     pylon.position.set(x, 0, z);
     pylon.lookAt(0, 0, 0); // Orienté vers le centre du terrain
@@ -701,7 +951,6 @@ const LocationsModule = {
   // CRÉATION DES OBJETS 3D FESTIFS POUR CHAQUE STRUCTURE
   // =========================================================================
   spawnAllPlacedMeshes() {
-    // Nettoyer les anciens meshes
     this.itemMeshes.forEach(mesh => this.scene.remove(mesh));
     this.itemMeshes.clear();
 
@@ -959,7 +1208,7 @@ const LocationsModule = {
     canvas.height = 96;
     const ctx = canvas.getContext('2d');
 
-    // Fond blanc arrondi avec bordure colorée
+    // Fond arrondi semi-transparent avec bordure
     ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
     ctx.roundRect ? ctx.roundRect(8, 8, 368, 80, 16) : ctx.fillRect(8, 8, 368, 80);
     ctx.fill();
@@ -993,6 +1242,14 @@ const LocationsModule = {
     canvas.addEventListener('pointermove', (e) => this.onPointerMove(e, canvas));
     canvas.addEventListener('pointerup', () => this.onPointerUp());
 
+    // Raccourci clavier Échap pour quitter le plein écran
+    this.keyHandler = (e) => {
+      if (e.key === 'Escape' && this.isFullscreen) {
+        this.toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', this.keyHandler);
+
     // Redimensionnement fluide
     this.resizeHandler = () => {
       if (!container || !this.camera || !this.renderer) return;
@@ -1014,18 +1271,16 @@ const LocationsModule = {
   },
 
   onPointerDown(e, canvas) {
-    if (e.button !== 0) return; // Clic gauche uniquement pour la sélection
+    if (e.button !== 0) return;
 
     const coords = this.getCanvasCoords(e, canvas);
     this.mouse.set(coords.x, coords.y);
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Recherche d'intersection avec nos objets 3D
     const interactiveMeshes = Array.from(this.itemMeshes.values());
     const intersects = this.raycaster.intersectObjects(interactiveMeshes, true);
 
     if (intersects.length > 0) {
-      // Retrouver le groupe racine de l'objet cliqué
       let hitObj = intersects[0].object;
       while (hitObj.parent && !hitObj.userData.id) {
         hitObj = hitObj.parent;
@@ -1035,20 +1290,13 @@ const LocationsModule = {
         const id = hitObj.userData.id;
         this.selectItem(id);
 
-        // Activer le mode glisser
         this.isDragging = true;
         this.draggedMesh = hitObj;
-        if (this.controls) this.controls.enabled = false; // Désactiver la rotation de caméra pendant le drag
+        if (this.controls) this.controls.enabled = false;
 
-        // Calcul du décalage avec le plan sol Y=0
         const intersectPoint = new THREE.Vector3();
         this.raycaster.ray.intersectPlane(this.plane, intersectPoint);
         this.dragOffset.copy(intersectPoint).sub(this.draggedMesh.position);
-      }
-    } else {
-      // Clic dans le vide -> désélectionne si on ne draggeait rien
-      if (!this.isDragging) {
-        // Optionnel : ne pas fermer systématiquement si on ajuste via les boutons
       }
     }
   },
@@ -1064,14 +1312,13 @@ const LocationsModule = {
     if (this.raycaster.ray.intersectPlane(this.plane, intersectPoint)) {
       const newPos = intersectPoint.sub(this.dragOffset);
 
-      // Limites du stade (-110m à +110m en X, -75m à +75m en Z)
+      // Limites du stade de Mbao
       newPos.x = Math.max(-110, Math.min(110, newPos.x));
       newPos.z = Math.max(-75, Math.min(75, newPos.z));
 
       this.draggedMesh.position.x = newPos.x;
       this.draggedMesh.position.z = newPos.z;
 
-      // Mise à jour de la fiche de données en mémoire
       const item = this.items.find(i => i.id === this.selectedItemId);
       if (item) {
         item.pos_x = Math.round(newPos.x * 10) / 10;
@@ -1087,7 +1334,6 @@ const LocationsModule = {
       this.draggedMesh = null;
       if (this.controls) this.controls.enabled = true;
 
-      // Sauvegarde automatique des nouvelles coordonnées en local
       this.persistCoordinatesLocally();
       this.renderCatalog(document.getElementById('stadiumSearchInput')?.value || '');
     }
@@ -1106,7 +1352,6 @@ const LocationsModule = {
       this.updateDockInfo(item);
     }
 
-    // Mise à jour surbrillance dans le catalogue
     document.querySelectorAll('.stadium-item-row').forEach(row => row.classList.remove('active'));
     this.renderCatalog(document.getElementById('stadiumSearchInput')?.value || '');
   },
@@ -1160,7 +1405,6 @@ const LocationsModule = {
 
     item.is_placed = true;
     if (item.pos_x === undefined || item.pos_x === 0) {
-      // Déposer au centre de la pelouse ou avec un léger décalage aléatoire
       item.pos_x = Math.round((Math.random() * 20 - 10));
       item.pos_z = Math.round((Math.random() * 14 - 7));
     }
@@ -1200,7 +1444,6 @@ const LocationsModule = {
     const mesh = this.itemMeshes.get(id);
     if (!mesh || !this.controls) return;
 
-    // Animation fluide vers la cible
     const targetPos = mesh.position.clone();
     this.controls.target.copy(targetPos);
     this.camera.position.set(targetPos.x, targetPos.y + 25, targetPos.z + 35);
@@ -1230,11 +1473,15 @@ const LocationsModule = {
     } else if (viewType === 'top') {
       document.getElementById('camViewTop')?.classList.add('active');
       this.controls.target.set(0, 0, 0);
-      this.camera.position.set(0, 160, 0.1); // Légère inclinaison pour OrbitControls
+      this.camera.position.set(0, 160, 0.1);
     } else if (viewType === 'entrance') {
       document.getElementById('camViewGate')?.classList.add('active');
       this.controls.target.set(0, 1.5, 0);
-      this.camera.position.set(0, 3, 68); // Hauteur des yeux devant l'arche
+      this.camera.position.set(0, 3, 68); // Devant l'arche Sud
+    } else if (viewType === 'benches') {
+      document.getElementById('camViewBenches')?.classList.add('active');
+      this.controls.target.set(0, 1.5, -20);
+      this.camera.position.set(0, 4, -45); // Devant les bancs de touche face à la pelouse
     }
   },
 
@@ -1267,7 +1514,6 @@ const LocationsModule = {
     const client = SupabaseClient.client;
     if (client) {
       try {
-        // Enregistrement des positions pour les structures personnalisées
         for (const item of this.items) {
           if (item.id.startsWith('struct-') || item.source_id?.startsWith('struct-')) {
             await client.from('stadium_placements').upsert({
@@ -1395,6 +1641,21 @@ const LocationsModule = {
       this.resizeHandler = null;
     }
 
+    if (this.keyHandler) {
+      window.removeEventListener('keydown', this.keyHandler);
+      this.keyHandler = null;
+    }
+
+    if (this.isFullscreen) {
+      this.isFullscreen = false;
+      document.getElementById('stadiumWorkspaceRoot')?.classList.remove('is-fullscreen');
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } catch (e) {}
+    }
+
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer.forceContextLoss();
@@ -1408,6 +1669,7 @@ const LocationsModule = {
     this.camera = null;
     this.controls = null;
     this.itemMeshes.clear();
+    this.stadiumSpotlights = [];
   }
 };
 

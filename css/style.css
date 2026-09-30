@@ -1952,3 +1952,112 @@ button, input, select, textarea {
   pointer-events: none;
 }
 
+/* ==========================================================================
+   MODE PLEIN ÉCRAN IMMERSIF (STADE DE MBAO)
+   ========================================================================== */
+
+.stadium-workspace.is-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 99999 !important;
+  background: #090d16 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-kpi-bar {
+  display: none !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-main-layout {
+  position: relative !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+  min-height: 100vh !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-viewport-card {
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  min-height: 100vh !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-canvas-container {
+  height: calc(100vh - 54px) !important;
+}
+
+/* Tiroir Rétractable du Catalogue en Plein Écran */
+.stadium-workspace.is-fullscreen .stadium-catalog-card {
+  position: absolute !important;
+  top: 60px !important;
+  left: 15px !important;
+  width: 330px !important;
+  max-height: calc(100vh - 120px) !important;
+  z-index: 50 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(12px) !important;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5) !important;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-catalog-card.drawer-collapsed {
+  transform: translateX(-360px) !important;
+  pointer-events: none;
+}
+
+.stadium-drawer-toggle-btn {
+  display: none;
+}
+
+.stadium-workspace.is-fullscreen .stadium-drawer-toggle-btn {
+  display: inline-flex !important;
+  position: absolute !important;
+  top: 60px !important;
+  left: 15px !important;
+  z-index: 55 !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 0.85rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-drawer-toggle-btn:hover {
+  background: #2563eb !important;
+  border-color: #60a5fa !important;
+}
+
+.stadium-workspace.is-fullscreen .stadium-catalog-card:not(.drawer-collapsed) ~ .stadium-canvas-container .stadium-drawer-toggle-btn,
+.stadium-workspace.is-fullscreen .stadium-drawer-toggle-btn.has-drawer-open {
+  left: 360px !important;
+}
+
+.btn-fullscreen-toggle {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #60a5fa !important;
+  font-weight: 600 !important;
+}
+
+.btn-fullscreen-toggle:hover {
+  background: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+
