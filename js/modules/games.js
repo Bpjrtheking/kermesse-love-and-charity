@@ -340,24 +340,35 @@ const GamesModule = {
               <input type="text" id="gName" class="form-control" required placeholder="Ex: Tir à la corde, Lancer d'anneaux, Pêche aux canards, Manège...">
             </div>
 
-            <!-- Image de l'attraction (Parcourir sur PC) -->
+            <!-- Image de l'attraction (Mobile, Tablette & PC) -->
             <div class="form-group">
-              <label style="display: flex; justify-content: space-between; align-items: center;">
-                <span>📸 Photo / Image du jeu</span>
-                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Affichée sur l'écran tactile des caisses</span>
+              <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-weight: 700;">📸 Photo de l'attraction / jeu</span>
+                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Affichée sur les caisses</span>
               </label>
-              <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+              
+              <!-- 2 Boutons tactiles : Caméra directe ou Galerie/PC -->
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                <input type="file" id="cgCameraInput" accept="image/*" capture="environment" style="display: none;">
                 <input type="file" id="cgImageInput" accept="image/*" style="display: none;">
-                <button type="button" class="btn btn-secondary btn-sm" id="cgBrowseBtn" style="display: flex; align-items: center; gap: 6px;">
-                  <span>📁</span> Parcourir une image sur mon PC...
+                
+                <button type="button" class="btn btn-secondary btn-sm" id="cgCameraBtn" style="flex: 1 1 140px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0.55rem 0.75rem; font-weight: 600;">
+                  <span>📷</span> Prendre une photo
                 </button>
-                <button type="button" class="btn btn-danger btn-sm" id="cgRemoveImgBtn" style="display: none; padding: 4px 8px;">
-                  <span>🗑️</span> Enlever la photo
+                <button type="button" class="btn btn-secondary btn-sm" id="cgBrowseBtn" style="flex: 1 1 140px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0.55rem 0.75rem; font-weight: 600;">
+                  <span>🖼️</span> Galerie / Fichiers
                 </button>
               </div>
-              <div id="cgImagePreviewBox" style="display: none; margin-top: 0.6rem;">
-                <img id="cgImagePreview" src="" alt="Aperçu jeu" style="max-width: 160px; max-height: 100px; object-fit: cover; border-radius: var(--radius-md); border: 2px solid var(--primary); box-shadow: var(--shadow-sm);">
-                <div style="font-size: 0.75rem; color: var(--success); margin-top: 2px;">✅ Image prête (optimisée pour la caisse)</div>
+
+              <!-- Prévisualisation tactile responsive -->
+              <div id="cgImagePreviewBox" style="display: none; background: #f8fafc; border: 2px dashed #3b82f6; border-radius: var(--radius-md); padding: 0.75rem; text-align: center;">
+                <div style="position: relative; display: inline-block;">
+                  <img id="cgImagePreview" src="" alt="Aperçu jeu" style="max-width: 100%; max-height: 140px; object-fit: cover; border-radius: 8px; border: 2px solid #3b82f6; box-shadow: var(--shadow-sm); display: block;">
+                  <button type="button" id="cgRemoveImgBtn" style="position: absolute; top: -8px; right: -8px; background: #dc2626; color: white; border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 0.9rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3);" title="Supprimer cette photo">✕</button>
+                </div>
+                <div style="font-size: 0.78rem; color: #16a34a; font-weight: 600; margin-top: 6px;">
+                  ✅ Photo prête &amp; optimisée pour l'écran tactile des caisses
+                </div>
               </div>
             </div>
 
@@ -414,33 +425,38 @@ const GamesModule = {
     modal.querySelector('.modal-close-btn').onclick = close;
     modal.querySelector('.close-btn').onclick = close;
 
-    // Gestion de la sélection d'image depuis le PC
+    // Gestion de la sélection d'image (Mobile, Tablette & PC)
     let currentImageDataUrl = null;
     const fileInput = modal.querySelector('#cgImageInput');
+    const cameraInput = modal.querySelector('#cgCameraInput');
     const browseBtn = modal.querySelector('#cgBrowseBtn');
+    const cameraBtn = modal.querySelector('#cgCameraBtn');
     const removeBtn = modal.querySelector('#cgRemoveImgBtn');
     const previewBox = modal.querySelector('#cgImagePreviewBox');
     const previewImg = modal.querySelector('#cgImagePreview');
 
     browseBtn.onclick = () => fileInput.click();
+    cameraBtn.onclick = () => cameraInput.click();
 
-    fileInput.onchange = (e) => {
+    const handleFileSelect = (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       GamesModule.compressAndLoadImage(file, (dataUrl) => {
         currentImageDataUrl = dataUrl;
         previewImg.src = dataUrl;
         previewBox.style.display = 'block';
-        removeBtn.style.display = 'inline-flex';
       });
     };
+
+    fileInput.onchange = handleFileSelect;
+    cameraInput.onchange = handleFileSelect;
 
     removeBtn.onclick = () => {
       currentImageDataUrl = null;
       fileInput.value = '';
+      cameraInput.value = '';
       previewImg.src = '';
       previewBox.style.display = 'none';
-      removeBtn.style.display = 'none';
     };
 
     modal.querySelector('#saveGameBtn').onclick = async () => {
@@ -563,24 +579,35 @@ const GamesModule = {
               <input type="text" id="egName" class="form-control" value="${game.name}" required>
             </div>
 
-            <!-- Image de l'attraction (Parcourir sur PC) -->
+            <!-- Image de l'attraction (Mobile, Tablette & PC) -->
             <div class="form-group">
-              <label style="display: flex; justify-content: space-between; align-items: center;">
-                <span>📸 Photo / Image du jeu</span>
-                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Affichée sur l'écran tactile des caisses</span>
+              <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-weight: 700;">📸 Photo de l'attraction / jeu</span>
+                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Affichée sur les caisses</span>
               </label>
-              <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+              
+              <!-- 2 Boutons tactiles : Caméra directe ou Galerie/PC -->
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                <input type="file" id="egCameraInput" accept="image/*" capture="environment" style="display: none;">
                 <input type="file" id="egImageInput" accept="image/*" style="display: none;">
-                <button type="button" class="btn btn-secondary btn-sm" id="egBrowseBtn" style="display: flex; align-items: center; gap: 6px;">
-                  <span>📁</span> Parcourir une image sur mon PC...
+                
+                <button type="button" class="btn btn-secondary btn-sm" id="egCameraBtn" style="flex: 1 1 140px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0.55rem 0.75rem; font-weight: 600;">
+                  <span>📷</span> Prendre une photo
                 </button>
-                <button type="button" class="btn btn-danger btn-sm" id="egRemoveImgBtn" style="${game.image_url ? 'display: inline-flex;' : 'display: none;'} padding: 4px 8px;">
-                  <span>🗑️</span> Enlever la photo
+                <button type="button" class="btn btn-secondary btn-sm" id="egBrowseBtn" style="flex: 1 1 140px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0.55rem 0.75rem; font-weight: 600;">
+                  <span>🖼️</span> Galerie / Fichiers
                 </button>
               </div>
-              <div id="egImagePreviewBox" style="${game.image_url ? 'display: block;' : 'display: none;'} margin-top: 0.6rem;">
-                <img id="egImagePreview" src="${game.image_url || ''}" alt="Aperçu jeu" style="max-width: 160px; max-height: 100px; object-fit: cover; border-radius: var(--radius-md); border: 2px solid var(--primary); box-shadow: var(--shadow-sm);">
-                <div style="font-size: 0.75rem; color: var(--success); margin-top: 2px;">✅ Image actuelle configurée</div>
+
+              <!-- Prévisualisation tactile responsive -->
+              <div id="egImagePreviewBox" style="${game.image_url ? 'display: block;' : 'display: none;'} background: #f8fafc; border: 2px dashed #3b82f6; border-radius: var(--radius-md); padding: 0.75rem; text-align: center;">
+                <div style="position: relative; display: inline-block;">
+                  <img id="egImagePreview" src="${game.image_url || ''}" alt="Aperçu jeu" style="max-width: 100%; max-height: 140px; object-fit: cover; border-radius: 8px; border: 2px solid #3b82f6; box-shadow: var(--shadow-sm); display: block;">
+                  <button type="button" id="egRemoveImgBtn" style="position: absolute; top: -8px; right: -8px; background: #dc2626; color: white; border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 0.9rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3);" title="Supprimer cette photo">✕</button>
+                </div>
+                <div style="font-size: 0.78rem; color: #16a34a; font-weight: 600; margin-top: 6px;">
+                  ✅ Photo configurée pour l'écran tactile des caisses
+                </div>
               </div>
             </div>
 
@@ -632,33 +659,38 @@ const GamesModule = {
     modal.querySelector('.modal-close-btn').onclick = close;
     modal.querySelector('.close-btn').onclick = close;
 
-    // Gestion de la photo depuis le PC
+    // Gestion de la photo (Mobile, Tablette & PC)
     let currentImageDataUrl = game.image_url || null;
     const fileInput = modal.querySelector('#egImageInput');
+    const cameraInput = modal.querySelector('#egCameraInput');
     const browseBtn = modal.querySelector('#egBrowseBtn');
+    const cameraBtn = modal.querySelector('#egCameraBtn');
     const removeBtn = modal.querySelector('#egRemoveImgBtn');
     const previewBox = modal.querySelector('#egImagePreviewBox');
     const previewImg = modal.querySelector('#egImagePreview');
 
     browseBtn.onclick = () => fileInput.click();
+    cameraBtn.onclick = () => cameraInput.click();
 
-    fileInput.onchange = (e) => {
+    const handleFileSelect = (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       GamesModule.compressAndLoadImage(file, (dataUrl) => {
         currentImageDataUrl = dataUrl;
         previewImg.src = dataUrl;
         previewBox.style.display = 'block';
-        removeBtn.style.display = 'inline-flex';
       });
     };
+
+    fileInput.onchange = handleFileSelect;
+    cameraInput.onchange = handleFileSelect;
 
     removeBtn.onclick = () => {
       currentImageDataUrl = null;
       fileInput.value = '';
+      cameraInput.value = '';
       previewImg.src = '';
       previewBox.style.display = 'none';
-      removeBtn.style.display = 'none';
     };
 
     modal.querySelector('#saveEditGameBtn').onclick = async () => {

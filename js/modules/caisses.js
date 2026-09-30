@@ -35,6 +35,32 @@ const CaissesCore = {
     }
   },
 
+  // Réinitialisation complète des ventes et tests (Remise à 0 F avant la kermesse)
+  async resetAllSalesAndTests() {
+    if (!confirm("⚠️ ATTENTION : Vous allez remettre à ZÉRO toutes les ventes enregistrées (Entrée, Jeux, Restauration) et réinitialiser les caisses.\n\nCette action permet d'effacer les essais et tests avant le jour J de la kermesse.\n\nConfirmer la remise à zéro complète ?")) {
+      return false;
+    }
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        await client.from('ticket_sales').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await client.from('cash_movements').delete().in('type', ['vente', 'correction']);
+      } catch (e) {
+        console.warn('[Reset All Sales DB Warning]', e);
+      }
+    }
+
+    localStorage.removeItem('kermesse_entry_sales');
+    localStorage.removeItem('kermesse_game_sales');
+    localStorage.removeItem('kermesse_food_sales');
+    localStorage.removeItem('kermesse_cancelled_sale_ids');
+
+    AuditLogger.log('REMISE_A_ZERO_VENTES', 'ticket_sales', null, 'Remise à zéro complète des ventes de test avant kermesse');
+    Notify.success('Toutes les ventes et chiffres de test ont été effacés. Tableau de bord et Bilan sont à 0 F.');
+    return true;
+  },
+
   // MOTEUR FINANCIER CENTRALISÉ & CONSOLIDÉ (Utilisé par Caisses, Bilan, Dashboard et Rapports Officiels)
   async calculateConsolidatedFinances() {
     const client = SupabaseClient.client;
@@ -43,14 +69,16 @@ const CaissesCore = {
     let allSales = [];
     let allRegisters = [];
     let allExpenses = [];
+    let isDbOnline = false;
 
     // 1. Récupération des ventes depuis Supabase
     if (client) {
       try {
-        const { data: s } = await client
+        const { data: s, error: sErr } = await client
           .from('ticket_sales')
           .select('id, quantity, total_amount_f, category, item_name, created_at, stand:stands(id, name, color_name, color_hex)');
-        if (s && s.length > 0) {
+        if (!sErr && s) {
+          isDbOnline = true;
           allSales = s.filter(item => !cancelledIds.includes(item.id));
         }
 
@@ -73,12 +101,22 @@ const CaissesCore = {
     // Filtrer les annulations de la sauvegarde locale
     localSales = localSales.filter(l => !cancelledIds.includes(l.id));
 
-    // Dédoublonnage
-    localSales.forEach(ls => {
-      if (!allSales.some(s => s.id === ls.id)) {
-        allSales.push(ls);
-      }
-    });
+    // Dédoublonnage : si la base Supabase est connectée, elle fait foi.
+    // On n'injecte des ventes locales que celles générées hors-ligne (id temporaire non-UUID)
+    // pour éviter de ressusciter d'anciennes ventes supprimées en base.
+    if (isDbOnline) {
+      localSales.forEach(ls => {
+        if (!CaissesCore.isUuid(ls.id) && !allSales.some(s => s.id === ls.id)) {
+          allSales.push(ls);
+        }
+      });
+    } else {
+      localSales.forEach(ls => {
+        if (!allSales.some(s => s.id === ls.id)) {
+          allSales.push(ls);
+        }
+      });
+    }
 
     // 3. Calculs des recettes par caisse et palmarès stands
     let revEntree = 0;
@@ -220,6 +258,7 @@ const CaissesCore = {
   async loadEntryCatalog() {
     const client = SupabaseClient.client;
     let catalog = [];
+    let hasDbRecords = false;
 
     if (client) {
       try {
@@ -230,31 +269,34 @@ const CaissesCore = {
           .eq('is_active', true)
           .order('value_f', { ascending: true });
 
-        if (!error && data && data.length > 0) {
-          catalog = data.map(d => ({
-            id: d.id,
-            name: d.name,
-            price: d.value_f,
-            icon: d.color || '🎟️',
-            description: d.description || ''
-          }));
+        if (!error && data) {
+          hasDbRecords = true;
+          if (data.length > 0) {
+            catalog = data.map(d => ({
+              id: d.id,
+              name: d.name,
+              price: d.value_f,
+              icon: d.color || '🎟️',
+              description: d.description || ''
+            }));
+          }
         }
       } catch (e) {
         console.warn('[CaissesCore DB Warning]', e);
       }
     }
 
-    if (catalog.length === 0) {
-      const stored = localStorage.getItem('kermesse_entry_catalog');
-      if (stored) {
-        try {
-          catalog = JSON.parse(stored);
-        } catch (e) {}
-      }
+    const stored = localStorage.getItem('kermesse_entry_catalog');
+    if (!hasDbRecords && stored !== null) {
+      try {
+        catalog = JSON.parse(stored);
+      } catch (e) {}
+    } else if (catalog.length > 0) {
+      localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
     }
 
-    // Suggestions par défaut si rien n'est encore configuré
-    if (!catalog || catalog.length === 0) {
+    // N'injecter les 4 suggestions QUE si rien n'a JAMAIS été configuré (premier lancement pur)
+    if (!hasDbRecords && stored === null && catalog.length === 0) {
       catalog = [
         { id: 'ent-enf', name: 'Entrée Enfant (-12 ans)', price: 200, icon: '🧒', description: 'Moins de 12 ans' },
         { id: 'ent-adu', name: 'Entrée Adulte', price: 500, icon: '🧑', description: 'Tarif standard' },
@@ -1003,6 +1045,9 @@ const CaisseEntreeModule = {
           <button class="btn btn-secondary btn-sm" onclick="CaisseEntreeModule.loadDefaultSuggestions()">
             <span>🔄</span> Suggestions par défaut
           </button>
+          <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) { CaisseEntreeModule.loadData().then(() => CaisseEntreeModule.renderCurrentTab()); } })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
+            <span>🧹</span> Remettre les ventes à 0 F
+          </button>
         </div>
       </div>
 
@@ -1277,25 +1322,33 @@ const CaisseEntreeModule = {
     const ticket = this.entryCatalog.find(t => t.id === ticketId);
     if (!ticket) return;
 
-    if (!confirm(`Supprimer définitivement le billet « ${ticket.name} » du catalogue ?\n\nIl ne sera plus proposé sur l'écran d'accueil.`)) {
+    if (!confirm(`Supprimer définitivement le billet « ${ticket.name} » du catalogue ?\n\nIl ne sera plus proposé sur l'écran d'accueil et ses ventes de test seront retirées du bilan.`)) {
       return;
     }
 
     const client = SupabaseClient.client;
-    if (client && CaissesCore.isUuid(ticketId)) {
+    if (client) {
       try {
-        await client.from('tickets_catalog').delete().eq('id', ticketId);
+        if (CaissesCore.isUuid(ticketId)) {
+          await client.from('tickets_catalog').delete().eq('id', ticketId);
+        }
+        // Supprimer également les ventes passées pour ce billet (nettoie immédiatement le Dashboard et le Bilan)
+        await client.from('ticket_sales').delete().eq('item_name', ticket.name);
       } catch (e) {
         console.warn('[Delete Ticket DB Warning]', e);
       }
     }
 
+    // Supprimer également des ventes locales
+    this.sales = (this.sales || []).filter(s => s.item_name !== ticket.name);
+    localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
+
     this.entryCatalog = this.entryCatalog.filter(t => t.id !== ticketId);
     this.cart = this.cart.filter(c => c.id !== ticketId);
 
     await CaissesCore.saveEntryCatalog(this.entryCatalog);
-    AuditLogger.log('SUPPRESSION_BILLET_ENTREE', 'tickets_catalog', ticketId, `Suppression billet ${ticket.name}`);
-    Notify.success(`Billet « ${ticket.name} » supprimé.`);
+    AuditLogger.log('SUPPRESSION_BILLET_ENTREE', 'tickets_catalog', ticketId, `Suppression billet ${ticket.name} et nettoyage des ventes associées`);
+    Notify.success(`Billet « ${ticket.name} » supprimé et ventes nettoyées.`);
     this.renderCurrentTab();
   },
 
@@ -3927,9 +3980,12 @@ const CaisseBilanModule = {
           <div class="card-title">
             <span>📊</span> Pôle 2 : Bilan Financier Consolidé de la Kermesse
           </div>
-          <div class="card-actions">
+          <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
             <button class="btn btn-secondary btn-sm" onclick="CaisseBilanModule.render(document.getElementById('mainContent'))">
               <span>🔄</span> Actualiser
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) CaisseBilanModule.render(document.getElementById('mainContent')); })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
+              <span>🧹</span> Remettre à 0 F
             </button>
           </div>
         </div>

@@ -14,13 +14,25 @@ const DashboardModule = {
     const canSeeFinance = isSuperAdmin || (user && (user.role_code === 'admin_finances' || user.role_code === 'admin_billetterie'));
 
     container.innerHTML = `
-      <div class="dashboard-header" style="margin-bottom: 2rem;">
-        <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--gray-900); margin-bottom: 0.25rem;">
-          ${isSuperAdmin ? 'Tableau de bord — Love and Charity (L&C)' : `Tableau de bord — ${user.role_name || 'Espace Membre'}`}
-        </h2>
-        <p style="color: var(--gray-500); font-size: 0.9rem;">
-          Bienvenue, <strong>${user.full_name || user.login}</strong>. Suivi et contrôle en temps réel de la kermesse.
-        </p>
+      <div class="dashboard-header" style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--gray-900); margin-bottom: 0.25rem;">
+            ${isSuperAdmin ? 'Tableau de bord — Love and Charity (L&C)' : `Tableau de bord — ${user.role_name || 'Espace Membre'}`}
+          </h2>
+          <p style="color: var(--gray-500); font-size: 0.9rem; margin: 0;">
+            Bienvenue, <strong>${user.full_name || user.login}</strong>. Suivi et contrôle en temps réel de la kermesse.
+          </p>
+        </div>
+        ${canSeeFinance ? `
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-secondary btn-sm" onclick="DashboardModule.loadRealData()" title="Rafraîchir les indicateurs en direct">
+            <span>🔄</span> Actualiser
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) DashboardModule.loadRealData(); })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
+            <span>🧹</span> Remettre à 0 F
+          </button>
+        </div>
+        ` : ''}
       </div>
 
       <!-- Zone d'alertes intelligentes -->
