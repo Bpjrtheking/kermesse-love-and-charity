@@ -678,7 +678,7 @@ const CaisseEntreeModule = {
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
 
     container.innerHTML = `
-      <div style="display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem;">
+      <div class="pos-main-layout">
         
         <div>
           <!-- Indicateurs du pôle entrée -->
@@ -717,7 +717,7 @@ const CaisseEntreeModule = {
               </div>
             </div>
           ` : `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.85rem;">
+            <div class="pos-catalog-grid">
               ${this.entryCatalog.map(t => {
                 const inCart = this.cart.find(i => i.id === t.id);
                 const qty = inCart ? inCart.qty : 0;
@@ -796,7 +796,7 @@ const CaisseEntreeModule = {
         </div>
 
         <!-- Panier Entrée (Colonne Droite) -->
-        <div class="card" style="border: 2px solid #10b981; box-shadow: var(--shadow-md); position: sticky; top: 1rem;">
+        <div class="card pos-cart-panel" style="border: 2px solid #10b981; box-shadow: var(--shadow-md);">
           <div class="card-header" style="background: #10b981; color: white;">
             <div class="card-title" style="color: white; font-size: 1rem;">
               <span>🛒</span> Panier Entrée (${this.cart.reduce((s, i) => s + i.qty, 0)})
@@ -1812,7 +1812,7 @@ const CaisseJeuxModule = {
     const totalGameRevenue = this.sales.reduce((s, x) => s + (x.total_amount_f || 0), 0);
 
     container.innerHTML = `
-      <div style="display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem;">
+      <div class="pos-main-layout">
         
         <div>
           <!-- Indicateurs caisse jeux -->
@@ -1851,7 +1851,7 @@ const CaisseJeuxModule = {
               </button>
             </div>
           ` : `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 0.75rem;">
+            <div class="pos-catalog-grid">
               ${filteredGames.map(g => {
                 const standColor = g.stand ? g.stand.color_hex : '#64748b';
                 const standName = g.stand ? `${g.stand.color_name} ${g.stand.number}` : 'Général';
@@ -1960,7 +1960,7 @@ const CaisseJeuxModule = {
         </div>
 
         <!-- Panier de vente tactile (Colonne Droite) -->
-        <div class="card" style="border: 2px solid var(--primary); box-shadow: var(--shadow-md); position: sticky; top: 1rem;">
+        <div class="card pos-cart-panel" style="border: 2px solid var(--primary); box-shadow: var(--shadow-md);">
           <div class="card-header" style="background: var(--primary); color: white;">
             <div class="card-title" style="color: white; font-size: 1rem;">
               <span>🛒</span> Panier Jeux (${this.cart.reduce((s, i) => s + i.qty, 0)})
@@ -3185,7 +3185,7 @@ const CaisseRestaurationModule = {
       : this.products.filter(p => (p.category || 'Autre') === this.activeCategoryFilter);
 
     container.innerHTML = `
-      <div style="display: grid; grid-template-columns: 1fr 350px; gap: 1.25rem;">
+      <div class="pos-main-layout">
         
         <div>
           <!-- Indicateurs Restauration -->
@@ -3226,7 +3226,7 @@ const CaisseRestaurationModule = {
               </button>
             </div>
           ` : `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.85rem;">
+            <div class="pos-catalog-grid">
               ${filteredProducts.map(p => {
                 const inCart = this.cart.find(i => i.id === p.id);
                 const qty = inCart ? inCart.qty : 0;
@@ -3324,7 +3324,7 @@ const CaisseRestaurationModule = {
         </div>
 
         <!-- Panier Commande Restauration (Colonne Droite) -->
-        <div class="card" style="border: 2px solid #ea580c; box-shadow: var(--shadow-md); position: sticky; top: 1rem;">
+        <div class="card pos-cart-panel" style="border: 2px solid #ea580c; box-shadow: var(--shadow-md);">
           <div class="card-header" style="background: #ea580c; color: white;">
             <div class="card-title" style="color: white; font-size: 1rem;">
               <span>🛒</span> Commande (${this.cart.reduce((s, i) => s + i.qty, 0)})
@@ -3960,7 +3960,7 @@ const CaisseBilanModule = {
       <div style="max-width: 860px; margin: 0 auto;">
         
         <!-- Cartes synthétiques des 4 Caisses -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="pos-bilan-kpi">
           
           <div class="card" style="border: 2px solid #10b981; border-top: 6px solid #10b981;">
             <div class="card-body" style="padding: 1rem;">
@@ -4010,7 +4010,7 @@ const CaisseBilanModule = {
 
         <!-- Grand Bilan Consolidé Net -->
         <div style="background: #f8fafc; border: 2px solid var(--gray-300); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 2rem; box-shadow: var(--shadow-md);">
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align: center; border-bottom: 1px solid var(--gray-200); padding-bottom: 1rem; margin-bottom: 1rem;">
+          <div class="pos-bilan-banner">
             <div>
               <div style="font-size: 0.85rem; color: var(--gray-600);">Total Recettes Brutes</div>
               <div style="font-size: 1.4rem; font-weight: 800; color: var(--success); margin-top: 4px;">

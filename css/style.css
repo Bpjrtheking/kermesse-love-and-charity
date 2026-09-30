@@ -208,10 +208,14 @@ button, input, select, textarea {
 /* Main Content Area */
 .main-wrapper {
   flex: 1;
+  min-width: 0;
   margin-left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+  max-width: calc(100vw - var(--sidebar-width));
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  box-sizing: border-box;
   transition: var(--transition);
 }
 
@@ -359,6 +363,9 @@ button, input, select, textarea {
 .content-body {
   padding: 2rem;
   flex: 1;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Common Components */
@@ -1775,12 +1782,6 @@ button, input, select, textarea {
   min-height: 680px;
 }
 
-@media (max-width: 1024px) {
-  .stadium-main-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
 .stadium-catalog-card {
   display: flex;
   flex-direction: column;
@@ -2059,5 +2060,52 @@ button, input, select, textarea {
   background: #1d4ed8 !important;
   color: #ffffff !important;
 }
+
+/* ==============================================================================
+ * MODULES DE CAISSES, BILAN & COMMERCE TACTILE (POS)
+ * ============================================================================== */
+.pos-main-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.pos-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.85rem;
+}
+
+.pos-cart-panel {
+  position: sticky;
+  top: 85px;
+  width: 100%;
+}
+
+.pos-bilan-kpi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.pos-bilan-banner {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  text-align: center;
+  border-bottom: 1px solid var(--gray-200);
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+
+.reports-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
 
 

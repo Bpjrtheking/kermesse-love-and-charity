@@ -224,7 +224,7 @@ const ReportsModule = {
         </h3>
 
         <!-- 3 Grands Indicateurs Clés -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+        <div class="reports-kpi-grid">
           <div style="background: #f0fdf4; border: 2px solid #16a34a; border-radius: var(--radius-md); padding: 1.1rem; text-align: center;">
             <div style="font-size: 0.85rem; font-weight: 700; color: #166534; text-transform: uppercase;">Total Recettes Brutes Encaissées</div>
             <div style="font-size: 1.75rem; font-weight: 900; color: #15803d; margin: 0.35rem 0;">
