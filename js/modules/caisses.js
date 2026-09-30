@@ -35,6 +35,188 @@ const CaissesCore = {
     }
   },
 
+  // MOTEUR FINANCIER CENTRALISÉ & CONSOLIDÉ (Utilisé par Caisses, Bilan, Dashboard et Rapports Officiels)
+  async calculateConsolidatedFinances() {
+    const client = SupabaseClient.client;
+    const cancelledIds = this.getCancelledSaleIds();
+
+    let allSales = [];
+    let allRegisters = [];
+    let allExpenses = [];
+
+    // 1. Récupération des ventes depuis Supabase
+    if (client) {
+      try {
+        const { data: s } = await client
+          .from('ticket_sales')
+          .select('id, quantity, total_amount_f, category, item_name, created_at, stand:stands(id, name, color_name, color_hex)');
+        if (s && s.length > 0) {
+          allSales = s.filter(item => !cancelledIds.includes(item.id));
+        }
+
+        const { data: r } = await client.from('cash_registers').select('*').order('name');
+        if (r) allRegisters = r;
+      } catch (e) {
+        console.warn('[Consolidated Finances DB Sales Warning]', e);
+      }
+    }
+
+    // 2. Fusion avec les ventes locales (Entrée, Jeux, Restauration)
+    const storedEntree = localStorage.getItem('kermesse_entry_sales');
+    const storedJeux = localStorage.getItem('kermesse_game_sales');
+    const storedFood = localStorage.getItem('kermesse_food_sales');
+    let localSales = [];
+    try { if (storedEntree) localSales = [...localSales, ...JSON.parse(storedEntree)]; } catch (e) {}
+    try { if (storedJeux) localSales = [...localSales, ...JSON.parse(storedJeux)]; } catch (e) {}
+    try { if (storedFood) localSales = [...localSales, ...JSON.parse(storedFood)]; } catch (e) {}
+
+    // Filtrer les annulations de la sauvegarde locale
+    localSales = localSales.filter(l => !cancelledIds.includes(l.id));
+
+    // Dédoublonnage
+    localSales.forEach(ls => {
+      if (!allSales.some(s => s.id === ls.id)) {
+        allSales.push(ls);
+      }
+    });
+
+    // 3. Calculs des recettes par caisse et palmarès stands
+    let revEntree = 0;
+    let revJeux = 0;
+    let revResto = 0;
+    let ticketsEntreeCount = 0;
+    let ticketsJeuxCount = 0;
+    let restoItemsCount = 0;
+    const standTotals = {};
+
+    allSales.forEach(s => {
+      const amt = s.total_amount_f || 0;
+      const qty = s.quantity || 1;
+
+      if (s.category === 'entree') {
+        revEntree += amt;
+        ticketsEntreeCount += qty;
+      } else if (s.category === 'restauration') {
+        revResto += amt;
+        restoItemsCount += qty;
+      } else {
+        revJeux += amt;
+        ticketsJeuxCount += qty;
+        const stName = (s.stand && s.stand.name) ? s.stand.name : 'Stand Non Spécifié';
+        const stColor = (s.stand && s.stand.color_hex) ? s.stand.color_hex : '#3b82f6';
+        if (!standTotals[stName]) {
+          standTotals[stName] = { name: stName, revenue: 0, ticketsCount: 0, colorHex: stColor };
+        }
+        standTotals[stName].revenue += amt;
+        standTotals[stName].ticketsCount += qty;
+      }
+    });
+
+    const totalRecettes = revEntree + revJeux + revResto;
+    const totalTickets = ticketsEntreeCount + ticketsJeuxCount;
+
+    // 4. Récupération et consolidation des Dépenses (sans double comptage)
+    // a) Mouvements de caisse autorisés (type = 'depense_autorisee')
+    if (client) {
+      try {
+        const { data: caisseMvts } = await client
+          .from('cash_movements')
+          .select('id, amount_f, reason, created_at, type, cash_register_id, user:app_users(login)')
+          .eq('type', 'depense_autorisee')
+          .order('created_at', { ascending: false });
+
+        if (caisseMvts) {
+          caisseMvts.forEach(cm => {
+            allExpenses.push({
+              id: cm.id,
+              source: 'Caisse',
+              registerId: cm.cash_register_id,
+              reason: cm.reason || 'Dépense de caisse',
+              amount_f: Math.abs(cm.amount_f),
+              created_at: cm.created_at,
+              author: cm.user ? cm.user.login : 'Caissier'
+            });
+          });
+        }
+      } catch (e) {
+        console.warn('[Consolidated Finances Movements Warning]', e);
+      }
+
+      // b) Dépenses de la table 'expenses' qui ne proviennent pas d'une caisse (évite tout double comptage)
+      try {
+        const { data: expTable } = await client
+          .from('expenses')
+          .select('id, amount_f, motive, category, receipt_ref, status, created_at, cash_register_id, user:app_users!expenses_user_id_fkey(login)')
+          .eq('status', 'approuve')
+          .order('created_at', { ascending: false });
+
+        if (expTable) {
+          expTable.forEach(et => {
+            const alreadyExists = allExpenses.some(ae => ae.id === et.id || (et.cash_register_id && ae.registerId === et.cash_register_id && Math.abs(ae.amount_f) === Math.abs(et.amount_f) && ae.reason.includes(et.motive)));
+            if (!alreadyExists) {
+              allExpenses.push({
+                id: et.id,
+                source: et.cash_register_id ? 'Caisse' : 'Générale',
+                registerId: et.cash_register_id,
+                reason: et.motive + (et.receipt_ref ? ` (Réf: ${et.receipt_ref})` : ''),
+                amount_f: Math.abs(et.amount_f),
+                created_at: et.created_at,
+                author: et.user ? et.user.login : 'Comptabilité'
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('[Consolidated Finances Expenses Table Warning]', e);
+      }
+    }
+
+    // c) Dépenses locales enregistrées sur les caisses (mode hors-ligne ou non synchronisé)
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('kermesse_expenses_')) {
+          const regId = key.replace('kermesse_expenses_', '');
+          const localExpList = JSON.parse(localStorage.getItem(key) || '[]');
+          localExpList.forEach(le => {
+            const alreadyExists = allExpenses.some(ae => ae.id === le.id);
+            if (!alreadyExists) {
+              allExpenses.push({
+                id: le.id,
+                source: 'Caisse Locale',
+                registerId: regId,
+                reason: le.reason || 'Dépense locale',
+                amount_f: Math.abs(le.amount_f),
+                created_at: le.created_at || new Date().toISOString(),
+                author: le.user ? le.user.login : 'Caissier'
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {}
+
+    const totalExpenses = allExpenses.reduce((sum, e) => sum + Math.abs(e.amount_f), 0);
+    const beneficeNet = totalRecettes - totalExpenses;
+
+    return {
+      sales: allSales,
+      revEntree,
+      revJeux,
+      revResto,
+      totalRecettes,
+      ticketsEntreeCount,
+      ticketsJeuxCount,
+      restoItemsCount,
+      totalTickets,
+      standTotals,
+      expenses: allExpenses,
+      totalExpenses,
+      beneficeNet,
+      registers: allRegisters
+    };
+  },
+
   async loadEntryCatalog() {
     const client = SupabaseClient.client;
     let catalog = [];
@@ -3762,77 +3944,17 @@ const CaisseBilanModule = {
   },
 
   async loadData() {
-    const client = SupabaseClient.client;
-    this.sales = [];
-    this.registers = [];
-    this.expenses = [];
-
-    const cancelledIds = CaissesCore.getCancelledSaleIds();
-
-    if (client) {
-      try {
-        const { data: s } = await client
-          .from('ticket_sales')
-          .select('id, quantity, total_amount_f, category, item_name, stand:stands(name, color_name, color_hex)');
-        if (s && s.length > 0) {
-          this.sales = s.filter(item => !cancelledIds.includes(item.id));
-        }
-
-        const { data: r } = await client.from('cash_registers').select('*').order('name');
-        if (r) this.registers = r;
-
-        const { data: e } = await client.from('cash_movements').select('*').eq('type', 'depense_autorisee');
-        if (e) this.expenses = e;
-      } catch (e) {
-        console.warn('[Bilan DB Error]', e);
-      }
-    }
-
-    // Récupération locale de secours si Supabase vide ou hors ligne
-    const storedEntree = localStorage.getItem('kermesse_entry_sales');
-    const storedJeux = localStorage.getItem('kermesse_game_sales');
-    const storedFood = localStorage.getItem('kermesse_food_sales');
-    let localCombined = [];
-    try { if (storedEntree) localCombined = [...localCombined, ...JSON.parse(storedEntree)]; } catch (e) {}
-    try { if (storedJeux) localCombined = [...localCombined, ...JSON.parse(storedJeux)]; } catch (e) {}
-    try { if (storedFood) localCombined = [...localCombined, ...JSON.parse(storedFood)]; } catch (e) {}
-
-    // Filtrer les ventes annulées du localCombined
-    localCombined = localCombined.filter(l => !cancelledIds.includes(l.id));
-
-    if (this.sales.length === 0) {
-      this.sales = localCombined;
-    } else {
-      const unSynced = localCombined.filter(l => !this.sales.some(s => s.id === l.id) && !cancelledIds.includes(l.id));
-      this.sales = [...this.sales, ...unSynced];
-    }
+    this.finances = await CaissesCore.calculateConsolidatedFinances();
+    this.sales = this.finances.sales;
+    this.registers = this.finances.registers;
+    this.expenses = this.finances.expenses;
   },
 
   renderSummary() {
     const container = document.getElementById('bilanContentContainer');
     if (!container) return;
 
-    let revEntree = 0;
-    let revJeux = 0;
-    let revResto = 0;
-    const standTotals = {};
-
-    this.sales.forEach(s => {
-      const amt = s.total_amount_f || 0;
-      if (s.category === 'entree') {
-        revEntree += amt;
-      } else if (s.category === 'restauration') {
-        revResto += amt;
-      } else {
-        revJeux += amt;
-        const stName = s.stand ? s.stand.name : 'Stand Non Spécifié';
-        standTotals[stName] = (standTotals[stName] || 0) + amt;
-      }
-    });
-
-    const totalDépenses = this.expenses.reduce((sum, e) => sum + Math.abs(e.amount_f), 0);
-    const totalRecettes = revEntree + revJeux + revResto;
-    const beneficeNet = totalRecettes - totalDépenses;
+    const { revEntree, revJeux, revResto, totalRecettes, totalExpenses, beneficeNet, standTotals } = this.finances;
 
     container.innerHTML = `
       <div style="max-width: 860px; margin: 0 auto;">
@@ -3896,9 +4018,9 @@ const CaisseBilanModule = {
               </div>
             </div>
             <div>
-              <div style="font-size: 0.85rem; color: var(--gray-600);">Total Dépenses Caisses</div>
+              <div style="font-size: 0.85rem; color: var(--gray-600);">Total Dépenses Kermesse</div>
               <div style="font-size: 1.4rem; font-weight: 800; color: var(--danger); margin-top: 4px;">
-                -${totalDépenses.toLocaleString()} F
+                -${totalExpenses.toLocaleString()} F
               </div>
             </div>
             <div>
@@ -3925,16 +4047,19 @@ const CaisseBilanModule = {
               <p style="text-align: center; color: var(--gray-500); padding: 1rem 0;">Aucune vente de tickets enregistrée pour l'instant.</p>
             ` : `
               <div style="display: flex; flex-direction: column; gap: 0.6rem;">
-                ${Object.entries(standTotals)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([name, total], idx) => `
+                ${Object.values(standTotals)
+                  .sort((a, b) => b.revenue - a.revenue)
+                  .map((st, idx) => `
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--gray-50); border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
                       <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">#${idx + 1}</span>
-                        <strong>🎪 ${name}</strong>
+                        <div>
+                          <strong>🎪 ${st.name}</strong>
+                          <div style="font-size: 0.75rem; color: var(--gray-500);">${st.ticketsCount} ticket(s) de jeux vendu(s)</div>
+                        </div>
                       </div>
                       <strong style="color: var(--success); font-size: 1.1rem;">
-                        ${total.toLocaleString()} F
+                        ${st.revenue.toLocaleString()} F
                       </strong>
                     </div>
                   `).join('')}
