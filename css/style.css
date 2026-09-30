@@ -1750,3 +1750,205 @@ button, input, select, textarea {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+/* ==========================================================================
+   STADE 3D DE MBAO & PLAN D'IMPLANTATION (PÔLE 3)
+   ========================================================================== */
+
+.stadium-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stadium-kpi-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.stadium-main-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1rem;
+  min-height: 680px;
+}
+
+@media (max-width: 1024px) {
+  .stadium-main-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stadium-catalog-card {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: var(--shadow-sm);
+  max-height: 720px;
+  overflow: hidden;
+}
+
+.stadium-catalog-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--gray-200);
+  background: var(--gray-50);
+}
+
+.stadium-catalog-list {
+  padding: 0.75rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.stadium-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+  background: #ffffff;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.stadium-item-row:hover {
+  border-color: #3b82f6;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.stadium-item-row.placed {
+  border-left: 4px solid var(--success, #16a34a);
+}
+
+.stadium-item-row.unplaced {
+  border-left: 4px solid var(--warning, #d97706);
+}
+
+.stadium-item-row.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.stadium-viewport-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 1px solid #1e293b;
+  min-height: 600px;
+}
+
+.stadium-viewport-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  z-index: 10;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.stadium-canvas-container {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: 620px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.stadium-canvas-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.stadium-camera-tools {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  z-index: 20;
+}
+
+.stadium-tool-btn {
+  background: rgba(15, 23, 42, 0.85);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+}
+
+.stadium-tool-btn:hover {
+  background: rgba(37, 99, 235, 0.9);
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.stadium-tool-btn.active {
+  background: #2563eb;
+  border-color: #60a5fa;
+  font-weight: 600;
+}
+
+.stadium-selection-dock {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 1.25rem;
+  color: #ffffff;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  max-width: 95%;
+  flex-wrap: wrap;
+}
+
+.stadium-compass-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(15, 23, 42, 0.75);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.35rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  z-index: 15;
+  pointer-events: none;
+}
+

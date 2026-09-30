@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="css/responsive.css?v=3.2">
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Three.js CDN & OrbitControls for Stade de Mbao 3D View -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
@@ -87,11 +90,11 @@
           <ul class="nav-links">
             <li class="nav-item" data-module="decoration" onclick="App.navigateTo('decoration')">
               <span class="nav-icon">🎨</span>
-              <span>Décoration &amp; 10 Zones</span>
+              <span>Décoration &amp; Structures</span>
             </li>
             <li class="nav-item" data-module="locations" onclick="App.navigateTo('locations')">
-              <span class="nav-icon">📍</span>
-              <span>Emplacements &amp; Repères</span>
+              <span class="nav-icon">🏟️</span>
+              <span>Stade 3D de Mbao (Plan)</span>
             </li>
           </ul>
         </div>
@@ -334,11 +337,11 @@
   <script src="js/modules/tickets.js?v=3.7"></script>
   <script src="js/modules/cash.js?v=3.7"></script>
   <script src="js/modules/games.js?v=4.0"></script>
-  <script src="js/modules/decoration.js?v=3.0"></script>
+  <script src="js/modules/decoration.js?v=4.0"></script>
   <script src="js/modules/stocks.js?v=3.0"></script>
   <script src="js/modules/gifts.js?v=3.0"></script>
   <script src="js/modules/inventory.js?v=3.0"></script>
-  <script src="js/modules/locations.js?v=3.0"></script>
+  <script src="js/modules/locations.js?v=4.0"></script>
   <script src="js/modules/materials.js?v=3.5"></script>
   <script src="js/modules/loans.js?v=3.0"></script>
   <script src="js/modules/movements.js?v=3.0"></script>
@@ -370,8 +373,8 @@
         cash: { title: 'Pôle 2 : Caisse Entrée & Caisses', sub: 'Gestion des caisses et fonds', handler: CaisseEntreeModule },
         expenses: { title: 'Pôle 2 : Caisse Tickets de Jeux', sub: 'Dépenses et sorties de caisse', handler: CaisseJeuxModule },
         closures: { title: 'Pôle 2 : Bilan Financier', sub: 'Clôtures et bilan consolidé', handler: CaisseBilanModule },
-        decoration: { title: 'Pôle 3 : Décoration & Organisation', sub: 'Aménagement des 10 zones, barnums, mobilier et circulation', handler: DecorationModule },
-        locations: { title: 'Pôle 3 : Emplacements & Repères', sub: 'Lieux physiques, repères de l\'espace et zones', handler: LocationsModule },
+        decoration: { title: 'Pôle 3 : Décoration & Structures', sub: 'Aménagement des 10 zones, catalogue des structures, manèges et mobilier', handler: DecorationModule },
+        locations: { title: 'Pôle 3 : Stade 3D de Mbao (Plan)', sub: 'Maquette 3D interactive du Stade de Mbao, placement et plan de masse', handler: LocationsModule },
         caisse_restauration: { title: 'Pôle 4 : Caisse Restauration & Buvette', sub: 'Vente tactile des plats & boissons liée aux stocks, dépenses et clôture', handler: CaisseRestaurationModule },
         stocks: { title: 'Pôle 4 : Restauration', sub: 'Denrées, snacks, boissons, emballages, cuisine et réapprovisionnements', handler: StocksModule },
         inventory: { title: 'Pôle 4 : Inventaires & Pertes', sub: 'Comptages comparatifs, réapprovisionnements et pertes/périmés', handler: InventoryModule },
@@ -438,6 +441,11 @@
             this.navigateTo('dashboard', true);
           }
           return;
+        }
+
+        // Nettoyage de l'ancien module si disponible (ex: 3D Three.js)
+        if (this.currentModule && this.modules[this.currentModule] && typeof this.modules[this.currentModule].handler.cleanup === 'function') {
+          try { this.modules[this.currentModule].handler.cleanup(); } catch (e) {}
         }
 
         this.currentModule = moduleName;
