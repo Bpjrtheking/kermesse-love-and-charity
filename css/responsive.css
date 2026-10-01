@@ -646,27 +646,18 @@ html, body {
   }
 
   .stadium-viewport-card {
-    min-height: 420px !important;
-    height: 420px !important;
+    min-height: 380px !important;
+    height: 52vh !important;
+    max-height: 500px !important;
   }
 
   .stadium-canvas-container {
     height: 100% !important;
   }
 
-  .stadium-camera-tools {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 0.35rem !important;
-    overflow-x: auto !important;
-    max-width: calc(100% - 2rem) !important;
-    padding-bottom: 2px !important;
-    z-index: 25 !important;
-  }
-
   .stadium-catalog-card {
     width: 100% !important;
-    max-height: 420px !important;
+    max-height: 520px !important;
   }
 
   .stadium-kpi-bar {

@@ -46,7 +46,7 @@ const LocationsModule = {
     this.cleanup();
 
     container.innerHTML = `
-      <div class="stadium-workspace" id="stadiumWorkspaceRoot">
+      <div class="stadium-workspace mobile-view-3d" id="stadiumWorkspaceRoot">
         <!-- Barre supérieure de KPI -->
         <div class="stadium-kpi-bar">
           <div class="stat-card">
@@ -65,6 +65,16 @@ const LocationsModule = {
             <div class="stat-label">Mode d'Aménagement</div>
             <div class="stat-value" style="font-size: 1.15rem; color: #2563eb;">3D Tactile &amp; Plein Écran</div>
           </div>
+        </div>
+
+        <!-- Sélecteur d'onglets pour Mobile & Tablette (Stade 3D vs Inventaire) -->
+        <div class="stadium-mobile-tab-bar" id="stadiumMobileTabBar">
+          <button class="stadium-mobile-tab-btn active" id="btnStadTab3D" onclick="LocationsModule.switchMobileView('3d')">
+            🏟️ Maquette 3D du Stade
+          </button>
+          <button class="stadium-mobile-tab-btn" id="btnStadTabCatalog" onclick="LocationsModule.switchMobileView('catalog')">
+            📦 Structures &amp; Stands (<span id="mobilePlacedCount">0 / 0</span>)
+          </button>
         </div>
 
         <!-- Layout principal : Catalogue à gauche + Maquette 3D à droite -->
@@ -108,7 +118,26 @@ const LocationsModule = {
 
           <!-- Fenêtre de Rendu 3D du Stade -->
           <div class="stadium-viewport-card" id="stadiumViewportCard">
-            <!-- Barre d'outils supérieure du viewer -->
+            <!-- Barre de caméras préréglées mobile & tablette -->
+            <div class="stadium-mobile-camera-bar">
+              <button class="stadium-cam-chip active" id="mobCam3D" onclick="LocationsModule.setCameraView('perspective')">
+                🏟️ 3D Tribune
+              </button>
+              <button class="stadium-cam-chip" id="mobCamTop" onclick="LocationsModule.setCameraView('top')">
+                🛰️ Vue Ciel (Plan)
+              </button>
+              <button class="stadium-cam-chip" id="mobCamGate" onclick="LocationsModule.setCameraView('entrance')">
+                🚶 Entrée Sud
+              </button>
+              <button class="stadium-cam-chip" id="mobCamBenches" onclick="LocationsModule.setCameraView('benches')">
+                🪑 Bancs Touche
+              </button>
+              <button class="stadium-cam-chip" style="margin-left: auto; background: rgba(37,99,235,0.5); border-color: #60a5fa;" onclick="LocationsModule.toggleFullscreen()">
+                ⛶ Plein Écran
+              </button>
+            </div>
+
+            <!-- Barre d'outils supérieure du viewer (Desktop) -->
             <div class="stadium-viewport-header">
               <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                 <span style="font-weight: 600; font-size: 0.92rem;">🏟️ Maquette 3D — Stade Municipal de Mbao</span>
@@ -169,6 +198,11 @@ const LocationsModule = {
                 Nord ⬆️ | Tribune Mbao ⬅️ | Entrée Sud ⬇️
               </div>
 
+              <!-- Pastille d'aide tactile mobile -->
+              <div class="stadium-touch-hint-pill">
+                <span>🖐️ 1 doigt pour pivoter • 2 doigts pour zoomer</span>
+              </div>
+
               <!-- Dock flottant de l'élément sélectionné -->
               <div class="stadium-selection-dock" id="stadiumSelectionDock" style="display: none;">
                 <div style="display: flex; align-items: center; gap: 0.6rem;">
@@ -214,6 +248,20 @@ const LocationsModule = {
     this.initThreeJS();
   },
 
+  switchMobileView(view) {
+    const root = document.getElementById('stadiumWorkspaceRoot');
+    if (!root) return;
+    root.classList.remove('mobile-view-3d', 'mobile-view-catalog');
+    root.classList.add(`mobile-view-${view}`);
+
+    document.getElementById('btnStadTab3D')?.classList.toggle('active', view === '3d');
+    document.getElementById('btnStadTabCatalog')?.classList.toggle('active', view === 'catalog');
+
+    if (view === '3d' && this.resizeHandler) {
+      setTimeout(() => this.resizeHandler(), 80);
+    }
+  },
+
   async loadItems() {
     // Purger les anciens faux stands / structures de test des versions précédentes
     try {
@@ -244,7 +292,9 @@ const LocationsModule = {
     const total = this.items.length;
     const placed = this.items.filter(i => i.is_placed).length;
     const el = document.getElementById('stadiumPlacedCount');
+    const elMob = document.getElementById('mobilePlacedCount');
     if (el) el.textContent = `${placed} / ${total}`;
+    if (elMob) elMob.textContent = `${placed} / ${total}`;
   },
 
   renderCatalog(filterText = '') {
@@ -399,15 +449,21 @@ const LocationsModule = {
 
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
+    const isMobile = window.innerWidth <= 768;
 
     // 1. Scène
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x93c5fd); // Ciel bleu Dakar
     this.scene.fog = new THREE.FogExp2(0x93c5fd, 0.0035);
 
-    // 2. Caméra Perspective
-    this.camera = new THREE.PerspectiveCamera(45, width / height, 1, 1000);
-    this.camera.position.set(0, 75, 110);
+    // 2. Caméra Perspective (Champ de vision optimisé sur Smartphone et Tablette)
+    const fov = isMobile ? 54 : 45;
+    this.camera = new THREE.PerspectiveCamera(fov, width / height, 1, 1000);
+    if (isMobile) {
+      this.camera.position.set(0, 92, 135);
+    } else {
+      this.camera.position.set(0, 75, 110);
+    }
 
     // 3. Renderer WebGL optimisé
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -426,6 +482,13 @@ const LocationsModule = {
       this.controls.minDistance = 8;
       this.controls.maxDistance = 280;
       this.controls.target.set(0, 0, 0);
+
+      if (typeof THREE.TOUCH !== 'undefined') {
+        this.controls.touches = {
+          ONE: THREE.TOUCH.ROTATE,
+          TWO: THREE.TOUCH.DOLLY_PAN
+        };
+      }
     }
 
     // 5. Éclairage
@@ -1503,21 +1566,32 @@ const LocationsModule = {
   // =========================================================================
   setCameraView(viewType) {
     document.querySelectorAll('.stadium-camera-tools .stadium-tool-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.stadium-cam-chip').forEach(c => c.classList.remove('active'));
+
+    const isMobile = window.innerWidth <= 768;
 
     if (viewType === 'perspective') {
       document.getElementById('camView3D')?.classList.add('active');
+      document.getElementById('mobCam3D')?.classList.add('active');
       this.controls.target.set(0, 0, 0);
-      this.camera.position.set(0, 75, 110);
+      if (isMobile) {
+        this.camera.position.set(0, 92, 135);
+      } else {
+        this.camera.position.set(0, 75, 110);
+      }
     } else if (viewType === 'top') {
       document.getElementById('camViewTop')?.classList.add('active');
+      document.getElementById('mobCamTop')?.classList.add('active');
       this.controls.target.set(0, 0, 0);
-      this.camera.position.set(0, 160, 0.1);
+      this.camera.position.set(0, isMobile ? 180 : 160, 0.1);
     } else if (viewType === 'entrance') {
       document.getElementById('camViewGate')?.classList.add('active');
+      document.getElementById('mobCamGate')?.classList.add('active');
       this.controls.target.set(0, 1.5, 0);
       this.camera.position.set(0, 3, 68); // Devant l'arche Sud
     } else if (viewType === 'benches') {
       document.getElementById('camViewBenches')?.classList.add('active');
+      document.getElementById('mobCamBenches')?.classList.add('active');
       this.controls.target.set(0, 1.5, -20);
       this.camera.position.set(0, 4, -45); // Devant les bancs de touche face à la pelouse
     }
@@ -1526,7 +1600,12 @@ const LocationsModule = {
   centerView() {
     if (this.controls) {
       this.controls.target.set(0, 0, 0);
-      this.camera.position.set(0, 75, 110);
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        this.camera.position.set(0, 92, 135);
+      } else {
+        this.camera.position.set(0, 75, 110);
+      }
     }
   },
 

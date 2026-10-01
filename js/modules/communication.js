@@ -12,6 +12,7 @@
 
 const CommunicationModule = {
   currentTab: 'items', // 'items', 'signage', 'whatsapp'
+  currentStatusFilter: '', // '', 'a_faire', 'en_cours', 'termine'
 
   async render(container) {
     container.innerHTML = `
@@ -34,44 +35,40 @@ const CommunicationModule = {
           <!-- Bannière informative capacité illimitée -->
           <div class="alert-banner info" style="margin-bottom: 1.25rem; font-size: 0.86rem; border-left: 5px solid #2563eb;">
             <div>
-              ♾️ <strong>Pôle Communication & Affichage 100% Illimité :</strong> Planifiez et enregistrez autant d'actions, d'affiches, de flyers, de signalétiques et de campagnes que vous le souhaitez, <strong>sans aucun plafond ni restriction de nombre</strong>. Toutes les actions sont synchronisées en direct.
+              ♾️ <strong>Pôle Communication & Affichage 100% Illimité :</strong> Planifiez et enregistrez autant d'actions, d'affiches, de flyers, de signalétiques et de campagnes que vous le souhaitez, <strong>sans aucun plafond ni restriction de nombre</strong>.
             </div>
           </div>
 
-          <!-- KPI Summary Cards -->
-          <div class="stats-grid" id="commStatsGrid">
-            <div class="stat-card">
-              <div class="stat-label">Total Actions Comm</div>
-              <div class="stat-value" id="commTotalCount">0</div>
-              <div class="stat-sub" style="color: #2563eb; font-weight: 700;">♾️ Capacité Illimitée</div>
+          <!-- KPI Summary Strip (Responsive & Compact) -->
+          <div class="comm-stats-strip" id="commStatsGrid">
+            <div class="comm-stat-pill">
+              <div class="pill-val" id="commTotalCount" style="color: #2563eb;">0</div>
+              <div class="pill-lbl">♾️ Total Actions Comm</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">À Faire / En cours</div>
-              <div class="stat-value" id="commPendingCount" style="color: var(--warning, #f59e0b);">0</div>
-              <div class="stat-sub">Actions à mener</div>
+            <div class="comm-stat-pill">
+              <div class="pill-val" id="commPendingCount" style="color: #f59e0b;">0</div>
+              <div class="pill-lbl">🟡 À Faire / En cours</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">Terminés / Affichés</div>
-              <div class="stat-value" id="commDoneCount" style="color: var(--success, #10b981);">0</div>
-              <div class="stat-sub">Actions validées</div>
+            <div class="comm-stat-pill">
+              <div class="pill-val" id="commDoneCount" style="color: #10b981;">0</div>
+              <div class="pill-lbl">🟢 Validés / Terminés</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">Stands Signalés</div>
-              <div class="stat-value" id="commStandsCount">0</div>
-              <div class="stat-sub">Panneaux prêts</div>
+            <div class="comm-stat-pill">
+              <div class="pill-val" id="commStandsCount" style="color: #8b5cf6;">0</div>
+              <div class="pill-lbl">🪧 Stands Signalés</div>
             </div>
           </div>
 
-          <!-- Tabs Navigation -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.5rem; overflow-x: auto;">
-            <button class="tab-btn active" id="tabCommItems" onclick="CommunicationModule.switchTab('items')">
-              📋 Supports & Actions (<span id="tabCommItemsCount">0</span>)
+          <!-- Navigation Onglets Segmentés Moderne (Segmented Pill Control) -->
+          <div class="comm-seg-pills">
+            <button class="comm-seg-btn active" id="tabCommItems" onclick="CommunicationModule.switchTab('items')">
+              📋 Supports & Actions <span class="comm-seg-count" id="tabCommItemsCount">0</span>
             </button>
-            <button class="tab-btn" id="tabCommSignage" onclick="CommunicationModule.switchTab('signage')">
-              🪧 Signalétique Stands & Plan
+            <button class="comm-seg-btn" id="tabCommSignage" onclick="CommunicationModule.switchTab('signage')">
+              🪧 Signalétique Stands <span class="comm-seg-count" id="tabCommSignageCount">0</span>
             </button>
-            <button class="tab-btn" id="tabCommWhatsapp" onclick="CommunicationModule.switchTab('whatsapp')">
-              📱 Modèles WhatsApp & Réseaux
+            <button class="comm-seg-btn" id="tabCommWhatsapp" onclick="CommunicationModule.switchTab('whatsapp')">
+              📱 WhatsApp & Réseaux
             </button>
           </div>
 
@@ -88,7 +85,7 @@ const CommunicationModule = {
 
   switchTab(tab) {
     this.currentTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.comm-seg-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(
       tab === 'items' ? 'tabCommItems' : (tab === 'signage' ? 'tabCommSignage' : 'tabCommWhatsapp')
     );
@@ -198,12 +195,14 @@ const CommunicationModule = {
     const elDone = document.getElementById('commDoneCount');
     const elStands = document.getElementById('commStandsCount');
     const elTabCount = document.getElementById('tabCommItemsCount');
+    const elSignageCount = document.getElementById('tabCommSignageCount');
 
     if (elTotal) elTotal.textContent = total;
     if (elPending) elPending.textContent = pending;
     if (elDone) elDone.textContent = done;
     if (elStands) elStands.textContent = standsCount;
     if (elTabCount) elTabCount.textContent = total;
+    if (elSignageCount) elSignageCount.textContent = standsCount;
   },
 
   renderCurrentTab() {
@@ -221,131 +220,217 @@ const CommunicationModule = {
 
   // 1. ONGLET SUPPORTS & CAMPAGNES
   renderItemsTab(container) {
+    const total = this.items.length;
+    const pending = this.items.filter(i => i.status === 'a_faire').length;
+    const inProgress = this.items.filter(i => i.status === 'en_cours').length;
+    const done = this.items.filter(i => i.status === 'termine').length;
+
     container.innerHTML = `
-      <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between;">
-        <div class="search-box">
-          <input type="text" id="commSearch" class="form-control" placeholder="Rechercher un support, responsable, lieu..." oninput="CommunicationModule.filterItems()">
+      <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <!-- Ligne supérieure recherche et type -->
+        <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; align-items: center;">
+          <div class="search-box" style="flex: 1; min-width: 220px; position: relative;">
+            <input type="text" id="commSearch" class="form-control" placeholder="Rechercher action, lieu, responsable..." oninput="CommunicationModule.filterItems()">
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <select id="commTypeFilter" class="form-control" style="font-size: 0.85rem; padding: 0.45rem 0.75rem; width: auto; min-width: 160px;" onchange="CommunicationModule.filterItems()">
+              <option value="">Tous les supports</option>
+              <option value="affiche">🖼️ Affiches</option>
+              <option value="flyer">📄 Flyers</option>
+              <option value="signaletique_panneau">🪧 Signalétique & Panneaux</option>
+              <option value="plan_kermesse">🗺️ Plan Kermesse</option>
+              <option value="whatsapp">📱 WhatsApp</option>
+              <option value="reseaux_sociaux">🌐 Réseaux Sociaux</option>
+              <option value="annonce">📣 Annonces Micro</option>
+            </select>
+          </div>
         </div>
-        <div class="filters-group" style="display: flex; gap: 0.5rem;">
-          <select id="commTypeFilter" class="form-control" onchange="CommunicationModule.filterItems()">
-            <option value="">Tous les types</option>
-            <option value="affiche">Affiches</option>
-            <option value="flyer">Flyers</option>
-            <option value="signaletique_panneau">Signalétique & Panneaux</option>
-            <option value="plan_kermesse">Plan Kermesse</option>
-            <option value="whatsapp">Communication WhatsApp</option>
-            <option value="reseaux_sociaux">Réseaux Sociaux</option>
-            <option value="annonce">Annonces / Invitations</option>
-          </select>
-          <select id="commStatusFilter" class="form-control" onchange="CommunicationModule.filterItems()">
-            <option value="">Tous les statuts</option>
-            <option value="a_faire">À faire</option>
-            <option value="en_cours">En cours</option>
-            <option value="termine">Terminé</option>
-          </select>
+
+        <!-- Puces de filtres tactiles rapides par statut -->
+        <div class="comm-filter-chips">
+          <button class="comm-filter-chip ${this.currentStatusFilter === '' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('')">
+            Tous (${total})
+          </button>
+          <button class="comm-filter-chip ${this.currentStatusFilter === 'a_faire' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('a_faire')">
+            ⚪ À faire (${pending})
+          </button>
+          <button class="comm-filter-chip ${this.currentStatusFilter === 'en_cours' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('en_cours')">
+            🟡 En cours (${inProgress})
+          </button>
+          <button class="comm-filter-chip ${this.currentStatusFilter === 'termine' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('termine')">
+            🟢 Terminés (${done})
+          </button>
         </div>
       </div>
 
-      <div class="table-responsive" id="commTableContainer">
-        ${this.generateItemsTable(this.items)}
+      <div id="commItemsContainer">
+        ${this.generateItemsContent(this.items)}
       </div>
     `;
   },
 
-  generateItemsTable(itemsList) {
+  setStatusFilter(status) {
+    this.currentStatusFilter = status;
+    document.querySelectorAll('.comm-filter-chip').forEach(c => c.classList.remove('active'));
+    event?.target?.classList?.add('active');
+    this.filterItems();
+  },
+
+  generateItemsContent(itemsList) {
     if (!itemsList || itemsList.length === 0) {
       return `
         <div class="empty-state">
           <div class="empty-icon">📢</div>
-          <div class="empty-title">Aucune tâche de communication enregistrée</div>
-          <div class="empty-desc">Créez des affiches, flyers, panneaux de signalétique ou campagnes WhatsApp pour organiser la communication de la kermesse (nombre d'actions 100% illimité).</div>
+          <div class="empty-title">Aucune action trouvée</div>
+          <div class="empty-desc">Aucune tâche de communication ne correspond à vos filtres actuels. Créez une nouvelle action ou importez un pack prêt à l'emploi.</div>
           <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;">
             <button class="btn btn-secondary" onclick="CommunicationModule.openTemplatesModal()">
-              <span>📋</span> Charger des Packs d'Actions
+              <span>📋</span> Packs Prêts
             </button>
             <button class="btn btn-primary" onclick="CommunicationModule.openCreateModal()">
-              <span>➕</span> Créer une Action (Illimité)
+              <span>➕</span> Nouvelle Action
             </button>
           </div>
         </div>
       `;
     }
 
+    const typeLabels = {
+      'affiche': '🖼️ Affiche',
+      'flyer': '📄 Flyer',
+      'signaletique_panneau': '🪧 Signalétique',
+      'plan_kermesse': '🗺️ Plan Kermesse',
+      'whatsapp': '📱 WhatsApp',
+      'reseaux_sociaux': '🌐 Réseaux',
+      'annonce': '📣 Annonce'
+    };
+
+    const statusConfig = {
+      'a_faire': { label: 'À faire', icon: '⚪', badgeClass: 'status-a_faire' },
+      'en_cours': { label: 'En cours', icon: '🟡', badgeClass: 'status-en_cours' },
+      'termine': { label: 'Terminé', icon: '🟢', badgeClass: 'status-termine' }
+    };
+
     return `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem; color: var(--gray-700);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem; color: var(--gray-700);">
         <div>
-          Affichage de <strong>${itemsList.length}</strong> action(s) sur <strong>${this.items.length}</strong> au total &bull; <span class="badge badge-success" style="font-size: 0.72rem; font-weight: 700;">♾️ Capacité Illimitée (∞)</span>
+          Affichage de <strong>${itemsList.length}</strong> action(s) &bull; <span class="badge badge-success" style="font-size: 0.72rem; font-weight: 700;">♾️ Illimité (∞)</span>
         </div>
         <div style="display: flex; gap: 0.4rem;">
           <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.openTemplatesModal()" title="Ajouter des packs pré-remplis">
             📋 Packs Prêts
           </button>
+          <button class="btn btn-primary btn-sm" onclick="CommunicationModule.openCreateModal()">
+            ➕ Ajouter
+          </button>
         </div>
       </div>
 
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Support / Action</th>
-            <th>Type</th>
-            <th>Responsable</th>
-            <th>Emplacement / Cible</th>
-            <th>Date Prévue</th>
-            <th>Statut</th>
-            <th style="text-align: right; white-space: nowrap;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsList.map(item => {
-            let badgeClass = 'badge-gray';
-            let labelStatus = 'À faire';
-            if (item.status === 'en_cours') { badgeClass = 'badge-warning'; labelStatus = 'En cours'; }
-            if (item.status === 'termine') { badgeClass = 'badge-success'; labelStatus = 'Terminé'; }
+      <!-- VUE 1 : TABLEAU DESKTOP (Écrans >= 992px) -->
+      <div class="comm-desktop-table table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Support / Action</th>
+              <th>Type</th>
+              <th>Responsable</th>
+              <th>Emplacement / Cible</th>
+              <th>Date Prévue</th>
+              <th>Statut</th>
+              <th style="text-align: right; white-space: nowrap;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsList.map(item => {
+              const st = statusConfig[item.status] || statusConfig['a_faire'];
+              return `
+                <tr>
+                  <td>
+                    <strong>${item.title}</strong>
+                    ${item.materials_needed ? `<div style="font-size: 0.75rem; color: var(--gray-500); margin-top: 2px;">📦 Matériel : ${item.materials_needed}</div>` : ''}
+                  </td>
+                  <td><span class="badge badge-primary">${typeLabels[item.type] || item.type}</span></td>
+                  <td>${item.responsible_name || '-'}</td>
+                  <td>${item.display_location || '-'}</td>
+                  <td>${item.target_date || '-'}</td>
+                  <td><span class="comm-status-pill ${st.badgeClass}">${st.icon} ${st.label}</span></td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <button class="btn-icon" onclick="CommunicationModule.toggleStatus('${item.id}')" title="${item.status === 'termine' ? 'Marquer en cours' : 'Marquer comme terminé'}">
+                      ${item.status === 'termine' ? '↩️' : '✅'}
+                    </button>
+                    <button class="btn-icon" onclick="CommunicationModule.duplicateItem('${item.id}')" title="Dupliquer">
+                      📋
+                    </button>
+                    <button class="btn-icon danger" onclick="CommunicationModule.deleteItem('${item.id}')" title="Supprimer">
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
 
-            const typeLabels = {
-              'affiche': '🖼️ Affiche',
-              'flyer': '📄 Flyer',
-              'signaletique_panneau': '🪧 Signalétique',
-              'plan_kermesse': '🗺️ Plan Kermesse',
-              'whatsapp': '📱 WhatsApp',
-              'reseaux_sociaux': '🌐 Réseaux Sociaux',
-              'annonce': '📣 Annonce'
-            };
+      <!-- VUE 2 : FLUX DE FICHES ACTIONS BESPOKE MOBILE & TABLETTE (Écrans < 992px) -->
+      <div class="comm-mobile-cards">
+        ${itemsList.map(item => {
+          const st = statusConfig[item.status] || statusConfig['a_faire'];
+          const isDone = item.status === 'termine';
+          return `
+            <div class="comm-action-card card-status-${item.status}">
+              <div class="comm-card-top">
+                <div class="comm-card-badges">
+                  <span class="comm-type-pill">${typeLabels[item.type] || item.type}</span>
+                  <span class="comm-status-pill ${st.badgeClass}">${st.icon} ${st.label}</span>
+                </div>
+                ${item.target_date ? `<span class="comm-date-pill">📅 ${item.target_date}</span>` : ''}
+              </div>
 
-            return `
-              <tr>
-                <td>
-                  <strong>${item.title}</strong>
-                  ${item.materials_needed ? `<div style="font-size: 0.75rem; color: var(--gray-500); margin-top: 2px;">📦 Matériel : ${item.materials_needed}</div>` : ''}
-                </td>
-                <td><span class="badge badge-primary">${typeLabels[item.type] || item.type}</span></td>
-                <td>${item.responsible_name || '-'}</td>
-                <td>${item.display_location || '-'}</td>
-                <td>${item.target_date || '-'}</td>
-                <td><span class="badge ${badgeClass}">${labelStatus}</span></td>
-                <td style="text-align: right; white-space: nowrap;">
-                  <button class="btn-icon" onclick="CommunicationModule.toggleStatus('${item.id}')" title="${item.status === 'termine' ? 'Marquer comme en cours' : 'Marquer comme terminé'}">
-                    ${item.status === 'termine' ? '↩️' : '✅'}
-                  </button>
-                  <button class="btn-icon" onclick="CommunicationModule.duplicateItem('${item.id}')" title="Dupliquer cette action">
-                    📋
-                  </button>
-                  <button class="btn-icon danger" onclick="CommunicationModule.deleteItem('${item.id}')" title="Supprimer">
-                    🗑️
-                  </button>
-                </td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
+              <h4 class="comm-card-title">${item.title}</h4>
+
+              <div class="comm-card-details">
+                <div class="comm-detail-item">
+                  <span class="detail-icon">👤</span>
+                  <span class="detail-label">Responsable :</span>
+                  <strong class="detail-value">${item.responsible_name || 'Non assigné'}</strong>
+                </div>
+                ${item.display_location ? `
+                <div class="comm-detail-item">
+                  <span class="detail-icon">📍</span>
+                  <span class="detail-label">Lieu / Cible :</span>
+                  <span class="detail-value">${item.display_location}</span>
+                </div>` : ''}
+                ${item.materials_needed ? `
+                <div class="comm-detail-item">
+                  <span class="detail-icon">📦</span>
+                  <span class="detail-label">Matériel :</span>
+                  <span class="detail-value">${item.materials_needed}</span>
+                </div>` : ''}
+              </div>
+
+              <div class="comm-card-actions">
+                <button class="btn ${isDone ? 'btn-secondary' : 'btn-success'} btn-main-status" onclick="CommunicationModule.toggleStatus('${item.id}')">
+                  ${isDone ? '↩️ En cours' : '✅ Valider'}
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.duplicateItem('${item.id}')" title="Dupliquer">
+                  📋 Copier
+                </button>
+                <button class="btn btn-secondary btn-sm danger" onclick="CommunicationModule.deleteItem('${item.id}')" title="Supprimer">
+                  🗑️
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
     `;
   },
 
   filterItems() {
     const q = (document.getElementById('commSearch')?.value || '').toLowerCase();
     const t = document.getElementById('commTypeFilter')?.value;
-    const s = document.getElementById('commStatusFilter')?.value;
+    const s = this.currentStatusFilter;
 
     const filtered = this.items.filter(i => {
       const matchText = (i.title || '').toLowerCase().includes(q) ||
@@ -356,46 +441,44 @@ const CommunicationModule = {
       return matchText && matchType && matchStatus;
     });
 
-    const container = document.getElementById('commTableContainer');
-    if (container) container.innerHTML = this.generateItemsTable(filtered);
+    const container = document.getElementById('commItemsContainer');
+    if (container) container.innerHTML = this.generateItemsContent(filtered);
   },
 
   // 2. ONGLET SIGNALÉTIQUE STANDS & PLAN
   renderSignageTab(container) {
     container.innerHTML = `
-      <div class="alert-banner info" style="margin-bottom: 1.5rem;">
+      <div class="alert-banner info" style="margin-bottom: 1.25rem;">
         <div>
-          🪧 <strong>Signalétique physique sur le terrain :</strong> Chaque stand doit disposer de son panneau visible à l'entrée avec son <strong>numéro</strong>, sa <strong>couleur officielle</strong>, son <strong>nom de jeu</strong> et les tarifs en tickets/jetons.
+          🪧 <strong>Signalétique physique sur le terrain :</strong> Chaque stand doit disposer de son panneau visible à l'entrée avec son <strong>numéro</strong>, sa <strong>couleur officielle</strong>, son <strong>nom de jeu</strong> et les tarifs.
         </div>
       </div>
 
-      <div class="signage-grid">
+      <div class="signage-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
         ${this.stands.length === 0 ? `
           <div class="empty-state" style="grid-column: 1 / -1;">
             <div class="empty-icon">🎪</div>
             <div class="empty-title">Aucun stand configuré</div>
-            <div class="empty-desc">Les panneaux de signalétique s'afficheront ici automatiquement dès que les stands sont enregistrés.</div>
+            <div class="empty-desc">Les panneaux de signalétique s'afficheront ici automatiquement dès que les stands sont enregistrés en Pôle 5.</div>
           </div>
         ` : this.stands.map(s => `
-          <div class="card" style="border-left: 6px solid ${s.color_hex || '#3b82f6'};">
-            <div class="card-body" style="padding: 1.25rem;">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                <span class="badge" style="background-color: ${s.color_hex || '#3b82f6'}; color: #fff; font-size: 0.85rem; font-weight: 700;">
+          <div class="card" style="border-left: 6px solid ${s.color_hex || '#3b82f6'}; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+            <div class="card-body" style="padding: 1.15rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                <span class="badge" style="background-color: ${s.color_hex || '#3b82f6'}; color: #fff; font-size: 0.85rem; font-weight: 800; padding: 4px 10px; border-radius: 9999px;">
                   Stand N° ${s.number}
                 </span>
-                <span style="font-size: 0.8rem; font-weight: 600; color: var(--gray-600);">
-                  Couleur : ${s.color_name || 'Standard'}
+                <span style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600);">
+                  Secteur : ${s.color_name || 'Standard'}
                 </span>
               </div>
-              <h4 style="margin: 0.5rem 0; font-size: 1.1rem; color: var(--gray-900);">${s.name}</h4>
-              <p style="font-size: 0.8rem; color: var(--gray-500); margin-bottom: 1rem;">
-                Panneau d'affichage requis : Format A3 Plastifié ou carton rigide avec nom du jeu et règle.
+              <h4 style="margin: 0.4rem 0 0.6rem 0; font-size: 1.1rem; font-weight: 800; color: var(--gray-900);">${s.name}</h4>
+              <p style="font-size: 0.8rem; color: var(--gray-500); margin-bottom: 1rem; line-height: 1.4;">
+                Panneau officiel A3 Paysage avec cercle numéroté et couleur du secteur.
               </p>
-              <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.printStandSign('${s.id}', '${s.name}', '${s.number}', '${s.color_name}')" style="width: 100%;">
-                  🖨️ Générer / Imprimer Panneau
-                </button>
-              </div>
+              <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.printStandSign('${s.id}', '${s.name}', '${s.number}', '${s.color_name}')" style="width: 100%; min-height: 38px; font-weight: 700;">
+                🖨️ Générer / Imprimer Panneau A3
+              </button>
             </div>
           </div>
         `).join('')}
@@ -437,7 +520,7 @@ const CommunicationModule = {
     printWindow.document.close();
   },
 
-  // 3. ONGLET MODÈLES WHATSAPP & RÉSEAUX
+  // 3. ONGLET MODÈLES WHATSAPP & RÉSEAUX (Mobile First Chat Cards)
   renderWhatsappTab(container) {
     const templates = [
       {
@@ -458,29 +541,34 @@ const CommunicationModule = {
     ];
 
     container.innerHTML = `
-      <div class="alert-banner info" style="margin-bottom: 1.5rem;">
+      <div class="alert-banner info" style="margin-bottom: 1.25rem;">
         <div>
           📱 <strong>Diffusion Rapide WhatsApp :</strong> Cliquez sur <strong>Copier le message</strong> ou <strong>Ouvrir dans WhatsApp</strong> pour diffuser immédiatement les annonces officielles auprès de vos contacts et groupes.
         </div>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
         ${templates.map((tpl, idx) => `
-          <div class="card" style="background: var(--gray-50, #f9fafb); border: 1px solid var(--gray-200);">
-            <div class="card-body">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                <h4 style="margin: 0; font-size: 1rem; color: var(--gray-900);">💬 ${tpl.title}</h4>
-                <span class="badge badge-gray">${tpl.target}</span>
+          <div class="whatsapp-mobile-card">
+            <div class="whatsapp-card-head">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.2rem;">💬</span>
+                <h4>${tpl.title}</h4>
               </div>
-              <textarea id="whatsappTpl_${idx}" class="form-control" rows="5" readonly style="font-family: monospace; font-size: 0.85rem; background: #fff; margin-bottom: 0.75rem;">${tpl.content}</textarea>
-              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.copyWhatsappText('whatsappTpl_${idx}')">
-                  📋 Copier le message
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="CommunicationModule.shareOnWhatsapp('whatsappTpl_${idx}')">
-                  🚀 Partager sur WhatsApp
-                </button>
-              </div>
+              <span class="badge" style="background: rgba(255,255,255,0.25); color: #fff; font-size: 0.72rem;">${tpl.target}</span>
+            </div>
+
+            <div class="whatsapp-bubble-preview">
+              <div class="whatsapp-bubble-inner" id="whatsappTpl_${idx}">${tpl.content}</div>
+            </div>
+
+            <div class="whatsapp-card-footer">
+              <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.copyWhatsappText('whatsappTpl_${idx}')">
+                📋 Copier le message
+              </button>
+              <button class="btn btn-success btn-sm" style="background: #25d366; border-color: #22c55e;" onclick="CommunicationModule.shareOnWhatsapp('whatsappTpl_${idx}')">
+                🚀 Ouvrir WhatsApp
+              </button>
             </div>
           </div>
         `).join('')}
@@ -489,20 +577,21 @@ const CommunicationModule = {
   },
 
   copyWhatsappText(elementId) {
-    const textarea = document.getElementById(elementId);
-    if (!textarea) return;
-    textarea.select();
-    navigator.clipboard.writeText(textarea.value).then(() => {
-      Notify.success('Message copié dans le presse-papier !');
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const text = el.innerText || el.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      Notify.success('Message WhatsApp copié dans le presse-papier !');
     }).catch(() => {
       Notify.info('Veuillez sélectionner le texte pour copier.');
     });
   },
 
   shareOnWhatsapp(elementId) {
-    const textarea = document.getElementById(elementId);
-    if (!textarea) return;
-    const encoded = encodeURIComponent(textarea.value);
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const text = el.innerText || el.textContent;
+    const encoded = encodeURIComponent(text);
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
   },
 

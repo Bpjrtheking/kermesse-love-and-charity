@@ -301,25 +301,55 @@
 }
 
 .btn-hub-back {
-  background: var(--gray-100);
-  border: 1px solid var(--gray-300);
-  color: var(--gray-800);
-  padding: 0.55rem 1.1rem;
-  border-radius: var(--radius-md);
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #0f172a;
+  padding: 0.5rem 1.15rem;
+  border-radius: 9999px;
   font-weight: 800;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.55rem;
   text-decoration: none;
-  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-hub-back span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1;
+  transition: all 0.2s ease;
 }
 
 .btn-hub-back:hover {
-  background: var(--gray-200);
-  color: var(--gray-900);
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: var(--active-pole-color, var(--primary));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateX(-3px);
+}
+
+.btn-hub-back:hover span:first-child {
+  background: #fee2e2;
+  color: #dc2626;
   transform: translateX(-2px);
+}
+
+.btn-hub-back:active {
+  transform: scale(0.96);
 }
 
 .pole-title-group {
@@ -649,19 +679,25 @@
 
   .btn-hub-back {
     padding: 0 0.85rem;
-    height: 36px;
-    min-height: 36px;
+    height: 38px;
+    min-height: 38px;
     font-size: 0.82rem;
     font-weight: 800;
     border-radius: 9999px;
-    background: #f1f5f9;
-    border-color: #cbd5e1;
-    color: #1e293b;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #0f172a;
     flex-shrink: 0;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
   }
 
-  .btn-hub-back span:last-child {
-    display: inline;
+  .btn-hub-back span:first-child {
+    width: 20px;
+    height: 20px;
+    font-size: 0.82rem;
   }
 
   .pole-title-group {
@@ -1152,5 +1188,484 @@
     opacity: 1;
   }
 }
+
+/* ==============================================================================
+ * DESIGN BESPOKE MOBILE & TABLETTE POUR LE PÔLE 1 (COMMUNICATION)
+ * ============================================================================== */
+
+/* Barre d'onglets segmentée moderne Pôle 1 */
+.comm-seg-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1.25rem;
+}
+
+.comm-seg-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.comm-seg-btn:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f172a;
+}
+
+.comm-seg-btn.active {
+  background: #ffffff;
+  color: #c2410c;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.comm-seg-count {
+  background: #ffedd5;
+  color: #c2410c;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+/* Bandeau compact de KPI Communication */
+.comm-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .comm-stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+}
+
+.comm-stat-pill {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.comm-stat-pill .pill-val {
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.comm-stat-pill .pill-lbl {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Filtres rapides au pouce */
+.comm-filter-chips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.comm-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.comm-filter-chip {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  padding: 0.35rem 0.8rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.comm-filter-chip:hover {
+  background: #f1f5f9;
+}
+
+.comm-filter-chip.active {
+  background: #f97316;
+  border-color: #ea580c;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
+}
+
+/* Vues Table Desktop vs Fiches Mobile */
+.comm-desktop-table {
+  display: block;
+}
+
+.comm-mobile-cards {
+  display: none;
+}
+
+@media (max-width: 991px) {
+  .comm-desktop-table {
+    display: none !important;
+  }
+
+  .comm-mobile-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+}
+
+/* FLUX DE FICHES D'ACTIONS (Bespoke Mobile Action Cards) */
+.comm-action-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1rem 1.15rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.comm-action-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 5px;
+}
+
+.comm-action-card.card-status-a_faire::before { background: #94a3b8; }
+.comm-action-card.card-status-en_cours::before { background: #f59e0b; }
+.comm-action-card.card-status-termine::before { background: #10b981; }
+
+.comm-action-card:active {
+  transform: scale(0.99);
+}
+
+.comm-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.comm-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.comm-type-pill {
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+}
+
+.comm-status-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.comm-status-pill.status-a_faire { background: #f1f5f9; color: #475569; }
+.comm-status-pill.status-en_cours { background: #fef3c7; color: #b45309; }
+.comm-status-pill.status-termine { background: #dcfce7; color: #15803d; }
+
+.comm-date-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.comm-card-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.comm-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: #f8fafc;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  border: 1px solid #f1f5f9;
+}
+
+.comm-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  line-height: 1.3;
+}
+
+.comm-detail-item .detail-icon {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+}
+
+.comm-detail-item .detail-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.comm-detail-item .detail-value {
+  color: #1e293b;
+}
+
+.comm-card-actions {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding-top: 0.4rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.comm-card-actions .btn {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.85rem;
+  min-height: 38px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-weight: 700;
+}
+
+.comm-card-actions .btn-main-status {
+  flex: 1;
+}
+
+/* Modèles WhatsApp Cards Mobile */
+.whatsapp-mobile-card {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 1rem;
+}
+
+.whatsapp-card-head {
+  background: #075e54;
+  color: #ffffff;
+  padding: 0.65rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.whatsapp-card-head h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.whatsapp-bubble-preview {
+  background: #efeae2;
+  padding: 1rem;
+  background-image: radial-gradient(#d1d7db 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.whatsapp-bubble-inner {
+  background: #ffffff;
+  border-radius: 10px 10px 10px 2px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #111b21;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  font-family: var(--font-sans);
+}
+
+.whatsapp-card-footer {
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.whatsapp-card-footer .btn {
+  flex: 1;
+  min-height: 40px;
+}
+
+/* ==============================================================================
+ * STADE 3D DE MBAO : DESIGN MOBILE & TABLETTE RÉVOLUTIONNAIRE
+ * ============================================================================== */
+
+/* Sélecteur d'onglets mobile (Stade 3D vs Inventaire) */
+.stadium-mobile-tab-bar {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .stadium-mobile-tab-bar {
+    display: flex;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 9999px;
+    border: 1px solid #cbd5e1;
+    gap: 4px;
+    margin-bottom: 0.85rem;
+  }
+
+  .stadium-mobile-tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0.55rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .stadium-mobile-tab-btn.active {
+    background: #ffffff;
+    color: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+  }
+
+  /* Affichage conditionnel selon l'onglet mobile actif */
+  .stadium-workspace.mobile-view-3d .stadium-catalog-card {
+    display: none !important;
+  }
+  .stadium-workspace.mobile-view-3d .stadium-viewport-card {
+    display: flex !important;
+  }
+
+  .stadium-workspace.mobile-view-catalog .stadium-viewport-card {
+    display: none !important;
+  }
+  .stadium-workspace.mobile-view-catalog .stadium-catalog-card {
+    display: flex !important;
+    width: 100% !important;
+    max-height: none !important;
+  }
+}
+
+/* Barre de caméras préréglées mobile & tablette */
+.stadium-mobile-camera-bar {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 20;
+}
+.stadium-mobile-camera-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.stadium-cam-chip {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.stadium-cam-chip.active {
+  background: #10b981;
+  border-color: #34d399;
+  color: #ffffff;
+}
+
+/* Bouton bascule tactile (Scroll lock vs 3D rotation) */
+.stadium-touch-hint-pill {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e2e8f0;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 
 
