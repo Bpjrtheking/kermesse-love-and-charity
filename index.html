@@ -9,9 +9,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Love &amp; Charity — Portail Kermesse</title>
   
-  <link rel="stylesheet" href="css/style.css?v=5.8">
-  <link rel="stylesheet" href="css/responsive.css?v=5.8">
-  <link rel="stylesheet" href="css/portal.css?v=5.8">
+  <link rel="stylesheet" href="css/style.css?v=5.9">
+  <link rel="stylesheet" href="css/responsive.css?v=5.9">
+  <link rel="stylesheet" href="css/portal.css?v=5.9">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="portal-wrapper">
@@ -40,8 +40,8 @@
       <a href="tasks.html" class="btn btn-secondary btn-sm" title="Mes Tâches &amp; Bloc-Notes" style="padding: 0.45rem 0.75rem;">
         <span>📝</span>
       </a>
-      <button class="btn btn-secondary btn-sm" onclick="Auth.logout()" title="Déconnexion" style="padding: 0.45rem 0.75rem;">
-        <span>🚪</span>
+      <button class="btn btn-logout-header" onclick="Auth.logout()" title="Déconnexion de la session">
+        <span>🚪</span> <span class="logout-lbl">Déconnexion</span>
       </button>
     </div>
   </header>
@@ -51,6 +51,22 @@
     
     <!-- Bannière d'Accueil Spacieuse -->
     <div class="portal-hero">
+
+      <!-- Bandeau profil utilisateur & Déconnexion directe sur Mobile & Desktop -->
+      <div class="portal-user-strip">
+        <div class="portal-user-strip-left">
+          <div class="portal-avatar-large" id="heroUserAvatar">U</div>
+          <div class="portal-user-strip-details">
+            <span class="portal-user-welcome-label">Connecté en session :</span>
+            <strong class="portal-user-strip-name" id="heroUserName">Chargement...</strong>
+            <span class="portal-user-strip-role" id="heroUserRole">Administrateur</span>
+          </div>
+        </div>
+        <button class="btn-hero-logout" onclick="Auth.logout()" title="Se déconnecter de l'application">
+          <span>🚪</span> Déconnexion
+        </button>
+      </div>
+
       <div class="portal-hero-text">
         <h2>👋 Bienvenue sur votre espace Kermesse</h2>
         <p>
@@ -224,19 +240,30 @@
 
     </div>
 
+    <!-- Bouton de Déconnexion Confort en Bas de Menu pour Mobile & Tablette -->
+    <div class="portal-bottom-logout-card">
+      <div class="bottom-logout-info">
+        <span>Session active sécurisée Love &amp; Charity</span>
+        <strong id="footerUserLabel">Administrateur connecté</strong>
+      </div>
+      <button class="btn-bottom-logout" onclick="Auth.logout()" title="Se déconnecter de la plateforme">
+        <span>🚪</span> Déconnexion de la session
+      </button>
+    </div>
+
   </main>
 
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=5.8"></script>
-  <script src="js/notify.js?v=5.8"></script>
-  <script src="js/supabase.js?v=5.8"></script>
-  <script src="js/audit.js?v=5.8"></script>
-  <script src="js/offline.js?v=5.8"></script>
-  <script src="js/auth.js?v=5.8"></script>
-  <script src="js/permissions.js?v=5.8"></script>
+  <script src="js/config.js?v=5.9"></script>
+  <script src="js/notify.js?v=5.9"></script>
+  <script src="js/supabase.js?v=5.9"></script>
+  <script src="js/audit.js?v=5.9"></script>
+  <script src="js/offline.js?v=5.9"></script>
+  <script src="js/auth.js?v=5.9"></script>
+  <script src="js/permissions.js?v=5.9"></script>
 
   <!-- Routeur & Contrôleur du Hub -->
   <script>
@@ -300,9 +327,23 @@
 
       // 4. Profil utilisateur
       if (user) {
-        document.getElementById('headerUserName').textContent = user.full_name || user.login;
-        document.getElementById('headerUserRole').textContent = user.role_name || user.role_code || 'Administrateur';
-        document.getElementById('headerUserAvatar').textContent = (user.login || 'U').charAt(0).toUpperCase();
+        const name = user.full_name || user.login;
+        const role = user.role_name || user.role_code || 'Administrateur';
+        const initial = (user.login || 'U').charAt(0).toUpperCase();
+
+        document.getElementById('headerUserName').textContent = name;
+        document.getElementById('headerUserRole').textContent = role;
+        document.getElementById('headerUserAvatar').textContent = initial;
+
+        const heroAvatar = document.getElementById('heroUserAvatar');
+        const heroName = document.getElementById('heroUserName');
+        const heroRole = document.getElementById('heroUserRole');
+        const footerLabel = document.getElementById('footerUserLabel');
+
+        if (heroAvatar) heroAvatar.textContent = initial;
+        if (heroName) heroName.textContent = name;
+        if (heroRole) heroRole.textContent = role;
+        if (footerLabel) footerLabel.textContent = `${name} (${role})`;
 
         const isSuperAdmin = Permissions.isSuperAdmin(user);
         if (isSuperAdmin) {
