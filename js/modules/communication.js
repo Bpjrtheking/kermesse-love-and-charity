@@ -61,13 +61,13 @@ const CommunicationModule = {
         <div class="comm-seg-pills-wrap">
           <div class="comm-seg-pills">
             <button class="comm-seg-btn active" id="tabCommItems" onclick="CommunicationModule.switchTab('items')">
-              📋 Supports &amp; Actions <span class="comm-seg-count" id="tabCommItemsCount">0</span>
+              <span>📋</span> <span>Supports &amp; Actions</span> <span class="comm-seg-count" id="tabCommItemsCount">0</span>
             </button>
             <button class="comm-seg-btn" id="tabCommSignage" onclick="CommunicationModule.switchTab('signage')">
-              🪧 Signalétique Stands <span class="comm-seg-count" id="tabCommSignageCount">0</span>
+              <span>🪧</span> <span>Signalétique Stands</span> <span class="comm-seg-count" id="tabCommSignageCount">0</span>
             </button>
             <button class="comm-seg-btn" id="tabCommWhatsapp" onclick="CommunicationModule.switchTab('whatsapp')">
-              📱 WhatsApp &amp; Réseaux
+              <span>📱</span> <span>WhatsApp &amp; Réseaux</span>
             </button>
           </div>
         </div>
