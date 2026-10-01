@@ -59,7 +59,7 @@ const SecurityModule = {
           </div>
 
           <!-- Tabs Navigation -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.5rem; overflow-x: auto;">
+          <div class="tabs-nav">
             <button class="tab-btn active" id="tabSecIncidents" onclick="SecurityModule.switchTab('incidents')">
               🚨 Registre des Incidents
             </button>

@@ -8,9 +8,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Supervision &amp; Bilans SuperAdmin — Kermesse Love and Charity</title>
   
-  <link rel="stylesheet" href="css/style.css?v=6.2">
-  <link rel="stylesheet" href="css/responsive.css?v=6.2">
-  <link rel="stylesheet" href="css/portal.css?v=6.2">
+  <link rel="stylesheet" href="css/style.css?v=6.3">
+  <link rel="stylesheet" href="css/responsive.css?v=6.3">
+  <link rel="stylesheet" href="css/portal.css?v=6.3">
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -83,20 +83,20 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=6.2"></script>
-  <script src="js/notify.js?v=6.2"></script>
-  <script src="js/supabase.js?v=6.2"></script>
-  <script src="js/audit.js?v=6.2"></script>
-  <script src="js/offline.js?v=6.2"></script>
-  <script src="js/auth.js?v=6.2"></script>
-  <script src="js/permissions.js?v=6.2"></script>
+  <script src="js/config.js?v=6.3"></script>
+  <script src="js/notify.js?v=6.3"></script>
+  <script src="js/supabase.js?v=6.3"></script>
+  <script src="js/audit.js?v=6.3"></script>
+  <script src="js/offline.js?v=6.3"></script>
+  <script src="js/auth.js?v=6.3"></script>
+  <script src="js/permissions.js?v=6.3"></script>
 
   <!-- Modules Supervision -->
-  <script src="js/modules/dashboard.js?v=6.2"></script>
-  <script src="js/modules/caisses.js?v=6.2"></script>
-  <script src="js/modules/roles.js?v=6.2"></script>
-  <script src="js/modules/history.js?v=6.2"></script>
-  <script src="js/modules/reports.js?v=6.2"></script>
+  <script src="js/modules/dashboard.js?v=6.3"></script>
+  <script src="js/modules/caisses.js?v=6.3"></script>
+  <script src="js/modules/roles.js?v=6.3"></script>
+  <script src="js/modules/history.js?v=6.3"></script>
+  <script src="js/modules/reports.js?v=6.3"></script>
 
   <!-- Contrôleur de Page Supervision -->
   <script>
@@ -180,12 +180,39 @@
       navigateTo(moduleName) {
         if (this.tabs[moduleName]) {
           this.switchTab(moduleName);
-        } else if (moduleName.startsWith('caisse_') || moduleName === 'tickets' || moduleName === 'cash') {
-          window.location.href = `pole2-caisses.html#${moduleName}`;
-        } else if (moduleName === 'stocks' || moduleName === 'caisse_restauration') {
-          window.location.href = `pole4-restauration.html#${moduleName}`;
         } else {
-          window.location.href = `index.html#${moduleName}`;
+          const map = {
+            communication: 'pole1-communication.html',
+            tickets: 'pole2-caisses.html#caisse_jeux',
+            cash: 'pole2-caisses.html#caisse_entree',
+            caisse_entree: 'pole2-caisses.html#caisse_entree',
+            caisse_jeux: 'pole2-caisses.html#caisse_jeux',
+            caisse_jetons: 'pole2-caisses.html#caisse_jetons',
+            caisse_bilan: 'pole2-caisses.html#caisse_bilan',
+            decoration: 'pole3-organisation.html#decoration',
+            locations: 'pole3-organisation.html#locations',
+            caisse_restauration: 'pole4-restauration.html#caisse_restauration',
+            stocks: 'pole4-restauration.html#stocks',
+            inventory: 'pole4-restauration.html#inventory',
+            stands: 'pole5-stands.html#stands',
+            games: 'pole5-stands.html#games',
+            gifts: 'pole6-lots.html#gifts',
+            members: 'pole7-benevoles.html#members',
+            teams: 'pole7-benevoles.html#teams',
+            materials: 'pole8-materiel.html#materials',
+            loans: 'pole8-materiel.html#loans',
+            movements: 'pole8-materiel.html#movements',
+            returns: 'pole8-materiel.html#returns',
+            security: 'pole9-securite.html#security',
+            incidents: 'pole9-securite.html#incidents',
+            messages: 'messages.html',
+            tasks: 'tasks.html'
+          };
+          if (map[moduleName]) {
+            window.location.href = map[moduleName];
+          } else {
+            window.location.href = `index.html#${moduleName}`;
+          }
         }
       }
     };

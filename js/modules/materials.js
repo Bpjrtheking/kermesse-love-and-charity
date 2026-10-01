@@ -33,7 +33,7 @@ const MaterialsModule = {
 
         <div class="card-body">
           <!-- Onglets de navigation -->
-          <div class="tabs-nav" style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--gray-200); margin-bottom: 1.25rem;">
+          <div class="tabs-nav">
             <button class="tab-btn active" id="tabMatInventory" onclick="MaterialsModule.switchTab('inventory')">
               📦 Inventaire du Matériel Lourd
             </button>

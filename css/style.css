@@ -587,6 +587,40 @@ button, input, select, textarea {
   padding: 1.5rem;
 }
 
+/* Navigation des sous-onglets (Tabs Nav) par défaut (Desktop) */
+.tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--gray-200);
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  padding: 0.55rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--gray-600);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tab-btn:hover {
+  color: var(--gray-900);
+}
+
+.tab-btn.active {
+  color: var(--primary, #dc2626);
+  border-bottom-color: var(--primary, #dc2626);
+  font-weight: 700;
+}
+
 /* Filter & Search Bar */
 .toolbar {
   display: flex;

@@ -844,30 +844,37 @@ html, body {
   /* I. GRILLE D'ACCÈS RAPIDE AUX 9 PÔLES SUR MOBILE */
   .poles-shortcut-grid {
     display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 0.5rem !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.55rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .pole-shortcut-btn {
     display: flex !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    gap: 0.5rem !important;
-    padding: 0.65rem 0.75rem !important;
-    font-size: 0.8rem !important;
+    gap: 0.65rem !important;
+    padding: 0.75rem 0.9rem !important;
+    font-size: 0.88rem !important;
     text-align: left !important;
-    border-radius: 8px !important;
+    border-radius: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
   .pole-shortcut-btn .pole-icon {
-    font-size: 1.2rem !important;
-    flex-shrink: 0;
+    font-size: 1.25rem !important;
+    flex-shrink: 0 !important;
   }
 
   .pole-shortcut-btn .pole-label {
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.3 !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
   }
 
   /* J. CARNET DE BORD & TÂCHES : VERSION ULTRA-MOBILE */
@@ -1010,7 +1017,9 @@ html, body {
 
   /* L. ONGLETS ET SOUS-NAVIGATIONS CONFORMES MOBILES SANS SLIDER LATÉRAL */
   .tabs-nav,
-  .caisse-subtabs-nav {
+  .caisse-subtabs-nav,
+  .comm-seg-pills-wrap,
+  .comm-seg-pills {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 6px !important;
@@ -1025,13 +1034,24 @@ html, body {
     border: 1px solid #e2e8f0 !important;
   }
 
+  .comm-seg-pills-wrap {
+    display: block !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
   .tabs-nav::-webkit-scrollbar,
-  .caisse-subtabs-nav::-webkit-scrollbar {
+  .caisse-subtabs-nav::-webkit-scrollbar,
+  .comm-seg-pills-wrap::-webkit-scrollbar,
+  .comm-seg-pills::-webkit-scrollbar {
     display: none !important;
   }
 
   .tab-btn,
-  .caisse-subtab-btn {
+  .caisse-subtab-btn,
+  .comm-seg-btn {
     min-height: 40px !important;
     padding: 0.45rem 0.35rem !important;
     font-size: 0.78rem !important;
@@ -1050,14 +1070,84 @@ html, body {
   }
 
   .tab-btn span,
-  .caisse-subtab-btn span {
+  .caisse-subtab-btn span,
+  .comm-seg-btn span {
     font-size: 0.78rem !important;
     white-space: normal !important;
   }
 
   .tab-btn:last-child:nth-child(odd),
-  .caisse-subtab-btn:last-child:nth-child(odd) {
+  .caisse-subtab-btn:last-child:nth-child(odd),
+  .comm-seg-btn:last-child:nth-child(odd) {
     grid-column: span 2 !important;
+  }
+
+  /* BANDEAUX SESSIONS & DÉCONNEXION HUB MOBILE */
+  .portal-user-strip {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.85rem !important;
+    padding: 1rem !important;
+  }
+
+  .portal-user-strip-left {
+    width: 100% !important;
+    gap: 0.75rem !important;
+  }
+
+  .portal-user-strip-details {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .portal-user-strip-name {
+    white-space: normal !important;
+    word-break: break-word !important;
+    font-size: 0.95rem !important;
+    line-height: 1.3 !important;
+  }
+
+  .btn-hero-logout {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+    box-sizing: border-box !important;
+  }
+
+  .portal-bottom-logout-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    text-align: center !important;
+    gap: 0.85rem !important;
+    padding: 1.15rem 1rem !important;
+    margin-top: 1.5rem !important;
+  }
+
+  .bottom-logout-info {
+    width: 100% !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 0.25rem !important;
+  }
+
+  .bottom-logout-info span {
+    font-size: 0.75rem !important;
+  }
+
+  .bottom-logout-info strong {
+    font-size: 0.95rem !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+  }
+
+  .btn-bottom-logout {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 0.9rem !important;
+    box-sizing: border-box !important;
   }
 
   /* M. TABLEAUX RESPONSIVES TACTILES SANS DÉFORMATION DE PAGE */
