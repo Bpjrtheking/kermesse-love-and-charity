@@ -907,29 +907,32 @@ const CaisseEntreeModule = {
                 const qty = inCart ? inCart.qty : 0;
 
                 return `
-                  <div class="card" style="border: 2px solid ${qty > 0 ? '#10b981' : '#e2e8f0'}; border-top: 5px solid #10b981; transition: box-shadow 0.15s; background: ${qty > 0 ? '#f0fdf4' : 'white'};">
-                    <div class="card-body" style="padding: 1rem;">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <span style="font-size: 2rem;">${t.icon || '🎟️'}</span>
-                        <strong style="font-size: 1.15rem; color: #047857;">${t.price > 0 ? `${t.price.toLocaleString()} F` : 'Gratuit'}</strong>
+                  <div class="card pos-product-card" style="border: 2px solid ${qty > 0 ? '#10b981' : '#e2e8f0'}; border-top: 5px solid #10b981; background: ${qty > 0 ? '#f0fdf4' : 'white'};">
+                    <div class="card-body">
+                      <div class="pos-card-top-row">
+                        <span class="pos-card-emoji">${t.icon || '🎟️'}</span>
+                        <div class="pos-card-price-badge">
+                          <div class="pos-card-price-val" style="color: #047857;">${t.price > 0 ? `${t.price.toLocaleString()} F` : 'Gratuit'}</div>
+                          <div class="pos-card-price-sub">Billet</div>
+                        </div>
                       </div>
-                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.35rem; min-height: 2.2em; line-height: 1.2;">
+                      <div class="pos-card-title">
                         ${t.name}
                       </div>
-                      ${t.description ? `<div style="font-size: 0.72rem; color: var(--gray-500); margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${t.description}</div>` : ''}
+                      ${t.description ? `<div style="font-size: 0.7rem; color: var(--gray-500); margin-bottom: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${t.description}</div>` : ''}
 
                       <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
-                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
-                        <button class="btn btn-secondary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseEntreeModule.decrementItem('${t.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                      <div class="pos-stepper-box">
+                        <button class="btn btn-secondary btn-sm pos-stepper-btn" onclick="CaisseEntreeModule.decrementItem('${t.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
                           −
                         </button>
-                        <div style="text-align: center;">
-                          <span style="font-size: 1.2rem; font-weight: 800; color: ${qty > 0 ? '#047857' : 'var(--gray-400)'};">
+                        <div class="pos-stepper-center">
+                          <span class="pos-stepper-count" style="color: ${qty > 0 ? '#047857' : 'var(--gray-400)'};">
                             ${qty}
                           </span>
-                          <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">billet(s)</div>
+                          <span class="pos-stepper-unit">billet(s)</span>
                         </div>
-                        <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.incrementItem('${t.id}', '${t.name.replace(/'/g, "\\'")}', ${t.price})" title="Augmenter">
+                        <button class="btn btn-primary btn-sm pos-stepper-btn" style="background: #059669; border-color: #047857;" onclick="CaisseEntreeModule.incrementItem('${t.id}', '${t.name.replace(/'/g, "\\'")}', ${t.price})" title="Augmenter">
                           +
                         </button>
                       </div>
@@ -2122,14 +2125,14 @@ const CaisseJeuxModule = {
                 const qty = inCart ? inCart.qty : 0;
 
                 return `
-                  <div class="card" style="border: 2px solid ${qty > 0 ? standColor : `${standColor}40`}; border-top: 5px solid ${standColor}; transition: transform 0.15s, box-shadow 0.15s; background: ${qty > 0 ? `${standColor}08` : 'white'}; overflow: hidden;">
+                  <div class="card pos-product-card" style="border: 2px solid ${qty > 0 ? standColor : `${standColor}40`}; border-top: 5px solid ${standColor}; transition: transform 0.15s, box-shadow 0.15s; background: ${qty > 0 ? `${standColor}08` : 'white'}; overflow: hidden;">
                     
                     <!-- 1. PHOTO DU JEU AU-DESSUS (CLIQUABLE POUR AJOUTER UN TICKET) -->
-                    <div style="position: relative; width: 100%; height: 115px; cursor: pointer; background: ${standColor}15; overflow: hidden; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Cliquer sur la photo pour ajouter un ticket">
+                    <div style="position: relative; width: 100%; height: 110px; cursor: pointer; background: ${standColor}15; overflow: hidden; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Cliquer sur la photo pour ajouter un ticket">
                       ${g.image_url ? `
                         <img src="${g.image_url}" alt="${g.name}" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'">
                       ` : `
-                        <div style="font-size: 2.5rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">🎯</div>
+                        <div style="font-size: 2.2rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));">🎯</div>
                       `}
                       ${qty > 0 ? `
                         <div style="position: absolute; top: 6px; right: 6px; background: var(--primary); color: white; border-radius: 999px; padding: 2px 8px; font-weight: 800; font-size: 0.8rem; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border: 2px solid white;">
@@ -2139,32 +2142,32 @@ const CaisseJeuxModule = {
                     </div>
 
                     <!-- 2. DÉTAILS ET NOM DU JEU EN-DESSOUS -->
-                    <div class="card-body" style="padding: 0.75rem 0.85rem;">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                        <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.72rem; padding: 1px 6px;">
+                    <div class="card-body">
+                      <div class="pos-card-top-row">
+                        <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.7rem; padding: 1px 6px;">
                           ${standName}
                         </span>
-                        <strong style="color: var(--primary); font-size: 1.05rem;">
-                          ${price.toLocaleString()} F
-                        </strong>
+                        <div class="pos-card-price-badge">
+                          <div class="pos-card-price-val" style="color: var(--primary);">${price.toLocaleString()} F</div>
+                        </div>
                       </div>
 
-                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.65rem; min-height: 2.4em; line-height: 1.25; cursor: pointer;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Cliquer pour ajouter un ticket">
+                      <div class="pos-card-title" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Cliquer pour ajouter un ticket">
                         ${g.name}
                       </div>
 
                       <!-- 3. DEUX BOUTONS : AUGMENTER (+) ET DIMINUER (-) EN-DESSOUS DU NOM -->
-                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
-                        <button class="btn btn-secondary btn-sm" style="width: 36px; height: 36px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.decrementGame('${g.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                      <div class="pos-stepper-box">
+                        <button class="btn btn-secondary btn-sm pos-stepper-btn" onclick="CaisseJeuxModule.decrementGame('${g.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
                           −
                         </button>
-                        <div style="text-align: center;">
-                          <span style="font-size: 1.15rem; font-weight: 800; color: ${qty > 0 ? 'var(--primary)' : 'var(--gray-400)'};">
+                        <div class="pos-stepper-center">
+                          <span class="pos-stepper-count" style="color: ${qty > 0 ? 'var(--primary)' : 'var(--gray-400)'};">
                             ${qty}
                           </span>
-                          <div style="font-size: 0.68rem; color: var(--gray-500); line-height: 1;">ticket(s)</div>
+                          <span class="pos-stepper-unit">ticket(s)</span>
                         </div>
-                        <button class="btn btn-primary btn-sm" style="width: 36px; height: 36px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Augmenter">
+                        <button class="btn btn-primary btn-sm pos-stepper-btn" onclick="CaisseJeuxModule.incrementGame('${g.id}', '${g.name.replace(/'/g, "\\'")}', ${price}, '${standName.replace(/'/g, "\\'")}', '${standColor}', '${g.stand ? g.stand.id : ''}')" title="Augmenter">
                           +
                         </button>
                       </div>
@@ -3580,32 +3583,32 @@ const CaisseRestaurationModule = {
                 const emoji = this.getProductEmoji(p.name, p.category);
 
                 return `
-                  <div class="card" style="border: 2px solid ${qty > 0 ? '#ea580c' : '#e2e8f0'}; border-top: 5px solid #ea580c; transition: box-shadow 0.15s; background: ${qty > 0 ? '#fff7ed' : 'white'};">
-                    <div class="card-body" style="padding: 1rem;">
-                      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">
-                        <span style="font-size: 2rem;">${emoji}</span>
-                        <div style="text-align: right;">
-                          <strong style="font-size: 1.15rem; color: #c2410c;">${price.toLocaleString()} F</strong>
-                          <div style="font-size: 0.72rem; color: var(--gray-500);">${p.category || 'Restauration'}</div>
+                  <div class="card pos-product-card" style="border: 2px solid ${qty > 0 ? '#ea580c' : '#e2e8f0'}; border-top: 5px solid #ea580c; background: ${qty > 0 ? '#fff7ed' : 'white'};">
+                    <div class="card-body">
+                      <div class="pos-card-top-row">
+                        <span class="pos-card-emoji">${emoji}</span>
+                        <div class="pos-card-price-badge">
+                          <div class="pos-card-price-val" style="color: #c2410c;">${price.toLocaleString()} F</div>
+                          <div class="pos-card-price-sub">${p.category || 'Restauration'}</div>
                         </div>
                       </div>
 
-                      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.6rem; min-height: 2.2em; line-height: 1.2;">
+                      <div class="pos-card-title">
                         ${p.name}
                       </div>
 
                       <!-- 2 BOUTONS : AUGMENTER (+) ET DIMINUER (-) -->
-                      <div style="display: flex; align-items: center; justify-content: space-between; background: var(--gray-50); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
-                        <button class="btn btn-secondary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="CaisseRestaurationModule.decrementItem('${p.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
+                      <div class="pos-stepper-box">
+                        <button class="btn btn-secondary btn-sm pos-stepper-btn" onclick="CaisseRestaurationModule.decrementItem('${p.id}')" ${qty === 0 ? 'disabled style="opacity: 0.3;"' : ''} title="Diminuer">
                           −
                         </button>
-                        <div style="text-align: center;">
-                          <span style="font-size: 1.2rem; font-weight: 800; color: ${qty > 0 ? '#c2410c' : 'var(--gray-400)'};">
+                        <div class="pos-stepper-center">
+                          <span class="pos-stepper-count" style="color: ${qty > 0 ? '#c2410c' : 'var(--gray-400)'};">
                             ${qty}
                           </span>
-                          <div style="font-size: 0.7rem; color: var(--gray-500); line-height: 1;">servi(s)</div>
+                          <span class="pos-stepper-unit">servi(s)</span>
                         </div>
-                        <button class="btn btn-primary btn-sm" style="width: 38px; height: 38px; font-size: 1.3rem; font-weight: 900; padding: 0; display: flex; align-items: center; justify-content: center; background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.incrementItem('${p.id}', '${p.name.replace(/'/g, "\\'")}', ${price})" title="Ajouter">
+                        <button class="btn btn-primary btn-sm pos-stepper-btn" style="background: #ea580c; border-color: #c2410c;" onclick="CaisseRestaurationModule.incrementItem('${p.id}', '${p.name.replace(/'/g, "\\'")}', ${price})" title="Ajouter">
                           +
                         </button>
                       </div>

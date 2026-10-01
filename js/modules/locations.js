@@ -71,16 +71,19 @@ const LocationsModule = {
         <div class="stadium-main-layout">
           
           <!-- Catalogue des Éléments & Stands -->
-          <div class="stadium-catalog-card" id="stadiumCatalogCard">
+          <div class="stadium-catalog-card ${window.innerWidth <= 768 ? 'drawer-collapsed' : ''}" id="stadiumCatalogCard">
             <div class="stadium-catalog-header">
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h4 style="margin: 0; font-size: 1rem; color: var(--gray-900);">📦 Structures &amp; Stands</h4>
-                <div style="display: flex; gap: 0.35rem;">
-                  <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('stands')" title="Créer un nouveau stand">
+                <div style="display: flex; gap: 0.35rem; align-items: center;">
+                  <button class="btn btn-secondary btn-sm" onclick="window.location.href='pole5-stands.html'" title="Créer un nouveau stand">
                     🎪 Stand
                   </button>
-                  <button class="btn btn-primary btn-sm" onclick="App.navigateTo('decoration')" title="Ajouter une structure festive">
+                  <button class="btn btn-primary btn-sm" onclick="if(typeof PoleApp!=='undefined'){PoleApp.switchTab('decoration');}else{window.location.href='pole3-organisation.html#decoration';}" title="Ajouter une structure festive">
                     ➕ Créer
+                  </button>
+                  <button class="btn btn-secondary btn-sm" onclick="LocationsModule.toggleCatalogDrawer()" style="font-weight: 800; padding: 0.25rem 0.55rem;" title="Fermer le catalogue">
+                    ✕
                   </button>
                 </div>
               </div>
@@ -115,23 +118,40 @@ const LocationsModule = {
               </div>
 
               <div class="stadium-viewport-header-tools">
+                <button class="stadium-v-btn" id="btnDrawerToggle" onclick="LocationsModule.toggleCatalogDrawer()" title="Catalogue des stands et structures">
+                  📦 <span class="desk-lbl">Structures</span><span class="mob-lbl">Stands</span>
+                </button>
                 <button class="stadium-v-btn active" id="camViewTop" onclick="LocationsModule.setCameraView('top')" title="Vue Ciel (Plan 2D)">
-                  🛰️ Vue Ciel (Plan)
+                  🛰️ <span class="desk-lbl">Vue Ciel (Plan)</span><span class="mob-lbl">Plan</span>
                 </button>
                 <button class="stadium-v-btn" id="camView3D" onclick="LocationsModule.setCameraView('perspective')" title="Vue 3D Tribune">
-                  🏟️ 3D Tribune
+                  🏟️ <span class="desk-lbl">3D Tribune</span><span class="mob-lbl">3D</span>
                 </button>
                 <button class="stadium-v-btn" id="btnAtmoCycle" onclick="LocationsModule.toggleAtmosphereCycle()" title="Changer l'ambiance lumineuse (Jour / Couchant / Nuit)">
-                  ☀️ Jour
+                  <span id="atmoIcon">☀️</span> <span class="desk-lbl" id="atmoLabel">Jour</span>
                 </button>
                 <button class="stadium-v-btn btn-fullscreen-toggle" id="btnToggleFullscreen" onclick="LocationsModule.toggleFullscreen()" title="Mode Plein Écran">
-                  ⛶ Plein Écran
+                  ⛶ <span class="desk-lbl">Plein Écran</span><span class="mob-lbl">Plein</span>
                 </button>
               </div>
             </div>
 
             <!-- Conteneur WebGL Three.js -->
             <div class="stadium-canvas-container" id="stadiumCanvasContainer">
+              <!-- Bouton mobile flottant pour ouvrir le catalogue des stands -->
+              <button class="stadium-floating-catalog-btn" id="stadiumFloatingCatalogBtn" onclick="LocationsModule.toggleCatalogDrawer()" title="Ouvrir le catalogue des structures">
+                📦 Stands &amp; Structures
+              </button>
+
+              <!-- Barre d'outils tactiles flottante (Mobile D-Pad & Zoom) -->
+              <div class="stadium-mobile-controls-bar" id="stadiumMobControls">
+                <button class="stadium-quick-mob-btn" onclick="LocationsModule.rotateCamera(-45)" title="Pivoter à gauche">↺ Gauche</button>
+                <button class="stadium-quick-mob-btn" onclick="LocationsModule.rotateCamera(45)" title="Pivoter à droite">↻ Droite</button>
+                <button class="stadium-quick-mob-btn" onclick="LocationsModule.zoomCamera(-25)" title="Zoom avant">🔍 +</button>
+                <button class="stadium-quick-mob-btn" onclick="LocationsModule.zoomCamera(25)" title="Zoom arrière">🔍 −</button>
+                <button class="stadium-quick-mob-btn" onclick="LocationsModule.centerView()" title="Recentrer">🎯 Centre</button>
+              </div>
+
               <!-- Dock flottant de l'élément sélectionné -->
               <div class="stadium-selection-dock" id="stadiumSelectionDock" style="display: none;">
                 <div style="display: flex; align-items: center; gap: 0.6rem;">
@@ -176,13 +196,18 @@ const LocationsModule = {
 
   toggleAtmosphereCycle() {
     const modes = ['day', 'sunset', 'night'];
-    const labels = { day: '☀️ Jour', sunset: '🌅 Couchant', night: '🌙 Nuit' };
+    const icons = { day: '☀️', sunset: '🌅', night: '🌙' };
+    const labels = { day: 'Jour', sunset: 'Couchant', night: 'Nuit' };
     const current = this.currentAtmosphere || 'day';
     const nextIdx = (modes.indexOf(current) + 1) % modes.length;
     const nextMode = modes[nextIdx];
     this.setAtmosphere(nextMode);
+    const atmoIcon = document.getElementById('atmoIcon');
+    const atmoLabel = document.getElementById('atmoLabel');
     const btn = document.getElementById('btnAtmoCycle');
-    if (btn) btn.textContent = labels[nextMode];
+    if (atmoIcon) atmoIcon.textContent = icons[nextMode];
+    if (atmoLabel) atmoLabel.textContent = labels[nextMode];
+    if (!atmoIcon && btn) btn.textContent = `${icons[nextMode]} ${labels[nextMode]}`;
   },
 
   async loadItems() {
@@ -235,10 +260,10 @@ const LocationsModule = {
             Vous n'avez pas encore créé de stands de kermesse. Dès que vous créez un stand dans le <strong>Pôle 5</strong> ou une structure festive dans le <strong>Pôle 3</strong>, il apparaîtra ici prêt à être placé sur le terrain.
           </p>
           <div style="display: flex; flex-direction: column; gap: 0.6rem;">
-            <button class="btn btn-primary btn-sm" onclick="App.navigateTo('stands')">
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='pole5-stands.html'">
               🎪 Créer un Stand en Pôle 5
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('decoration')">
+            <button class="btn btn-secondary btn-sm" onclick="if(typeof PoleApp!=='undefined'){PoleApp.switchTab('decoration');}else{window.location.href='pole3-organisation.html#decoration';}">
               🏰 Ajouter un Manège / Structure
             </button>
           </div>
@@ -312,12 +337,32 @@ const LocationsModule = {
   toggleFullscreen() {
     const root = document.getElementById('stadiumWorkspaceRoot');
     const btn = document.getElementById('btnToggleFullscreen');
+    let exitBtn = document.getElementById('stadiumExitFullscreenBtn');
 
     this.isFullscreen = !this.isFullscreen;
 
     if (this.isFullscreen) {
       root?.classList.add('is-fullscreen');
-      if (btn) btn.innerHTML = '✕ Quitter';
+      if (btn) btn.innerHTML = '✕ <span class="desk-lbl">Quitter</span><span class="mob-lbl">Retour</span>';
+
+      // Bouton Flottant Dédié pour le Retour sur Téléphone & Tablette
+      if (!exitBtn) {
+        exitBtn = document.createElement('button');
+        exitBtn.id = 'stadiumExitFullscreenBtn';
+        exitBtn.className = 'stadium-btn-exit-fullscreen';
+        exitBtn.innerHTML = '<span>✕</span> <strong>Quitter Plein Écran</strong>';
+        exitBtn.onclick = () => LocationsModule.toggleFullscreen();
+        root?.appendChild(exitBtn);
+      }
+
+      // Sur mobile, refermer le tiroir par défaut pour libérer 100% de la vue 3D
+      if (window.innerWidth <= 768) {
+        const card = document.getElementById('stadiumCatalogCard');
+        if (card && !card.classList.contains('drawer-collapsed')) {
+          card.classList.add('drawer-collapsed');
+          this.isDrawerCollapsed = true;
+        }
+      }
 
       if (this.controls && typeof THREE.TOUCH !== 'undefined') {
         this.controls.touches.ONE = THREE.TOUCH.ROTATE;
@@ -332,11 +377,22 @@ const LocationsModule = {
       } catch (e) {}
     } else {
       root?.classList.remove('is-fullscreen');
-      if (btn) btn.innerHTML = '⛶ Plein Écran';
+      if (btn) btn.innerHTML = '⛶ <span class="desk-lbl">Plein Écran</span><span class="mob-lbl">Plein</span>';
 
-      if (window.innerWidth <= 768 && this.controls && typeof THREE.TOUCH !== 'undefined') {
-        this.controls.touches.ONE = THREE.TOUCH.NONE;
-        this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+      if (exitBtn) {
+        exitBtn.remove();
+      }
+
+      // Sur mobile, garder fermé sauf si l'utilisateur demande explicitement
+      const card = document.getElementById('stadiumCatalogCard');
+      if (card && window.innerWidth > 768) {
+        card.classList.remove('drawer-collapsed');
+        this.isDrawerCollapsed = false;
+      }
+
+      if (this.controls && typeof THREE.TOUCH !== 'undefined') {
+        this.controls.touches.ONE = THREE.TOUCH.ROTATE;
+        this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
       }
 
       try {
@@ -355,15 +411,18 @@ const LocationsModule = {
   toggleCatalogDrawer() {
     const card = document.getElementById('stadiumCatalogCard');
     const toggleBtn = document.getElementById('btnDrawerToggle');
+    const floatingBtn = document.getElementById('stadiumFloatingCatalogBtn');
     if (!card) return;
 
     this.isDrawerCollapsed = !this.isDrawerCollapsed;
     if (this.isDrawerCollapsed) {
       card.classList.add('drawer-collapsed');
-      toggleBtn?.classList.remove('has-drawer-open');
+      toggleBtn?.classList.remove('active');
+      if (floatingBtn) floatingBtn.style.display = 'inline-flex';
     } else {
       card.classList.remove('drawer-collapsed');
-      toggleBtn?.classList.add('has-drawer-open');
+      toggleBtn?.classList.add('active');
+      if (floatingBtn) floatingBtn.style.display = 'none';
     }
   },
 
@@ -380,6 +439,14 @@ const LocationsModule = {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
     const isMobile = window.innerWidth <= 768;
+
+    if (isMobile) {
+      this.isDrawerCollapsed = true;
+      const card = document.getElementById('stadiumCatalogCard');
+      if (card && !card.classList.contains('drawer-collapsed')) {
+        card.classList.add('drawer-collapsed');
+      }
+    }
 
     // 1. Scène
     this.scene = new THREE.Scene();
@@ -413,22 +480,11 @@ const LocationsModule = {
       this.controls.maxDistance = 280;
       this.controls.target.set(0, 0, 0);
 
-      if (isMobile) {
-        // Défilement de page libre au doigt sur smartphone sans blocage
-        this.renderer.domElement.style.touchAction = 'pan-y';
-        if (typeof THREE.TOUCH !== 'undefined') {
-          this.controls.touches = {
-            ONE: THREE.TOUCH.NONE,
-            TWO: THREE.TOUCH.DOLLY_ROTATE
-          };
-        }
-      } else {
-        if (typeof THREE.TOUCH !== 'undefined') {
-          this.controls.touches = {
-            ONE: THREE.TOUCH.ROTATE,
-            TWO: THREE.TOUCH.DOLLY_PAN
-          };
-        }
+      if (typeof THREE.TOUCH !== 'undefined') {
+        this.controls.touches = {
+          ONE: THREE.TOUCH.ROTATE,
+          TWO: THREE.TOUCH.DOLLY_PAN
+        };
       }
     }
 
@@ -1530,6 +1586,31 @@ const LocationsModule = {
       } else {
         this.camera.position.set(0, 75, 110);
       }
+      this.controls.update();
+    }
+  },
+
+  rotateCamera(deltaDeg) {
+    if (!this.camera || !this.controls) return;
+    const rad = (deltaDeg * Math.PI) / 180;
+    const target = this.controls.target || new THREE.Vector3(0, 0, 0);
+    const x = this.camera.position.x - target.x;
+    const z = this.camera.position.z - target.z;
+    this.camera.position.x = target.x + (x * Math.cos(rad) - z * Math.sin(rad));
+    this.camera.position.z = target.z + (x * Math.sin(rad) + z * Math.cos(rad));
+    this.camera.lookAt(target);
+    this.controls.update();
+  },
+
+  zoomCamera(delta) {
+    if (!this.camera || !this.controls) return;
+    const target = this.controls.target || new THREE.Vector3(0, 0, 0);
+    const dir = new THREE.Vector3().subVectors(this.camera.position, target).normalize();
+    const newPos = this.camera.position.clone().addScaledVector(dir, delta);
+    const dist = newPos.distanceTo(target);
+    if (dist >= this.controls.minDistance && dist <= this.controls.maxDistance) {
+      this.camera.position.copy(newPos);
+      this.controls.update();
     }
   },
 
@@ -1690,6 +1771,7 @@ const LocationsModule = {
     if (this.isFullscreen) {
       this.isFullscreen = false;
       document.getElementById('stadiumWorkspaceRoot')?.classList.remove('is-fullscreen');
+      document.getElementById('stadiumExitFullscreenBtn')?.remove();
       try {
         if (document.fullscreenElement && document.exitFullscreen) {
           document.exitFullscreen().catch(() => {});

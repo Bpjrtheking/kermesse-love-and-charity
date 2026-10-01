@@ -646,25 +646,75 @@ html, body {
   }
 
   .stadium-viewport-card {
-    min-height: 320px !important;
-    height: 340px !important;
-    max-height: 360px !important;
+    min-height: 420px !important;
+    height: 450px !important;
+    max-height: 540px !important;
+    order: 1 !important; /* Le terrain 3D du Stade apparaît EN PREMIER sur mobile */
   }
 
   .stadium-canvas-container {
     height: 100% !important;
-    touch-action: pan-y !important;
+    touch-action: none !important;
   }
 
   .stadium-catalog-card {
     width: 100% !important;
     max-height: none !important;
+    order: 2 !important; /* Le catalogue se place en-dessous de la maquette */
   }
 
   .stadium-kpi-bar {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 0.5rem !important;
+  }
+
+  /* Navigation En-Tête Pôles & Onglets Grille Conforme (Sans slider latéral) */
+  .btn-hub-back {
+    font-size: 0 !important;
+    padding: 0 !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    border-radius: 50% !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .btn-hub-back .hub-back-text {
+    display: none !important;
+  }
+
+  .btn-hub-back span {
+    font-size: 1.25rem !important;
+    line-height: 1 !important;
+  }
+
+  .pole-tabs-bar {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.4rem !important;
+    padding: 0.45rem 0.65rem !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pole-tab-btn {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 0.4rem 0.3rem !important;
+    font-size: 0.77rem !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    text-align: center !important;
+    justify-content: center !important;
+    min-height: 38px !important;
+  }
+
+  .pole-tab-btn:last-child:nth-child(odd) {
+    grid-column: span 2 !important;
   }
 
   /* H. GRILLES STATISTIQUES KPI SUR SMARTPHONE */
@@ -875,40 +925,53 @@ html, body {
     width: 100% !important;
   }
 
-  /* L. ONGLETS HORIZONTAUX FLUIDES TACTILES */
-  .tabs-nav {
-    display: flex !important;
-    gap: 0.35rem !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    padding-bottom: 5px !important;
-    margin-bottom: 1rem !important;
-    scrollbar-width: none !important;
-    border-bottom: 1px solid var(--gray-200) !important;
+  /* L. ONGLETS ET SOUS-NAVIGATIONS CONFORMES MOBILES SANS SLIDER LATÉRAL */
+  .tabs-nav,
+  .caisse-subtabs-nav {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 4px !important;
+    background: #f1f5f9 !important;
+    border-radius: 14px !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    margin-bottom: 0.85rem !important;
+    border: 1px solid #e2e8f0 !important;
   }
 
-  .tabs-nav::-webkit-scrollbar {
+  .tabs-nav::-webkit-scrollbar,
+  .caisse-subtabs-nav::-webkit-scrollbar {
     display: none !important;
   }
 
-  .tab-btn {
-    flex-shrink: 0 !important;
-    font-size: 0.78rem !important;
-    padding: 0.45rem 0.75rem !important;
+  .tab-btn,
+  .caisse-subtab-btn {
+    min-height: 38px !important;
+    padding: 0.4rem 0.25rem !important;
+    font-size: 0.76rem !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    justify-content: center !important;
+    text-align: center !important;
     white-space: nowrap !important;
-    border-radius: 6px !important;
+    box-sizing: border-box !important;
   }
 
-  /* M. TABLEAUX RESPONSIVES TACTILES */
+  /* M. TABLEAUX RESPONSIVES TACTILES SANS DÉFORMATION DE PAGE */
   .card-body:has(.data-table),
-  .table-responsive {
+  .table-responsive,
+  .table-container {
     width: 100% !important;
     max-width: 100% !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     border: 1px solid var(--gray-200) !important;
-    border-radius: 8px !important;
+    border-radius: 12px !important;
     margin-bottom: 0.75rem !important;
+    background: #ffffff !important;
   }
 
   .data-table {
