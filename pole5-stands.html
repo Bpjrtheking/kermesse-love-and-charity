@@ -8,9 +8,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Pôle 5 : Stands &amp; Jeux — Kermesse Love and Charity</title>
   
-  <link rel="stylesheet" href="css/style.css?v=6.6">
-  <link rel="stylesheet" href="css/responsive.css?v=6.6">
-  <link rel="stylesheet" href="css/portal.css?v=6.6">
+  <link rel="stylesheet" href="css/style.css?v=6.7">
+  <link rel="stylesheet" href="css/responsive.css?v=6.7">
+  <link rel="stylesheet" href="css/portal.css?v=6.7">
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -74,17 +74,17 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=6.6"></script>
-  <script src="js/notify.js?v=6.6"></script>
-  <script src="js/supabase.js?v=6.6"></script>
-  <script src="js/audit.js?v=6.6"></script>
-  <script src="js/offline.js?v=6.6"></script>
-  <script src="js/auth.js?v=6.6"></script>
-  <script src="js/permissions.js?v=6.6"></script>
+  <script src="js/config.js?v=6.7"></script>
+  <script src="js/notify.js?v=6.7"></script>
+  <script src="js/supabase.js?v=6.7"></script>
+  <script src="js/audit.js?v=6.7"></script>
+  <script src="js/offline.js?v=6.7"></script>
+  <script src="js/auth.js?v=6.7"></script>
+  <script src="js/permissions.js?v=6.7"></script>
 
   <!-- Modules Pôle 5 -->
-  <script src="js/modules/stands.js?v=6.6"></script>
-  <script src="js/modules/games.js?v=6.6"></script>
+  <script src="js/modules/stands.js?v=6.7"></script>
+  <script src="js/modules/games.js?v=6.7"></script>
 
   <!-- Contrôleur de Page Pôle 5 -->
   <script>
@@ -172,7 +172,12 @@
     };
 
     window.App = PoleApp;
-    window.addEventListener('DOMContentLoaded', () => PoleApp.init());
+    window.PoleApp = PoleApp;
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', () => PoleApp.init());
+    } else {
+      PoleApp.init();
+    }
   </script>
 </body>
 </html>

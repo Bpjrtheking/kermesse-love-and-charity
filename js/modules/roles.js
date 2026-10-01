@@ -552,12 +552,6 @@ const RolesModule = {
       if (container) RolesModule.render(container);
     };
   },
-      Notify.success(`Permissions enregistrées pour ${login} : [${selected.join(', ')}]`);
-      close();
-      const container = document.getElementById('poleContainer') || document.getElementById('mainContent');
-      if (container) RolesModule.render(container);
-    };
-  },
 
   async toggleUserStatus(id, newStatus, login, targetRoleCode) {
     const currentUser = Auth.getCurrentUser();
