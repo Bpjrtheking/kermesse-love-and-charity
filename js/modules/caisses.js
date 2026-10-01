@@ -819,7 +819,7 @@ const CaisseEntreeModule = {
       try {
         const { data: vData } = await client
           .from('ticket_sales')
-          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, seller:app_users(login)')
+          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, seller:app_users(login, full_name)')
           .eq('category', 'entree')
           .order('created_at', { ascending: false });
         if (vData) {
@@ -1118,6 +1118,8 @@ const CaisseEntreeModule = {
     const user = Auth.getCurrentUser();
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const regId = this.register.id;
+    const sellerLogin = user ? user.login : 'Caissier';
+    const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
 
     for (const item of this.cart) {
       let realSaleId = 'sale-ent-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
@@ -1129,7 +1131,9 @@ const CaisseEntreeModule = {
         quantity: item.qty,
         unit_price_f: item.price,
         total_amount_f: item.price * item.qty,
-        sold_by: user ? user.id : null
+        sold_by: user ? user.id : null,
+        seller_name: sellerFullName,
+        seller_login: sellerLogin
       };
 
       if (client) {
@@ -1144,7 +1148,8 @@ const CaisseEntreeModule = {
       this.sales.unshift({
         ...saleObj,
         id: realSaleId,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        seller: { login: sellerLogin, full_name: sellerFullName }
       });
     }
 
@@ -1157,13 +1162,13 @@ const CaisseEntreeModule = {
           cash_register_id: regId,
           type: 'vente',
           amount_f: cartTotal,
-          reason: `Vente entrées (${this.cart.reduce((s, i) => s + i.qty, 0)} pers.)`,
+          reason: `Vente entrées (${this.cart.reduce((s, i) => s + i.qty, 0)} pers.) par ${sellerFullName} (@${sellerLogin})`,
           user_id: user ? user.id : null
         }]);
       } catch (e) {}
     }
 
-    AuditLogger.log('VENTE_ENTREE', 'ticket_sales', null, `Encaissement de ${cartTotal} F en Caisse Entrée`);
+    AuditLogger.log('VENTE_ENTREE', 'ticket_sales', null, `Encaissement de ${cartTotal} F en Caisse Entrée par ${sellerFullName} (@${sellerLogin})`);
     Notify.success(`Billets d'entrée validés ! Total : ${cartTotal.toLocaleString()} F`);
     this.cart = [];
     this.renderCurrentTab();
@@ -1175,13 +1180,20 @@ const CaisseEntreeModule = {
       return;
     }
 
-    if (!confirm(`Annuler et enlever le billet « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et le visiteur sera décompté.`)) {
+    const cancelReason = prompt(`Annulation du billet « ${name} » (${amount} F) :\n\nMotif obligatoire de l'annulation (ex: erreur de saisie, visiteur désisté, etc.) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Annulation interrompue : un motif précis est obligatoire pour la traçabilité nominative.");
       return;
     }
 
+    const admin = Auth.getCurrentUser();
+    const adminLabel = admin ? `${admin.full_name || admin.login} (@${admin.login})` : 'SuperAdmin';
+
     const client = SupabaseClient.client;
     // 1. Enregistrer dans la liste noire globale des ventes annulées (garantit la suppression dans le Bilan)
-    CaissesCore.addCancelledSaleId(id);
+    CaissesCore.addCancelledSaleId(id, name);
 
     if (client) {
       try {
@@ -1194,8 +1206,8 @@ const CaisseEntreeModule = {
             cash_register_id: this.register.id,
             type: 'correction',
             amount_f: -Math.abs(amount),
-            reason: `Annulation billet entrée : ${name}`,
-            user_id: Auth.getCurrentUser()?.id || null
+            reason: `Annulation billet entrée : ${name} (Par ${adminLabel} - Motif : ${motif})`,
+            user_id: admin?.id || null
           }]);
         }
       } catch (e) {
@@ -1206,8 +1218,8 @@ const CaisseEntreeModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('ANNULATION_VENTE_ENTREE', 'ticket_sales', id, `Annulation vente entrée ${name} (-${amount} F)`);
-    Notify.success(`Billet « ${name} » enlevé avec succès. Caisse et bilan actualisés.`);
+    AuditLogger.log('ANNULATION_VENTE_ENTREE', 'ticket_sales', id, `Annulation billet entrée « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Billet « ${name} » annulé. Motif consigné : ${motif}`);
     this.renderCurrentTab();
   },
 
@@ -1730,14 +1742,36 @@ const CaisseEntreeModule = {
     this.renderCurrentTab();
   },
 
+  activeSellerFilter: 'all',
+
   // 3. Onglet Journal des Entrées
   renderJournalTab(container) {
+    const sellers = Array.from(new Set(this.sales.map(s => {
+      return (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+    }))).filter(Boolean);
+
+    const filteredSales = (this.activeSellerFilter && this.activeSellerFilter !== 'all')
+      ? this.sales.filter(s => {
+          const sLog = (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+          return sLog === this.activeSellerFilter;
+        })
+      : this.sales;
+
     container.innerHTML = `
-      <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+      <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
         <h4 style="margin: 0;">Historique des Billets d'Entrée Encaissés</h4>
+        ${sellers.length > 1 ? `
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="font-size: 0.82rem; color: var(--gray-600); font-weight: 600;">Filtrer par vendeur :</span>
+            <select class="form-control form-control-sm" style="width: auto; padding: 2px 8px; font-size: 0.82rem;" onchange="CaisseEntreeModule.activeSellerFilter = this.value; CaisseEntreeModule.renderCurrentTab();">
+              <option value="all">👥 Tous les caissiers (${this.sales.length})</option>
+              ${sellers.map(sel => `<option value="${sel}" ${this.activeSellerFilter === sel ? 'selected' : ''}>👤 ${sel}</option>`).join('')}
+            </select>
+          </div>
+        ` : ''}
       </div>
       <div class="table-responsive">
-        ${this.sales.length === 0 ? `
+        ${filteredSales.length === 0 ? `
           <div class="empty-state">
             <div class="empty-icon">🧾</div>
             <div class="empty-title">Aucune entrée encaissée pour l'instant</div>
@@ -1750,21 +1784,31 @@ const CaisseEntreeModule = {
                 <th>Billet</th>
                 <th>Quantité</th>
                 <th>Total Encaissé</th>
+                <th>Vendeur / Caissier</th>
                 <th style="text-align: right;">Action</th>
               </tr>
             </thead>
             <tbody>
-              ${this.sales.map(s => `
-                <tr>
-                  <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td><strong>${s.item_name}</strong></td>
-                  <td>${s.quantity}</td>
-                  <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
-                  <td style="text-align: right;">
-                    <button class="btn btn-danger btn-sm" onclick="CaisseEntreeModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler cette vente">🗑️ Enlever</button>
-                  </td>
-                </tr>
-              `).join('')}
+              ${filteredSales.map(s => {
+                const sellerName = (s.seller && (s.seller.full_name || s.seller.login)) || s.seller_name || s.seller_login || 'Caissier';
+                const sellerLogin = (s.seller && s.seller.login) || s.seller_login || 'caissier';
+                return `
+                  <tr>
+                    <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td><strong>${s.item_name}</strong></td>
+                    <td>${s.quantity}</td>
+                    <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
+                    <td>
+                      <span class="badge badge-gray" title="Responsable individuel : ${sellerName} (@${sellerLogin})" style="font-size: 0.75rem;">
+                        👤 ${sellerName}
+                      </span>
+                    </td>
+                    <td style="text-align: right;">
+                      <button class="btn btn-danger btn-sm" onclick="CaisseEntreeModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler cette vente">🗑️ Enlever</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
         `}
@@ -1779,8 +1823,21 @@ const CaisseEntreeModule = {
     const expTotal = this.expenses.reduce((s, x) => s + Math.abs(x.amount_f), 0);
     const expected = initF + revEntree - expTotal;
 
+    // Calcul de la répartition par vendeur
+    const sellerStats = {};
+    this.sales.forEach(s => {
+      const sLogin = (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+      const sName = (s.seller && (s.seller.full_name || s.seller.login)) || s.seller_name || sLogin;
+      if (!sellerStats[sLogin]) {
+        sellerStats[sLogin] = { login: sLogin, name: sName, tickets: 0, total: 0 };
+      }
+      sellerStats[sLogin].tickets += (s.quantity || 1);
+      sellerStats[sLogin].total += (s.total_amount_f || 0);
+    });
+    const sellerList = Object.values(sellerStats);
+
     container.innerHTML = `
-      <div style="max-width: 600px; margin: 0 auto;">
+      <div style="max-width: 650px; margin: 0 auto;">
         <div class="card" style="border: 2px solid var(--primary); padding: 1.25rem;">
           <h3 style="margin-top: 0; margin-bottom: 1rem; color: var(--primary);">
             🔒 Contrôle &amp; Clôture — Caisse Entrée
@@ -1809,6 +1866,40 @@ const CaisseEntreeModule = {
                 ${expected.toLocaleString()} F
               </span>
             </div>
+          </div>
+
+          <!-- RÉPARTITION NOMINATIVE PAR VENDEUR -->
+          <div style="margin-bottom: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.85rem;">
+            <div style="font-weight: 700; font-size: 0.88rem; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+              <span>👤</span> Répartition nominative des recettes par caissier
+            </div>
+            ${sellerList.length === 0 ? `
+              <div style="font-size: 0.8rem; color: var(--gray-400); font-style: italic;">Aucune vente enregistrée.</div>
+            ` : `
+              <table style="width: 100%; font-size: 0.82rem; border-collapse: collapse;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--gray-200); color: var(--gray-500); text-align: left;">
+                    <th style="padding: 4px 0;">Caissier</th>
+                    <th style="padding: 4px 0; text-align: center;">Billets</th>
+                    <th style="padding: 4px 0; text-align: right;">Total Encaissé</th>
+                    <th style="padding: 4px 0; text-align: right;">Part</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sellerList.map(s => {
+                    const pct = revEntree > 0 ? Math.round((s.total / revEntree) * 100) : 0;
+                    return `
+                      <tr style="border-bottom: 1px solid var(--gray-100);">
+                        <td style="padding: 6px 0;"><strong>${s.name}</strong> <span style="color: var(--gray-400); font-size: 0.75rem;">(@${s.login})</span></td>
+                        <td style="padding: 6px 0; text-align: center;">${s.tickets}</td>
+                        <td style="padding: 6px 0; text-align: right; font-weight: 700; color: var(--success);">${s.total.toLocaleString()} F</td>
+                        <td style="padding: 6px 0; text-align: right; color: var(--gray-500);">${pct}%</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
           </div>
 
           ${this.register.status === 'closed' ? `
@@ -2027,7 +2118,7 @@ const CaisseJeuxModule = {
 
         const { data: vData } = await client
           .from('ticket_sales')
-          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, stand:stands(name, color_name, color_hex), seller:app_users(login)')
+          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, stand:stands(name, color_name, color_hex), seller:app_users(login, full_name)')
           .eq('category', 'jeu')
           .order('created_at', { ascending: false });
         if (vData) {
@@ -2359,6 +2450,8 @@ const CaisseJeuxModule = {
     const user = Auth.getCurrentUser();
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const regId = this.register.id;
+    const sellerLogin = user ? user.login : 'Caissier';
+    const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
 
     for (const item of this.cart) {
       let realSaleId = 'sale-game-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
@@ -2372,7 +2465,9 @@ const CaisseJeuxModule = {
         quantity: item.qty,
         unit_price_f: item.price,
         total_amount_f: item.price * item.qty,
-        sold_by: user ? user.id : null
+        sold_by: user ? user.id : null,
+        seller_name: sellerFullName,
+        seller_login: sellerLogin
       };
 
       if (client) {
@@ -2388,7 +2483,8 @@ const CaisseJeuxModule = {
         ...saleObj,
         id: realSaleId,
         created_at: new Date().toISOString(),
-        stand: { name: item.standName, color_hex: item.standColor }
+        stand: { name: item.standName, color_hex: item.standColor },
+        seller: { login: sellerLogin, full_name: sellerFullName }
       });
     }
 
@@ -2400,13 +2496,13 @@ const CaisseJeuxModule = {
           cash_register_id: regId,
           type: 'vente',
           amount_f: cartTotal,
-          reason: `Vente tickets jeux (${this.cart.reduce((s, i) => s + i.qty, 0)} tickets)`,
+          reason: `Vente tickets jeux (${this.cart.reduce((s, i) => s + i.qty, 0)} tickets) par ${sellerFullName} (@${sellerLogin})`,
           user_id: user ? user.id : null
         }]);
       } catch (e) {}
     }
 
-    AuditLogger.log('VENTE_JEUX', 'ticket_sales', null, `Encaissement de ${cartTotal} F en Caisse Jeux`);
+    AuditLogger.log('VENTE_JEUX', 'ticket_sales', null, `Encaissement de ${cartTotal} F en Caisse Jeux par ${sellerFullName} (@${sellerLogin})`);
     Notify.success(`Tickets de jeux validés ! Total : ${cartTotal.toLocaleString()} F`);
     this.cart = [];
     this.renderCurrentTab();
@@ -2418,13 +2514,20 @@ const CaisseJeuxModule = {
       return;
     }
 
-    if (!confirm(`Annuler et enlever la vente de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et déduit du bilan du stand.`)) {
+    const cancelReason = prompt(`Annuler la vente de « ${name} » (${amount} F) :\n\nMotif obligatoire de l'annulation (ex: erreur de sélection de stand, ticket rendu...) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Annulation interrompue : un motif précis est obligatoire pour la traçabilité nominative.");
       return;
     }
 
+    const admin = Auth.getCurrentUser();
+    const adminLabel = admin ? `${admin.full_name || admin.login} (@${admin.login})` : 'SuperAdmin';
+
     const client = SupabaseClient.client;
     // 1. Ajouter à la liste noire globale des annulations
-    CaissesCore.addCancelledSaleId(id);
+    CaissesCore.addCancelledSaleId(id, name);
 
     if (client) {
       try {
@@ -2436,8 +2539,8 @@ const CaisseJeuxModule = {
             cash_register_id: this.register.id,
             type: 'correction',
             amount_f: -Math.abs(amount),
-            reason: `Annulation vente jeu : ${name}`,
-            user_id: Auth.getCurrentUser()?.id || null
+            reason: `Annulation vente jeu : ${name} (Par ${adminLabel} - Motif : ${motif})`,
+            user_id: admin?.id || null
           }]);
         }
       } catch (e) {
@@ -2448,8 +2551,8 @@ const CaisseJeuxModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_game_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Annulation vente jeu ${name} (-${amount} F)`);
-    Notify.success(`Vente de « ${name} » enlevée avec succès.`);
+    AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Annulation vente jeu « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Vente de « ${name} » enlevée. Motif consigné : ${motif}`);
     this.renderCurrentTab();
   },
 
@@ -2626,14 +2729,36 @@ const CaisseJeuxModule = {
     this.renderCurrentTab();
   },
 
+  activeSellerFilter: 'all',
+
   // 3. Onglet Journal des Ventes Jeux
   renderJournalTab(container) {
+    const sellers = Array.from(new Set(this.sales.map(s => {
+      return (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+    }))).filter(Boolean);
+
+    const filteredSales = (this.activeSellerFilter && this.activeSellerFilter !== 'all')
+      ? this.sales.filter(s => {
+          const sLog = (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+          return sLog === this.activeSellerFilter;
+        })
+      : this.sales;
+
     container.innerHTML = `
-      <div style="margin-bottom: 1rem;">
+      <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
         <h4 style="margin: 0;">Journal des Ventes de Tickets de Jeux</h4>
+        ${sellers.length > 1 ? `
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="font-size: 0.82rem; color: var(--gray-600); font-weight: 600;">Filtrer par vendeur :</span>
+            <select class="form-control form-control-sm" style="width: auto; padding: 2px 8px; font-size: 0.82rem;" onchange="CaisseJeuxModule.activeSellerFilter = this.value; CaisseJeuxModule.renderCurrentTab();">
+              <option value="all">👥 Tous les caissiers (${this.sales.length})</option>
+              ${sellers.map(sel => `<option value="${sel}" ${this.activeSellerFilter === sel ? 'selected' : ''}>👤 ${sel}</option>`).join('')}
+            </select>
+          </div>
+        ` : ''}
       </div>
       <div class="table-responsive">
-        ${this.sales.length === 0 ? `
+        ${filteredSales.length === 0 ? `
           <div class="empty-state">
             <div class="empty-icon">🧾</div>
             <div class="empty-title">Aucun ticket de jeu vendu pour le moment</div>
@@ -2648,13 +2773,16 @@ const CaisseJeuxModule = {
                 <th>Qté</th>
                 <th>Prix</th>
                 <th>Total Encaissé</th>
+                <th>Vendeur / Caissier</th>
                 <th style="text-align: right;">Action</th>
               </tr>
             </thead>
             <tbody>
-              ${this.sales.map(s => {
+              ${filteredSales.map(s => {
                 const standName = s.stand ? s.stand.name : 'Stand';
                 const standColor = s.stand ? (s.stand.color_hex || '#3b82f6') : '#3b82f6';
+                const sellerName = (s.seller && (s.seller.full_name || s.seller.login)) || s.seller_name || s.seller_login || 'Caissier';
+                const sellerLogin = (s.seller && s.seller.login) || s.seller_login || 'caissier';
                 return `
                   <tr>
                     <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
@@ -2667,6 +2795,11 @@ const CaisseJeuxModule = {
                     <td>${s.quantity}</td>
                     <td>${s.unit_price_f} F</td>
                     <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
+                    <td>
+                      <span class="badge badge-gray" title="Responsable individuel : ${sellerName} (@${sellerLogin})" style="font-size: 0.75rem;">
+                        👤 ${sellerName}
+                      </span>
+                    </td>
                     <td style="text-align: right;">
                       <button class="btn btn-danger btn-sm" onclick="CaisseJeuxModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Annuler cette vente">🗑️ Enlever</button>
                     </td>
@@ -2687,8 +2820,21 @@ const CaisseJeuxModule = {
     const expTotal = this.expenses.reduce((s, x) => s + Math.abs(x.amount_f), 0);
     const expected = initF + revJeux - expTotal;
 
+    // Calcul de la répartition par vendeur
+    const sellerStats = {};
+    this.sales.forEach(s => {
+      const sLogin = (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+      const sName = (s.seller && (s.seller.full_name || s.seller.login)) || s.seller_name || sLogin;
+      if (!sellerStats[sLogin]) {
+        sellerStats[sLogin] = { login: sLogin, name: sName, tickets: 0, total: 0 };
+      }
+      sellerStats[sLogin].tickets += (s.quantity || 1);
+      sellerStats[sLogin].total += (s.total_amount_f || 0);
+    });
+    const sellerList = Object.values(sellerStats);
+
     container.innerHTML = `
-      <div style="max-width: 600px; margin: 0 auto;">
+      <div style="max-width: 650px; margin: 0 auto;">
         <div class="card" style="border: 2px solid var(--primary); padding: 1.25rem;">
           <h3 style="margin-top: 0; margin-bottom: 1rem; color: var(--primary);">
             🔒 Contrôle &amp; Clôture — Caisse Tickets Jeux
@@ -2717,6 +2863,40 @@ const CaisseJeuxModule = {
                 ${expected.toLocaleString()} F
               </span>
             </div>
+          </div>
+
+          <!-- RÉPARTITION NOMINATIVE PAR VENDEUR -->
+          <div style="margin-bottom: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.85rem;">
+            <div style="font-weight: 700; font-size: 0.88rem; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+              <span>👤</span> Répartition nominative des recettes par caissier
+            </div>
+            ${sellerList.length === 0 ? `
+              <div style="font-size: 0.8rem; color: var(--gray-400); font-style: italic;">Aucune vente enregistrée.</div>
+            ` : `
+              <table style="width: 100%; font-size: 0.82rem; border-collapse: collapse;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--gray-200); color: var(--gray-500); text-align: left;">
+                    <th style="padding: 4px 0;">Caissier</th>
+                    <th style="padding: 4px 0; text-align: center;">Tickets</th>
+                    <th style="padding: 4px 0; text-align: right;">Total Encaissé</th>
+                    <th style="padding: 4px 0; text-align: right;">Part</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sellerList.map(s => {
+                    const pct = revJeux > 0 ? Math.round((s.total / revJeux) * 100) : 0;
+                    return `
+                      <tr style="border-bottom: 1px solid var(--gray-100);">
+                        <td style="padding: 6px 0;"><strong>${s.name}</strong> <span style="color: var(--gray-400); font-size: 0.75rem;">(@${s.login})</span></td>
+                        <td style="padding: 6px 0; text-align: center;">${s.tickets}</td>
+                        <td style="padding: 6px 0; text-align: right; font-weight: 700; color: var(--success);">${s.total.toLocaleString()} F</td>
+                        <td style="padding: 6px 0; text-align: right; color: var(--gray-500);">${pct}%</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
           </div>
 
           ${this.register.status === 'closed' ? `
@@ -3463,7 +3643,7 @@ const CaisseRestaurationModule = {
       try {
         const { data: vData } = await client
           .from('ticket_sales')
-          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, payment_mode, product_id, created_at, seller:app_users(login)')
+          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, payment_mode, product_id, created_at, seller:app_users(login, full_name)')
           .eq('category', 'restauration')
           .order('created_at', { ascending: false });
         if (vData) {
@@ -3824,6 +4004,8 @@ const CaisseRestaurationModule = {
     const cartTotal = this.cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const regId = this.register.id;
     const mode = this.paymentMethod;
+    const sellerLogin = user ? user.login : 'Caissier';
+    const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
 
     for (const item of this.cart) {
       let realSaleId = 'sale-food-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
@@ -3837,7 +4019,9 @@ const CaisseRestaurationModule = {
         total_amount_f: item.price * item.qty,
         payment_mode: mode,
         product_id: CaissesCore.isUuid(item.id) ? item.id : null,
-        sold_by: user ? user.id : null
+        sold_by: user ? user.id : null,
+        seller_name: sellerFullName,
+        seller_login: sellerLogin
       };
 
       if (client) {
@@ -3852,7 +4036,8 @@ const CaisseRestaurationModule = {
       this.sales.unshift({
         ...saleObj,
         id: realSaleId,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        seller: { login: sellerLogin, full_name: sellerFullName }
       });
     }
 
@@ -3865,14 +4050,14 @@ const CaisseRestaurationModule = {
           cash_register_id: regId,
           type: 'vente',
           amount_f: cartTotal,
-          reason: `Vente Restauration (${mode === 'tokens' ? 'En Jetons' : 'En Espèces'})`,
+          reason: `Vente Restauration (${mode === 'tokens' ? 'En Jetons' : 'En Espèces'}) par ${sellerFullName} (@${sellerLogin})`,
           tokens_detail: mode === 'tokens' ? { total_tokens_f: cartTotal } : null,
           user_id: user ? user.id : null
         }]);
       } catch (e) {}
     }
 
-    AuditLogger.log('VENTE_RESTAURATION', 'ticket_sales', null, `Vente restauration de ${cartTotal} F (${mode})`);
+    AuditLogger.log('VENTE_RESTAURATION', 'ticket_sales', null, `Vente restauration de ${cartTotal} F (${mode}) par ${sellerFullName} (@${sellerLogin})`);
     Notify.success(`Commande validée ! Total : ${cartTotal.toLocaleString()} F`);
     this.cart = [];
     this.renderCurrentTab();
@@ -3884,12 +4069,18 @@ const CaisseRestaurationModule = {
       return;
     }
 
-    if (!confirm(`Annuler et enlever la commande de « ${name} » (${amount} F) ?\n\nLe montant sera retiré de la caisse et du bilan.`)) {
+    const cancelReason = prompt(`Annuler la commande de « ${name} » (${amount} F) :\n\nMotif obligatoire de l'annulation (ex: erreur de saisie, plat indisponible...) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Annulation interrompue : un motif précis est obligatoire pour la traçabilité nominative.");
       return;
     }
 
+    const admin = Auth.getCurrentUser();
+    const adminLabel = admin ? `${admin.full_name || admin.login} (@${admin.login})` : 'SuperAdmin';
+
     const client = SupabaseClient.client;
-    const user = Auth.getCurrentUser();
 
     // 1. Ajouter à la liste noire cloud/locale des annulations (pour mise à jour Bilan)
     await CaissesCore.addCancelledSaleId(id, name);
@@ -3905,8 +4096,8 @@ const CaisseRestaurationModule = {
             cash_register_id: this.register.id,
             type: 'correction',
             amount_f: -Math.abs(amount),
-            reason: `Annulation vente restauration : ${name}`,
-            user_id: user ? user.id : null
+            reason: `Annulation vente restauration : ${name} (Par ${adminLabel} - Motif : ${motif})`,
+            user_id: admin?.id || null
           }]);
         }
       } catch (e) {
@@ -3917,8 +4108,8 @@ const CaisseRestaurationModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Annulation vente resto ${name} (-${amount} F)`);
-    Notify.success(`Commande « ${name} » enlevée. Caisse et bilan synchronisés.`);
+    AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Annulation vente resto « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Commande « ${name} » enlevée. Motif consigné : ${motif}`);
     this.renderCurrentTab();
   },
 
@@ -4089,14 +4280,36 @@ const CaisseRestaurationModule = {
     this.renderCurrentTab();
   },
 
+  activeSellerFilter: 'all',
+
   // 3. Onglet Journal des Ventes Restauration
   renderJournalTab(container) {
+    const sellers = Array.from(new Set(this.sales.map(s => {
+      return (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+    }))).filter(Boolean);
+
+    const filteredSales = (this.activeSellerFilter && this.activeSellerFilter !== 'all')
+      ? this.sales.filter(s => {
+          const sLog = (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+          return sLog === this.activeSellerFilter;
+        })
+      : this.sales;
+
     container.innerHTML = `
-      <div style="margin-bottom: 1rem;">
+      <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
         <h4 style="margin: 0;">Journal des Ventes — Restauration &amp; Buvette</h4>
+        ${sellers.length > 1 ? `
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="font-size: 0.82rem; color: var(--gray-600); font-weight: 600;">Filtrer par vendeur :</span>
+            <select class="form-control form-control-sm" style="width: auto; padding: 2px 8px; font-size: 0.82rem;" onchange="CaisseRestaurationModule.activeSellerFilter = this.value; CaisseRestaurationModule.renderCurrentTab();">
+              <option value="all">👥 Tous les caissiers (${this.sales.length})</option>
+              ${sellers.map(sel => `<option value="${sel}" ${this.activeSellerFilter === sel ? 'selected' : ''}>👤 ${sel}</option>`).join('')}
+            </select>
+          </div>
+        ` : ''}
       </div>
       <div class="table-responsive">
-        ${this.sales.length === 0 ? `
+        ${filteredSales.length === 0 ? `
           <div class="empty-state">
             <div class="empty-icon">🧾</div>
             <div class="empty-title">Aucune commande encaissée pour l'instant</div>
@@ -4111,23 +4324,33 @@ const CaisseRestaurationModule = {
                 <th>Prix Unitaire</th>
                 <th>Règlement</th>
                 <th>Total Encaissé</th>
+                <th>Vendeur / Caissier</th>
                 <th style="text-align: right;">Action</th>
               </tr>
             </thead>
             <tbody>
-              ${this.sales.map(s => `
-                <tr>
-                  <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td><strong>${s.item_name}</strong></td>
-                  <td>${s.quantity}</td>
-                  <td>${(s.unit_price_f || 0).toLocaleString()} F</td>
-                  <td>${s.payment_mode === 'tokens' ? '<span class="badge badge-warning">🪙 Jetons</span>' : '<span class="badge badge-success">💵 Espèces</span>'}</td>
-                  <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
-                  <td style="text-align: right;">
-                    <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f}, '${s.product_id || ''}', ${s.quantity})" title="Annuler et remettre en stock">🗑️ Enlever</button>
-                  </td>
-                </tr>
-              `).join('')}
+              ${filteredSales.map(s => {
+                const sellerName = (s.seller && (s.seller.full_name || s.seller.login)) || s.seller_name || s.seller_login || 'Caissier';
+                const sellerLogin = (s.seller && s.seller.login) || s.seller_login || 'caissier';
+                return `
+                  <tr>
+                    <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td><strong>${s.item_name}</strong></td>
+                    <td>${s.quantity}</td>
+                    <td>${(s.unit_price_f || 0).toLocaleString()} F</td>
+                    <td>${s.payment_mode === 'tokens' ? '<span class="badge badge-warning">🪙 Jetons</span>' : '<span class="badge badge-success">💵 Espèces</span>'}</td>
+                    <td><strong style="color: var(--success);">${(s.total_amount_f || 0).toLocaleString()} F</strong></td>
+                    <td>
+                      <span class="badge badge-gray" title="Responsable individuel : ${sellerName} (@${sellerLogin})" style="font-size: 0.75rem;">
+                        👤 ${sellerName}
+                      </span>
+                    </td>
+                    <td style="text-align: right;">
+                      <button class="btn btn-danger btn-sm" onclick="CaisseRestaurationModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f}, '${s.product_id || ''}', ${s.quantity})" title="Annuler et remettre en stock">🗑️ Enlever</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
         `}
@@ -4144,8 +4367,21 @@ const CaisseRestaurationModule = {
     const expTotal = this.expenses.reduce((s, x) => s + Math.abs(x.amount_f), 0);
     const expectedCash = initF + revCash - expTotal;
 
+    // Calcul de la répartition par vendeur
+    const sellerStats = {};
+    this.sales.forEach(s => {
+      const sLogin = (s.seller && s.seller.login) || s.seller_login || 'Caissier';
+      const sName = (s.seller && (s.seller.full_name || s.seller.login)) || s.seller_name || sLogin;
+      if (!sellerStats[sLogin]) {
+        sellerStats[sLogin] = { login: sLogin, name: sName, items: 0, total: 0 };
+      }
+      sellerStats[sLogin].items += (s.quantity || 1);
+      sellerStats[sLogin].total += (s.total_amount_f || 0);
+    });
+    const sellerList = Object.values(sellerStats);
+
     container.innerHTML = `
-      <div style="max-width: 620px; margin: 0 auto;">
+      <div style="max-width: 650px; margin: 0 auto;">
         <div class="card" style="border: 2px solid #ea580c; padding: 1.25rem;">
           <h3 style="margin-top: 0; margin-bottom: 1rem; color: #c2410c;">
             🔒 Contrôle &amp; Clôture — Caisse Restauration
@@ -4178,6 +4414,40 @@ const CaisseRestaurationModule = {
                 ${expectedCash.toLocaleString()} F
               </span>
             </div>
+          </div>
+
+          <!-- RÉPARTITION NOMINATIVE PAR VENDEUR -->
+          <div style="margin-bottom: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.85rem;">
+            <div style="font-weight: 700; font-size: 0.88rem; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+              <span>👤</span> Répartition nominative des recettes par caissier
+            </div>
+            ${sellerList.length === 0 ? `
+              <div style="font-size: 0.8rem; color: var(--gray-400); font-style: italic;">Aucune commande enregistrée.</div>
+            ` : `
+              <table style="width: 100%; font-size: 0.82rem; border-collapse: collapse;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--gray-200); color: var(--gray-500); text-align: left;">
+                    <th style="padding: 4px 0;">Caissier</th>
+                    <th style="padding: 4px 0; text-align: center;">Articles</th>
+                    <th style="padding: 4px 0; text-align: right;">Total Encaissé</th>
+                    <th style="padding: 4px 0; text-align: right;">Part</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sellerList.map(s => {
+                    const pct = revTotal > 0 ? Math.round((s.total / revTotal) * 100) : 0;
+                    return `
+                      <tr style="border-bottom: 1px solid var(--gray-100);">
+                        <td style="padding: 6px 0;"><strong>${s.name}</strong> <span style="color: var(--gray-400); font-size: 0.75rem;">(@${s.login})</span></td>
+                        <td style="padding: 6px 0; text-align: center;">${s.items}</td>
+                        <td style="padding: 6px 0; text-align: right; font-weight: 700; color: var(--success);">${s.total.toLocaleString()} F</td>
+                        <td style="padding: 6px 0; text-align: right; color: var(--gray-500);">${pct}%</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
           </div>
 
           ${this.register.status === 'closed' ? `

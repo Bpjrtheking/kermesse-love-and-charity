@@ -31,14 +31,18 @@ const RolesModule = {
           </div>
         </div>
         <div class="card-body">
-          <div class="alert-banner info" style="margin-bottom: 1.5rem;">
+          <div class="alert-banner warning" style="margin-bottom: 1.5rem; border-left: 4px solid #ea580c; background: #fff7ed; color: #9a3412;">
             <div>
-              👑 <strong>Gestion des Accès :</strong> Vous pouvez créer des <strong>SuperAdministrateurs</strong> (accès total) ou des <strong>Administrateurs métier</strong>. Le compte original ne peut jamais être supprimé ni désactivé, mais vous pouvez modifier son login et son mot de passe librement.
+              <strong>⚠️ Règle Fondamentale de Traçabilité &amp; Responsabilité Personnelle :</strong>
+              <div style="font-size: 0.88rem; margin-top: 0.35rem; line-height: 1.5;">
+                Chaque administrateur est <strong>nominativement et personnellement responsable</strong> de toutes les opérations (encaissements, dépenses, saisies, validations) enregistrées sous son compte.
+                <br><strong>Aucun compte ne doit être partagé ou prêté</strong> à un collègue. Chaque intervenant sur le terrain doit disposer de son propre identifiant individuel.
+              </div>
             </div>
           </div>
 
           <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; color: var(--gray-800);">
-            Comptes Administrateurs & Accès
+            Comptes Administrateurs &amp; Accès
           </h3>
           <div class="table-responsive" id="usersTableContainer">
             <div class="empty-state">
@@ -47,10 +51,13 @@ const RolesModule = {
             </div>
           </div>
 
-          <h3 style="font-size: 1rem; font-weight: 700; margin: 2rem 0 1rem 0; color: var(--gray-800);">
-            Rôles Système Définis pour la Kermesse
+          <h3 style="font-size: 1rem; font-weight: 700; margin: 2rem 0 0.5rem 0; color: var(--gray-800);">
+            Matrice des 9 Pôles d'Activité de la Kermesse (Permissions d'Accès)
           </h3>
-          <div class="table-responsive" id="rolesTableContainer"></div>
+          <p style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 1rem;">
+            Il n'y a plus de rôles rigides imposés par liste déroulante : vous cochez librement les pôles autorisés pour chaque compte (1 ou plusieurs pôles), et vous lui donnez un intitulé descriptif personnalisé en guise de fonction.
+          </p>
+          <div class="table-responsive" id="polesMatrixContainer"></div>
         </div>
       </div>
     `;
@@ -58,10 +65,16 @@ const RolesModule = {
     await this.loadData();
   },
 
+  usersList: [],
+
   async loadData() {
+    // 1. Synchroniser les permissions et intitulés descriptifs personnalisés depuis le Cloud
+    await Permissions.syncPolesFromCloud();
+
     const client = SupabaseClient.client;
     if (!client) {
       this.renderLocalUsers();
+      this.renderPolesMatrix();
       return;
     }
 
@@ -74,38 +87,27 @@ const RolesModule = {
         `)
         .order('is_original_superadmin', { ascending: false });
 
-      const { data: roles, error: rErr } = await client.from('roles').select('*').order('name', { ascending: true });
-
       if (uErr) throw uErr;
-      this.renderUsersTable(users || []);
-
-      // Filtrer et harmoniser selon les 9 pôles officiels
-      const officialMap = new Map(this.DEFAULT_ROLES.map(r => [r.code, r]));
-      let displayRoles = (roles || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
-      if (displayRoles.length === 0) {
-        displayRoles = this.DEFAULT_ROLES;
-      } else {
-        displayRoles = displayRoles.map(r => {
-          const def = officialMap.get(r.code);
-          return def ? { ...r, name: def.name, description: def.description } : r;
-        });
-      }
-      this.renderRolesTable(displayRoles);
+      this.usersList = users || [];
+      this.renderUsersTable(this.usersList);
+      this.renderPolesMatrix();
     } catch (e) {
       console.error('[RolesModule Error]', e);
       this.renderLocalUsers();
+      this.renderPolesMatrix();
     }
   },
 
   renderLocalUsers() {
     const currentUser = Auth.getCurrentUser();
-    this.renderUsersTable([currentUser]);
+    this.usersList = [currentUser];
+    this.renderUsersTable(this.usersList);
   },
 
   renderUsersTable(users) {
     const container = document.getElementById('usersTableContainer');
     const currentUser = Auth.getCurrentUser();
-    const isSuperAdmin = currentUser && (currentUser.is_original_superadmin || currentUser.role_code === 'superadmin');
+    const isSuperAdmin = Permissions.isSuperAdmin(currentUser);
 
     container.innerHTML = `
       <table class="data-table">
@@ -113,10 +115,10 @@ const RolesModule = {
           <tr>
             <th>Login</th>
             <th>Nom Complet</th>
-            <th>Rôle Kermesse</th>
-            <th>Pôles Autorisés</th>
+            <th>Fonction / Titre Descriptif</th>
+            <th>Pôles d'Activité Autorisés</th>
             <th>Statut</th>
-            <th>Sécurité</th>
+            <th>Traçabilité</th>
             <th style="text-align: right;">Actions</th>
           </tr>
         </thead>
@@ -124,7 +126,7 @@ const RolesModule = {
           ${users.map(u => {
             const isOrig = Boolean(u.is_original_superadmin || u.login === 'Mounir');
             const roleCode = u.role ? u.role.code : (u.role_code || '');
-            const isTargetSuperAdmin = isOrig || roleCode === 'superadmin';
+            const isTargetSuperAdmin = isOrig || roleCode === 'superadmin' || Permissions.isSuperAdmin(u);
             const isCurrentOriginal = Boolean(currentUser?.is_original_superadmin || currentUser?.login?.toLowerCase() === 'mounir');
             const isSelf = Boolean(currentUser && (currentUser.id === u.id || currentUser.login.toLowerCase() === u.login.toLowerCase()));
 
@@ -139,6 +141,7 @@ const RolesModule = {
             }
 
             const allowedPoles = Permissions.getAllowedPoles(u);
+            const userTitle = Permissions.getUserTitle(u);
 
             return `
               <tr>
@@ -148,8 +151,8 @@ const RolesModule = {
                 </td>
                 <td>${u.full_name || '-'}</td>
                 <td>
-                  <span class="badge ${isTargetSuperAdmin ? 'badge-primary' : 'badge-gray'}">
-                    ${u.role ? u.role.name : (u.role_name || (isTargetSuperAdmin ? 'SuperAdministrateur' : 'Non défini'))}
+                  <span class="badge ${isTargetSuperAdmin ? 'badge-primary' : 'badge-gray'}" style="font-size: 0.82rem; font-weight: 600;">
+                    ${userTitle}
                   </span>
                 </td>
                 <td>
@@ -158,7 +161,7 @@ const RolesModule = {
                   ` : allowedPoles.length === 0 ? `
                     <span class="badge badge-danger" style="font-size: 0.72rem;">🔒 Aucun pôle</span>
                   ` : `
-                    <div style="display: flex; flex-wrap: wrap; gap: 2px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 3px;">
                       ${allowedPoles.map(p => {
                         const cfg = Permissions.POLES_CONFIG.find(c => c.num === p);
                         return cfg ? `
@@ -174,11 +177,13 @@ const RolesModule = {
                   ${u.is_active ? '<span class="badge badge-success">Actif</span>' : '<span class="badge badge-danger">Désactivé</span>'}
                 </td>
                 <td>
-                  <span class="badge badge-success">Défini par SuperAdmin</span>
+                  <span class="badge badge-success" title="Compte individuel : chaque action est signée nominativement" style="font-size: 0.72rem;">
+                    👤 Personnel &amp; Traçable
+                  </span>
                 </td>
-                <td style="text-align: right;">
+                <td style="text-align: right; white-space: nowrap;">
                   ${isSuperAdmin && !isTargetSuperAdmin ? `
-                    <button class="btn-icon" onclick="RolesModule.openEditUserPolesModal('${u.id}', '${(u.login || '').replace(/'/g, "\\'")}', '${(u.full_name || '').replace(/'/g, "\\'")}')" title="Gérer les Pôles autorisés (Multi-pôles)" style="color: #2563eb; background: #eff6ff;">
+                    <button class="btn-icon" onclick="RolesModule.openEditUserPolesModal('${u.id}', '${(u.login || '').replace(/'/g, "\\'")}', '${(u.full_name || '').replace(/'/g, "\\'")}')" title="Modifier les Pôles et la Fonction" style="color: #2563eb; background: #eff6ff;">
                       🎯
                     </button>
                   ` : ''}
@@ -210,123 +215,148 @@ const RolesModule = {
     `;
   },
 
-  renderRolesTable(roles) {
-    const container = document.getElementById('rolesTableContainer');
+  renderPolesMatrix() {
+    const container = document.getElementById('polesMatrixContainer');
     if (!container) return;
+
+    const users = this.usersList || [];
 
     container.innerHTML = `
       <table class="data-table">
         <thead>
           <tr>
-            <th>Code</th>
-            <th>Nom du Rôle</th>
-            <th>Description & Missions</th>
-            <th>Périmètre de Visibilité</th>
+            <th style="width: 250px;">Pôle d'Activité</th>
+            <th>Missions &amp; Périmètre Opérationnel</th>
+            <th>Administrateurs Assignés (Multi-Admins)</th>
+            <th style="width: 120px; text-align: center;">Accès Direct</th>
           </tr>
         </thead>
         <tbody>
-          ${roles.map(r => `
-            <tr>
-              <td><code>${r.code}</code></td>
-              <td><strong>${r.name}</strong></td>
-              <td>${r.description || '-'}</td>
-              <td>
-                <span class="badge ${r.code === 'superadmin' ? 'badge-primary' : 'badge-gray'}">
-                  ${r.code === 'superadmin' ? 'Vision Totale' : 'Interface Métier Spécifique'}
-                </span>
-              </td>
-            </tr>
-          `).join('')}
+          ${Permissions.POLES_CONFIG.map(p => {
+            // Identifier tous les administrateurs ayant accès à ce pôle
+            const assignedUsers = users.filter(u => {
+              if (Permissions.isSuperAdmin(u)) return true;
+              const allowed = Permissions.getAllowedPoles(u);
+              return allowed.includes(p.num);
+            });
+
+            return `
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <span style="font-size: 1.5rem; background: ${p.color}15; padding: 0.35rem 0.5rem; border-radius: 8px;">${p.icon}</span>
+                    <div>
+                      <strong style="color: ${p.color};">Pôle ${p.num}</strong>
+                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--gray-800);">${p.name}</div>
+                    </div>
+                  </div>
+                </td>
+                <td style="font-size: 0.85rem; color: var(--gray-600); line-height: 1.45;">
+                  ${this.getPoleDescription(p.num)}
+                </td>
+                <td>
+                  ${assignedUsers.length === 0 ? `
+                    <span class="badge badge-gray" style="font-size: 0.75rem;">Aucun admin spécifique</span>
+                  ` : `
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                      ${assignedUsers.map(u => {
+                        const isSuper = Permissions.isSuperAdmin(u);
+                        const title = Permissions.getUserTitle(u);
+                        return `
+                          <span class="badge ${isSuper ? 'badge-primary' : 'badge-gray'}" style="font-size: 0.72rem; padding: 3px 6px;" title="${u.full_name || u.login} : ${title}">
+                            👤 ${u.login} ${isSuper ? '👑' : ''}
+                          </span>
+                        `;
+                      }).join('')}
+                    </div>
+                  `}
+                </td>
+                <td style="text-align: center;">
+                  <a href="${p.page}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.6rem; text-decoration: none;">
+                    Ouvrir ↗
+                  </a>
+                </td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
       </table>
     `;
   },
 
-  OFFICIAL_ROLE_CODES: [
-    'superadmin',
-    'admin_communication',
-    'admin_finances',
-    'admin_decoration',
-    'admin_restauration',
-    'admin_stands',
-    'admin_lots',
-    'admin_benevoles',
-    'admin_logistique',
-    'admin_securite'
-  ],
-
-  DEFAULT_ROLES: [
-    { code: 'superadmin', name: '👑 SuperAdministrateur — Coordination Générale', description: 'Accès global, supervision des 9 pôles, gestion des comptes et finances' },
-    { code: 'admin_communication', name: '📢 Responsable — Communication & Affichage', description: 'Pôle 1 : Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan kermesse' },
-    { code: 'admin_finances', name: '🎟️ Responsable — Billetterie / Tickets / Caisse / Comptabilité', description: 'Pôle 2 : Tickets entrée/jeux/lots/préventes, séries, caisses centrale & stands, écarts' },
-    { code: 'admin_decoration', name: '🎨 Responsable — Organisation & Décoration', description: 'Pôle 3 : Ambiance festive, matériel déco, aménagement des zones et plan d\'implantation' },
-    { code: 'admin_restauration', name: '🍔 Responsable — Restauration', description: 'Pôle 4 : Cuisine, boissons, snacks, stocks denrées, hygiène et réapprovisionnements' },
-    { code: 'admin_stands', name: '🎪 Responsable — Stands & Jeux', description: 'Pôle 5 : Gestion des stands (Couleur+N°), catalogue jeux, règles, prix tickets, équipes stands' },
-    { code: 'admin_lots', name: '🎁 Responsable — Lots à gagner', description: 'Pôle 6 : Catalogue des lots (achats & dons), dotations stands et suivi des distributions' },
-    { code: 'admin_benevoles', name: '👥 Responsable — Planning & Bénévoles', description: 'Pôle 7 : Fiches bénévoles, contacts WhatsApp, planning créneaux et anti-conflits' },
-    { code: 'admin_logistique', name: '📦 Responsable — Logistique & Installation', description: 'Pôle 8 : Matériel lourd (tentes, tables, sono, électricité), chaîne de prêt et checklists' },
-    { code: 'admin_securite', name: '🛡️ Responsable — Accueil & Sécurité', description: 'Pôle 9 : Accueil, objets trouvés, rondes sanitaires, urgences et registre incidents' }
-  ],
+  getPoleDescription(num) {
+    const descriptions = {
+      1: "Affiches, flyers, réseaux sociaux, WhatsApp, signalétique, plan d'accès et communication extérieure.",
+      2: "Billetterie, tickets d'entrée/jeux/lots, gestion des caisses centrale & stands, journal des encaissements et clôture comptable.",
+      3: "Ambiance festive, matériel de décoration, implantation spatiale, plan du stade en 3D interactive.",
+      4: "Cuisine, boissons, snacks, sandwicherie, stocks de denrées, hygiène et traçabilité des ventes restauration.",
+      5: "Gestion des stands de jeux (Couleur + N°), catalogue des règles, fixation des tickets et équipes d'animation.",
+      6: "Catalogue des dotations et lots à gagner (achats & dons), suivi des remises de lots et gestion des stocks restants.",
+      7: "Fiches bénévoles, contacts WhatsApp, planning des créneaux horaires, prévention des conflits et suivi de présence.",
+      8: "Matériel lourd (tentes, tables, sono, électricité, barnums), chaîne de prêt/retour et checklists techniques.",
+      9: "Accueil du public, gestion des objets trouvés, rondes sanitaires, poste de secours et registre des incidents."
+    };
+    return descriptions[num] || "Gestion et opérations du pôle.";
+  },
 
   async openCreateUserModal() {
-    const client = SupabaseClient.client;
-    let roles = [];
-
-    if (client) {
-      const { data } = await client.from('roles').select('id, code, name, description').order('name');
-      const filtered = (data || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
-      if (filtered && filtered.length > 0) {
-        const officialMap = new Map(this.DEFAULT_ROLES.map(r => [r.code, r]));
-        roles = filtered.map(r => {
-          const def = officialMap.get(r.code);
-          return def ? { ...r, name: def.name, description: def.description } : r;
-        });
-      } else {
-        roles = this.DEFAULT_ROLES;
-      }
-    } else {
-      roles = this.DEFAULT_ROLES;
-    }
-
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
-      <div class="modal-dialog">
+      <div class="modal-dialog" style="max-width: 620px;">
         <div class="modal-header">
-          <h3>Créer un Compte Administrateur</h3>
+          <h3>➕ Créer un Compte Administrateur</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
-          <form id="createUserForm">
+          <form id="createUserForm" onsubmit="return false;">
+            <div class="alert-banner warning" style="margin-bottom: 1.25rem; font-size: 0.85rem; border-left: 4px solid #ea580c; background: #fff7ed; color: #9a3412;">
+              <div>
+                <strong>⚠️ Règle de Traçabilité &amp; Responsabilité Personnelle :</strong>
+                <div>Ce compte est strictement réservé à la personne désignée ci-dessous. <strong>Le prêt ou le partage de compte est interdit</strong> : chaque opération (vente, annulation, dépense) sera signée avec son identifiant.</div>
+              </div>
+            </div>
+
             <div class="form-row">
               <div class="form-group">
-                <label>Login unique *</label>
-                <input type="text" id="uLogin" class="form-control" required placeholder="Ex: Mamadou, Fatou...">
-                <div class="form-hint">Sera utilisé pour la connexion (sans email)</div>
+                <label>Login unique (Identifiant de connexion) *</label>
+                <input type="text" id="uLogin" class="form-control" required placeholder="Ex: Mamadou, Fatou, Cheikh...">
+                <div class="form-hint">Sera utilisé pour la connexion</div>
               </div>
               <div class="form-group">
-                <label>Nom complet *</label>
+                <label>Nom et Prénom *</label>
                 <input type="text" id="uFullName" class="form-control" required placeholder="Ex: Mamadou Sy">
               </div>
             </div>
 
             <div class="form-group">
-              <label>Rôle / Titre *</label>
-              <select id="uRole" class="form-control" required onchange="RolesModule.handleRoleChange(this.value)">
-                <option value="superadmin">👑 SuperAdministrateur (Tous les 9 Pôles d'office)</option>
-                ${roles.filter(r => r.code !== 'superadmin').map(r => `<option value="${r.code}">${r.name}</option>`).join('')}
-              </select>
+              <label>Fonction / Rôle Descriptif *</label>
+              <input type="text" id="uRoleTitle" class="form-control" required placeholder="Ex: Co-responsable Buvette, Trésorier Adjoint, Responsable Jeux..." value="">
+              <div class="form-hint">Intitulé libre affiché sur le badge et les journaux (aucun rôle rigide imposé).</div>
             </div>
 
-            <div class="form-group">
-              <label style="display: flex; justify-content: space-between; align-items: center;">
-                <span>🎯 Pôles d'Activité Autorisés (Multi-Pôles) *</span>
-                <span style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Cochez 1 ou plusieurs pôles</span>
+            <div class="form-group" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 0.85rem; border-radius: 8px;">
+              <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #1e293b; cursor: pointer;">
+                <input type="checkbox" id="uIsSuperAdmin" onchange="RolesModule.handleSuperAdminToggle(this.checked, 'create')">
+                <span>👑 Accès SuperAdministrateur (Tous les 9 Pôles + Supervision globale)</span>
               </label>
+              <div class="form-hint" style="margin-left: 1.7rem;">Donne un accès complet sans restriction à l'ensemble des 9 pôles et à l'administration des comptes.</div>
+            </div>
+
+            <div class="form-group" id="createPolesGroup">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label style="margin-bottom: 0; font-weight: 600;">🎯 Pôles d'Activité Autorisés (Multi-Pôles) *</label>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 6px;" onclick="RolesModule.toggleAllPoles('create', true)">Tout cocher</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 6px;" onclick="RolesModule.toggleAllPoles('create', false)">Tout décocher</button>
+                </div>
+              </div>
+              <div class="form-hint" style="margin-bottom: 0.5rem;">Cochez 1 ou plusieurs pôles autorisés pour cet administrateur.</div>
+
               <div class="pole-checkbox-grid" id="createPolesGrid">
                 ${Permissions.POLES_CONFIG.map(p => `
-                  <label class="pole-checkbox-item checked" id="cbCreateItem_${p.num}">
-                    <input type="checkbox" name="createPoleAccess" value="${p.num}" checked onchange="this.parentElement.classList.toggle('checked', this.checked)">
+                  <label class="pole-checkbox-item" id="cbCreateItem_${p.num}">
+                    <input type="checkbox" name="createPoleAccess" value="${p.num}" onchange="this.parentElement.classList.toggle('checked', this.checked)">
                     <span style="font-size: 1.15rem;">${p.icon}</span>
                     <span class="pole-name">Pôle ${p.num} : ${p.name.split('&')[0].trim()}</span>
                   </label>
@@ -337,13 +367,13 @@ const RolesModule = {
             <div class="form-group">
               <label>Mot de passe initial *</label>
               <input type="text" id="uPassword" class="form-control" required value="Kermesse#2026!">
-              <div class="form-hint">L'administrateur pourra se connecter directement avec ces identifiants sans obligation de changer son mot de passe. Seul le SuperAdministrateur peut modifier son mot de passe.</div>
+              <div class="form-hint">L'administrateur pourra se connecter immédiatement sans obligation de changer son mot de passe.</div>
             </div>
           </form>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary close-btn">Annuler</button>
-          <button class="btn btn-primary" id="saveUserBtn">Créer l'utilisateur</button>
+          <button class="btn btn-primary" id="saveUserBtn">💾 Créer l'administrateur</button>
         </div>
       </div>
     `;
@@ -357,103 +387,128 @@ const RolesModule = {
     modal.querySelector('#saveUserBtn').onclick = async () => {
       const login = document.getElementById('uLogin').value.trim();
       const fullName = document.getElementById('uFullName').value.trim();
-      const roleCode = document.getElementById('uRole').value;
+      const roleTitle = document.getElementById('uRoleTitle').value.trim();
+      const isSuper = document.getElementById('uIsSuperAdmin').checked;
       const password = document.getElementById('uPassword').value;
 
       if (!login || !fullName || !password) {
-        Notify.error('Veuillez remplir tous les champs obligatoires.');
+        Notify.error('Veuillez renseigner le login, le nom complet et le mot de passe.');
         return;
       }
 
-      const selectedPoles = Array.from(modal.querySelectorAll('input[name="createPoleAccess"]:checked')).map(cb => Number(cb.value));
+      const selectedPoles = isSuper 
+        ? [1, 2, 3, 4, 5, 6, 7, 8, 9] 
+        : Array.from(modal.querySelectorAll('input[name="createPoleAccess"]:checked')).map(cb => Number(cb.value));
+
+      if (!isSuper && selectedPoles.length === 0) {
+        Notify.error('Veuillez cocher au moins un pôle d\'activité autorisé (ou activer SuperAdmin).');
+        return;
+      }
 
       const client = SupabaseClient.client;
-      if (client) {
-        // Appeler la RPC PostgreSQL sécurisée
-        const { data, error } = await client.rpc('admin_create_app_user', {
-          p_login: login,
-          p_password: password,
-          p_full_name: fullName,
-          p_role_code: roleCode,
-          p_creator_login: Auth.getCurrentUser()?.login || 'Mounir'
-        });
+      const roleCode = isSuper ? 'superadmin' : 'admin_stands';
+      const finalTitle = roleTitle || (isSuper ? 'SuperAdministrateur' : `Admin Pôle(s) ${selectedPoles.join(', ')}`);
 
-        if (error) {
-          Notify.error('Erreur: ' + error.message);
-          return;
+      const saveBtn = modal.querySelector('#saveUserBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Création en cours...';
+
+      try {
+        if (client) {
+          const { data, error } = await client.rpc('admin_create_app_user', {
+            p_login: login,
+            p_password: password,
+            p_full_name: fullName,
+            p_role_code: roleCode,
+            p_creator_login: Auth.getCurrentUser()?.login || 'Mounir'
+          });
+
+          if (error) throw error;
+          if (data && !data.success) {
+            Notify.error(data.message);
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Créer l\'administrateur';
+            return;
+          }
+
+          const userId = data?.user_id || login;
+          await Permissions.setCustomTitle(userId, login, finalTitle);
+          await Permissions.setAllowedPoles(userId, login, selectedPoles);
+        } else {
+          await Permissions.setCustomTitle(login, login, finalTitle);
+          await Permissions.setAllowedPoles(login, login, selectedPoles);
         }
 
-        if (data && !data.success) {
-          Notify.error(data.message);
-          return;
-        }
-
-        // Enregistrer les permissions multi-pôles
-        await Permissions.setAllowedPoles(data?.user_id || login, login, selectedPoles);
-
-        Notify.success(`Compte ${login} créé avec succès avec accès aux Pôles [${selectedPoles.join(', ')}].`);
+        Notify.success(`Compte « ${login} » créé avec succès (${finalTitle}) !`);
         close();
         const container = document.getElementById('poleContainer') || document.getElementById('mainContent');
         if (container) RolesModule.render(container);
+      } catch (e) {
+        Notify.error('Erreur: ' + (e.message || 'Impossible de créer le compte.'));
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 Créer l\'administrateur';
       }
     };
   },
 
-  handleRoleChange(roleCode) {
-    const grid = document.getElementById('createPolesGrid');
+  handleSuperAdminToggle(isSuper, context) {
+    const gridId = context === 'create' ? 'createPolesGrid' : (context === 'reset' ? 'resetPolesGrid' : 'editPolesGrid');
+    const grid = document.getElementById(gridId);
     if (!grid) return;
 
-    if (roleCode === 'superadmin') {
-      grid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        cb.checked = true;
-        cb.parentElement.classList.add('checked');
-      });
-      return;
-    }
-
-    // Sélection intelligente par défaut selon le rôle
-    const defaultPoleMap = {
-      admin_communication: [1],
-      admin_finances: [2],
-      admin_billetterie: [2],
-      admin_decoration: [3],
-      admin_organisation: [3],
-      admin_restauration: [4],
-      admin_stands: [5],
-      admin_lots: [6],
-      admin_benevoles: [7],
-      admin_logistique: [8],
-      admin_securite: [9]
-    };
-
-    const targetPoles = defaultPoleMap[roleCode] || [];
     grid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      const val = Number(cb.value);
-      cb.checked = targetPoles.includes(val);
-      cb.parentElement.classList.toggle('checked', cb.checked);
+      if (isSuper) {
+        cb.checked = true;
+        cb.disabled = true;
+        cb.parentElement.classList.add('checked');
+      } else {
+        cb.disabled = false;
+      }
+    });
+  },
+
+  toggleAllPoles(context, state) {
+    const gridId = context === 'create' ? 'createPolesGrid' : (context === 'reset' ? 'resetPolesGrid' : 'editPolesGrid');
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
+
+    grid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      if (!cb.disabled) {
+        cb.checked = state;
+        cb.parentElement.classList.toggle('checked', state);
+      }
     });
   },
 
   openEditUserPolesModal(userId, login, fullName) {
     const currentPoles = Permissions.getAllowedPoles({ id: userId, login: login });
+    const currentTitle = Permissions.getUserTitle({ id: userId, login: login });
 
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 560px;">
+      <div class="modal-dialog" style="max-width: 580px;">
         <div class="modal-header">
-          <h3>🎯 Pôles Autorisés pour ${login}</h3>
+          <h3>🎯 Permissions &amp; Fonction : ${login}</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
-          <p style="font-size: 0.9rem; color: var(--gray-600); margin-bottom: 1rem;">
-            Sélectionnez les pôles auxquels <strong>${fullName || login}</strong> a le droit d'accéder. Les autres pôles lui apparaîtront verrouillés 🔒 sur son menu d'accueil.
-          </p>
-
-          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <button type="button" class="btn btn-secondary btn-sm" id="checkAllPolesBtn">Tout cocher</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="uncheckAllPolesBtn">Tout décocher</button>
+          <div class="form-group" style="margin-bottom: 1.25rem;">
+            <label>Fonction / Rôle Descriptif *</label>
+            <input type="text" id="editRoleTitle" class="form-control" value="${currentTitle.replace(/"/g, '&quot;')}" placeholder="Ex: Co-responsable Buvette & Caisses, Trésorier...">
+            <div class="form-hint">Intitulé libre définissant la mission de cet administrateur.</div>
           </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <label style="margin-bottom: 0; font-weight: 600;">Pôles d'Activité Autorisés (Multi-Pôles) *</label>
+            <div style="display: flex; gap: 0.35rem;">
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 6px;" onclick="RolesModule.toggleAllPoles('edit', true)">Tout cocher</button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 6px;" onclick="RolesModule.toggleAllPoles('edit', false)">Tout décocher</button>
+            </div>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 0.75rem;">
+            Sélectionnez les pôles auxquels <strong>${fullName || login}</strong> a accès. Les autres pôles lui apparaîtront verrouillés 🔒 sur son menu.
+          </p>
 
           <div class="pole-checkbox-grid" id="editPolesGrid">
             ${Permissions.POLES_CONFIG.map(p => {
@@ -471,7 +526,7 @@ const RolesModule = {
         <div class="modal-footer">
           <button class="btn btn-secondary close-btn">Annuler</button>
           <button class="btn btn-primary" id="saveUserPolesBtn" style="background: #2563eb; border-color: #1d4ed8;">
-            💾 Enregistrer les Pôles
+            💾 Enregistrer les Modifications
           </button>
         </div>
       </div>
@@ -483,23 +538,20 @@ const RolesModule = {
     modal.querySelector('.modal-close-btn').onclick = close;
     modal.querySelector('.close-btn').onclick = close;
 
-    modal.querySelector('#checkAllPolesBtn').onclick = () => {
-      modal.querySelectorAll('input[name="editPoleAccess"]').forEach(cb => {
-        cb.checked = true;
-        cb.parentElement.classList.add('checked');
-      });
-    };
-
-    modal.querySelector('#uncheckAllPolesBtn').onclick = () => {
-      modal.querySelectorAll('input[name="editPoleAccess"]').forEach(cb => {
-        cb.checked = false;
-        cb.parentElement.classList.remove('checked');
-      });
-    };
-
     modal.querySelector('#saveUserPolesBtn').onclick = async () => {
       const selected = Array.from(modal.querySelectorAll('input[name="editPoleAccess"]:checked')).map(cb => Number(cb.value));
+      const newTitle = document.getElementById('editRoleTitle').value.trim();
+
+      if (newTitle) {
+        await Permissions.setCustomTitle(userId, login, newTitle);
+      }
       await Permissions.setAllowedPoles(userId, login, selected);
+      Notify.success(`Permissions et titre enregistrés pour ${login} : [${selected.join(', ')}]`);
+      close();
+      const container = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (container) RolesModule.render(container);
+    };
+  },
       Notify.success(`Permissions enregistrées pour ${login} : [${selected.join(', ')}]`);
       close();
       const container = document.getElementById('poleContainer') || document.getElementById('mainContent');
@@ -643,37 +695,24 @@ const RolesModule = {
       return;
     }
 
-    const client = SupabaseClient.client;
-    let roles = [];
-    if (client) {
-      const { data } = await client.from('roles').select('id, code, name').order('name');
-      const filtered = (data || []).filter(r => this.OFFICIAL_ROLE_CODES.includes(r.code));
-      if (filtered && filtered.length > 0) {
-        const officialMap = new Map(this.DEFAULT_ROLES.map(r => [r.code, r]));
-        roles = filtered.map(r => {
-          const def = officialMap.get(r.code);
-          return def ? { ...r, name: def.name } : r;
-        });
-      } else {
-        roles = this.DEFAULT_ROLES;
-      }
-    } else {
-      roles = this.DEFAULT_ROLES;
-    }
+    const currentTitle = Permissions.getUserTitle({ id: userId, login: userLogin, role_name: userRoleCode });
+    const currentPoles = Permissions.getAllowedPoles({ id: userId, login: userLogin });
+    const isTargetSuper = Boolean(isOrig || userRoleCode === 'superadmin' || Permissions.isSuperAdmin({ id: userId, login: userLogin }));
 
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop open';
     modal.innerHTML = `
-      <div class="modal-dialog">
+      <div class="modal-dialog" style="max-width: 620px;">
         <div class="modal-header">
-          <h3>🔑 Modifier les Identifiants : ${userLogin}</h3>
+          <h3>🔑 Modifier les Identifiants &amp; Accès : ${userLogin}</h3>
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body">
-          <form id="resetCredentialsForm">
-            <div class="alert-banner info" style="margin-bottom: 1.25rem;">
+          <form id="resetCredentialsForm" onsubmit="return false;">
+            <div class="alert-banner warning" style="margin-bottom: 1.25rem; font-size: 0.85rem; border-left: 4px solid #ea580c; background: #fff7ed; color: #9a3412;">
               <div>
-                👑 <strong>SuperAdministration :</strong> Vous pouvez redéfinir le login, le rôle et le mot de passe de cet administrateur. Il pourra se connecter directement avec ces identifiants sans obligation de changer son mot de passe.
+                <strong>⚠️ Rappel de Sécurité &amp; Responsabilité Nominative :</strong>
+                <div>Chaque compte est personnel à cet administrateur. Le prêt ou le partage de compte est interdit afin de préserver la traçabilité de chaque encaissement et dépense.</div>
               </div>
             </div>
 
@@ -690,26 +729,53 @@ const RolesModule = {
             </div>
 
             <div class="form-group">
-              <label>Rôle Kermesse *</label>
-              <select id="resetRole" class="form-control" ${isOrig ? 'disabled' : ''}>
-                <option value="superadmin" ${userRoleCode === 'superadmin' ? 'selected' : ''}>👑 SuperAdministrateur (Accès Global Total)</option>
-                ${roles.filter(r => r.code !== 'superadmin').map(r => `
-                  <option value="${r.code}" ${r.code === userRoleCode ? 'selected' : ''}>${r.name}</option>
-                `).join('')}
-              </select>
-              ${isOrig ? '<div class="form-hint">Le rôle du SuperAdministrateur original est immuable.</div>' : ''}
+              <label>Fonction / Rôle Descriptif *</label>
+              <input type="text" id="resetRoleTitle" class="form-control" required value="${currentTitle.replace(/"/g, '&quot;')}" placeholder="Ex: Co-responsable Buvette & Caisses, Trésorier...">
+              <div class="form-hint">Intitulé personnalisé affiché sur le badge et les journaux de traçabilité.</div>
+            </div>
+
+            <div class="form-group" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 0.85rem; border-radius: 8px;">
+              <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #1e293b; cursor: pointer;">
+                <input type="checkbox" id="resetIsSuperAdmin" ${isTargetSuper ? 'checked' : ''} ${isOrig ? 'disabled' : ''} onchange="RolesModule.handleSuperAdminToggle(this.checked, 'reset')">
+                <span>👑 Accès SuperAdministrateur (Tous les 9 Pôles + Supervision globale)</span>
+              </label>
+              ${isOrig ? '<div class="form-hint" style="margin-left: 1.7rem; color: #b45309;">Le statut du SuperAdministrateur original est immuable.</div>' : '<div class="form-hint" style="margin-left: 1.7rem;">Cochez pour donner accès complet à l\'ensemble des 9 pôles et caisses.</div>'}
+            </div>
+
+            <div class="form-group" id="resetPolesGroup">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label style="margin-bottom: 0; font-weight: 600;">🎯 Pôles d'Activité Autorisés (Multi-Pôles) *</label>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 6px;" onclick="RolesModule.toggleAllPoles('reset', true)">Tout cocher</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 6px;" onclick="RolesModule.toggleAllPoles('reset', false)">Tout décocher</button>
+                </div>
+              </div>
+              <div class="form-hint" style="margin-bottom: 0.5rem;">Cochez le ou les pôles auxquels cet administrateur est affecté.</div>
+
+              <div class="pole-checkbox-grid" id="resetPolesGrid">
+                ${Permissions.POLES_CONFIG.map(p => {
+                  const isChecked = isTargetSuper || currentPoles.includes(p.num);
+                  return `
+                    <label class="pole-checkbox-item ${isChecked ? 'checked' : ''}">
+                      <input type="checkbox" name="resetPoleAccess" value="${p.num}" ${isChecked ? 'checked' : ''} ${isTargetSuper ? 'disabled' : ''} onchange="this.parentElement.classList.toggle('checked', this.checked)">
+                      <span style="font-size: 1.15rem;">${p.icon}</span>
+                      <span class="pole-name">Pôle ${p.num} : ${p.name.split('&')[0].trim()}</span>
+                    </label>
+                  `;
+                }).join('')}
+              </div>
             </div>
 
             <div class="form-group">
               <label>Nouveau mot de passe (laisser vide pour ne pas changer)</label>
-              <input type="text" id="resetPassword" class="form-control" placeholder="Entrez un nouveau mot de passe">
-              <div class="form-hint">L'administrateur utilisera directement ce mot de passe sans être sollicité pour le changer.</div>
+              <input type="text" id="resetPassword" class="form-control" placeholder="Entrez un nouveau mot de passe (min. 6 caractères)">
+              <div class="form-hint">L'administrateur utilisera directement ce mot de passe sans obligation de le changer.</div>
             </div>
           </form>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary close-btn">Annuler</button>
-          <button class="btn btn-primary" id="saveCredentialsBtn">Enregistrer les Identifiants</button>
+          <button class="btn btn-primary" id="saveCredentialsBtn">💾 Enregistrer les Modifications</button>
         </div>
       </div>
     `;
@@ -723,7 +789,8 @@ const RolesModule = {
     modal.querySelector('#saveCredentialsBtn').onclick = async () => {
       const newLogin = document.getElementById('resetLogin').value.trim();
       const newFullName = document.getElementById('resetFullName').value.trim();
-      const newRoleCode = document.getElementById('resetRole').value;
+      const newTitle = document.getElementById('resetRoleTitle').value.trim();
+      const isSuper = document.getElementById('resetIsSuperAdmin').checked;
       const newPassword = document.getElementById('resetPassword').value.trim();
 
       if (!newLogin) {
@@ -736,9 +803,22 @@ const RolesModule = {
         return;
       }
 
+      const selectedPoles = isSuper
+        ? [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        : Array.from(modal.querySelectorAll('input[name="resetPoleAccess"]:checked')).map(cb => Number(cb.value));
+
+      if (!isSuper && selectedPoles.length === 0) {
+        Notify.error('Veuillez cocher au moins un pôle autorisé (ou activer SuperAdmin).');
+        return;
+      }
+
       const saveBtn = modal.querySelector('#saveCredentialsBtn');
       saveBtn.disabled = true;
       saveBtn.textContent = 'Enregistrement...';
+
+      const finalTitle = newTitle || (isSuper ? 'SuperAdministrateur' : `Admin Pôle(s) ${selectedPoles.join(', ')}`);
+      const client = SupabaseClient.client;
+      const targetRoleCode = isSuper ? 'superadmin' : 'admin_stands';
 
       try {
         if (client) {
@@ -747,7 +827,7 @@ const RolesModule = {
             p_new_login: newLogin,
             p_new_password: newPassword || null,
             p_new_name: newFullName,
-            p_new_role_code: isOrig ? null : newRoleCode,
+            p_new_role_code: isOrig ? null : targetRoleCode,
             p_admin_login: currentUser?.login || 'SuperAdmin'
           });
 
@@ -759,25 +839,26 @@ const RolesModule = {
               must_change_password: false,
               updated_at: new Date().toISOString()
             };
-            if (!isOrig && roles.length > 0) {
-              const matchedRole = roles.find(r => r.code === newRoleCode);
-              if (matchedRole) updatePayload.role_id = matchedRole.id;
-            }
             const { error: directErr } = await client.from('app_users').update(updatePayload).eq('id', userId);
             if (directErr) throw directErr;
-
           } else if (data && !data.success) {
             Notify.error(data.message);
             saveBtn.disabled = false;
-            saveBtn.textContent = 'Enregistrer les Identifiants';
+            saveBtn.textContent = '💾 Enregistrer les Modifications';
             return;
           }
         }
+
+        // Sauvegarder l'intitulé descriptif et les pôles
+        await Permissions.setCustomTitle(userId, newLogin, finalTitle);
+        await Permissions.setAllowedPoles(userId, newLogin, selectedPoles);
 
         // Si le compte modifié est celui actuellement connecté, mettre à jour la session
         if (currentUser && (currentUser.id === userId || currentUser.login.toLowerCase() === userLogin.toLowerCase())) {
           currentUser.login = newLogin;
           currentUser.full_name = newFullName;
+          currentUser.custom_title = finalTitle;
+          currentUser.role_name = finalTitle;
           if (newPassword) localStorage.setItem('lc_mounir_pwd', newPassword);
           Auth.setCurrentUser(currentUser);
           const nameEl = document.getElementById('headerUserName');
@@ -786,13 +867,14 @@ const RolesModule = {
           if (avatarEl) avatarEl.textContent = newLogin.charAt(0).toUpperCase();
         }
 
-        Notify.success(`Identifiants de ${newLogin} enregistrés avec succès.`);
+        Notify.success(`Identifiants et permissions de ${newLogin} enregistrés avec succès (${finalTitle}).`);
         close();
-        RolesModule.render(document.getElementById('mainContent'));
+        const container = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (container) RolesModule.render(container);
       } catch (err) {
         Notify.error('Erreur: ' + (err.message || 'Impossible de mettre à jour.'));
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Enregistrer les Identifiants';
+        saveBtn.textContent = '💾 Enregistrer les Modifications';
       }
     };
   },

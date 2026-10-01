@@ -117,7 +117,7 @@ const Permissions = {
 
   isSuperAdmin(user = Auth.getCurrentUser()) {
     if (!user) return false;
-    return Boolean(user.is_original_superadmin || user.login?.toLowerCase() === 'mounir' || user.role_code === this.ROLES.SUPERADMIN);
+    return Boolean(user.is_original_superadmin || user.login?.toLowerCase() === 'mounir' || user.role_code === this.ROLES.SUPERADMIN || user.is_superadmin === true);
   },
 
   getCustomPolesMap() {
@@ -129,7 +129,65 @@ const Permissions = {
     }
   },
 
-  // Synchronisation des permissions de pôles depuis Supabase (audit logs)
+  getCustomTitlesMap() {
+    try {
+      const data = localStorage.getItem('lc_user_titles_map');
+      return data ? JSON.parse(data) : {};
+    } catch {
+      return {};
+    }
+  },
+
+  // Obtient le titre ou rôle descriptif d'un utilisateur
+  getUserTitle(user = Auth.getCurrentUser()) {
+    if (!user) return 'Invité';
+    if (this.isSuperAdmin(user)) return '👑 SuperAdministrateur';
+    const titlesMap = this.getCustomTitlesMap();
+    const custom = (user.id && titlesMap[user.id]) || (user.login && titlesMap[user.login.toLowerCase()]);
+    if (custom) return custom;
+    if (user.custom_title) return user.custom_title;
+    if (user.role_name && user.role_name !== 'Non défini') return user.role_name;
+
+    // Déduction selon les pôles autorisés si aucun titre personnalisé n'a été saisi
+    const poles = this.getAllowedPoles(user);
+    if (poles.length > 0) {
+      const names = poles.filter(p => typeof p === 'number').map(p => `Pôle ${p}`);
+      return `Admin ${names.join(', ')}`;
+    }
+    return user.role_code || 'Administrateur';
+  },
+
+  // Enregistre l'intitulé ou rôle descriptif personnalisé
+  async setCustomTitle(userId, login, title) {
+    if (!title && title !== '') return;
+    const cleanTitle = (title || '').trim();
+    const map = this.getCustomTitlesMap();
+    if (userId) map[userId] = cleanTitle;
+    if (login) map[login.toLowerCase()] = cleanTitle;
+    localStorage.setItem('lc_user_titles_map', JSON.stringify(map));
+
+    const currentUser = Auth.getCurrentUser();
+    if (currentUser && (currentUser.id === userId || currentUser.login?.toLowerCase() === login?.toLowerCase())) {
+      currentUser.custom_title = cleanTitle;
+      currentUser.role_name = cleanTitle;
+      Auth.setCurrentUser(currentUser);
+    }
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        await client.from('activity_logs').insert([{
+          action: 'UPDATE_USER_TITLE',
+          entity_type: 'user',
+          login: currentUser?.login || 'SuperAdmin',
+          details: `Attribution de l'intitulé « ${cleanTitle} » à ${login}`,
+          new_values: { userId, login, title: cleanTitle }
+        }]);
+      } catch (e) {}
+    }
+  },
+
+  // Synchronisation des permissions de pôles et des intitulés descriptifs depuis Supabase (audit logs)
   async syncPolesFromCloud() {
     const client = SupabaseClient.client;
     if (!client) return;
@@ -137,20 +195,28 @@ const Permissions = {
     try {
       const { data, error } = await client
         .from('activity_logs')
-        .select('new_values, created_at')
-        .eq('action', 'UPDATE_POLE_PERMISSIONS')
+        .select('action, new_values, created_at')
+        .in('action', ['UPDATE_POLE_PERMISSIONS', 'UPDATE_USER_TITLE'])
         .order('created_at', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        const map = this.getCustomPolesMap();
+        const polesMap = this.getCustomPolesMap();
+        const titlesMap = this.getCustomTitlesMap();
+
         data.forEach(log => {
-          if (log.new_values && log.new_values.poles) {
+          if (log.action === 'UPDATE_POLE_PERMISSIONS' && log.new_values && log.new_values.poles) {
             const { userId, login, poles } = log.new_values;
-            if (userId) map[userId] = poles;
-            if (login) map[login.toLowerCase()] = poles;
+            if (userId) polesMap[userId] = poles;
+            if (login) polesMap[login.toLowerCase()] = poles;
+          } else if (log.action === 'UPDATE_USER_TITLE' && log.new_values && typeof log.new_values.title === 'string') {
+            const { userId, login, title } = log.new_values;
+            if (userId) titlesMap[userId] = title;
+            if (login) titlesMap[login.toLowerCase()] = title;
           }
         });
-        localStorage.setItem('lc_user_poles_map', JSON.stringify(map));
+
+        localStorage.setItem('lc_user_poles_map', JSON.stringify(polesMap));
+        localStorage.setItem('lc_user_titles_map', JSON.stringify(titlesMap));
       }
     } catch (e) {
       console.warn('[Permissions Cloud Sync Warning]', e);
