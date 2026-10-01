@@ -3,12 +3,241 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Connexion — Love and Charity (L&C) | Gestion de Kermesse</title>
-  <link rel="stylesheet" href="css/style.css?v=2.2">
-  <link rel="stylesheet" href="css/responsive.css?v=2.2">
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f172a">
+  <!-- Cache Control (Anti-Cache Mobile & GitHub Pages) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Connexion — Love and Charity (L&amp;C) | Gestion de Kermesse</title>
+  
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="apple-touch-icon" href="assets/logo.svg">
+  <link rel="stylesheet" href="css/style.css?v=5.8">
+  <link rel="stylesheet" href="css/responsive.css?v=5.8">
+  
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
+    /* ==========================================
+       SPLASH SCREEN STYLES (EXPÉRIENCE APPLICATION NATIVE)
+       ========================================== */
+    .app-splash-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      z-index: 999999;
+      background: radial-gradient(circle at 50% 36%, #1e1b4b 0%, #0f172a 45%, #030712 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      overflow: hidden;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1), filter 0.45s ease;
+    }
+
+    .splash-ambient-glow {
+      position: absolute;
+      width: 380px;
+      height: 380px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(220, 38, 38, 0.24) 0%, rgba(249, 115, 22, 0.1) 45%, transparent 70%);
+      top: 36%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      filter: blur(45px);
+      pointer-events: none;
+      animation: ambientPulse 3s ease-in-out infinite alternate;
+    }
+
+    @keyframes ambientPulse {
+      0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.7; }
+      100% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+    }
+
+    .splash-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 340px;
+      width: 100%;
+    }
+
+    .splash-icon-wrapper {
+      position: relative;
+      width: 104px;
+      height: 104px;
+      margin-bottom: 1.65rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .splash-ring {
+      position: absolute;
+      inset: -12px;
+      border-radius: 36px;
+      border: 2px solid rgba(220, 38, 38, 0.35);
+      animation: splashRingExpand 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+      pointer-events: none;
+    }
+
+    .splash-ring.ring-2 {
+      animation-delay: 0.7s;
+      border-color: rgba(249, 115, 22, 0.25);
+    }
+
+    @keyframes splashRingExpand {
+      0% { transform: scale(0.85); opacity: 0.85; }
+      100% { transform: scale(1.42); opacity: 0; }
+    }
+
+    .splash-app-icon {
+      width: 96px;
+      height: 96px;
+      background: #ffffff;
+      border-radius: 26px;
+      box-shadow: 0 20px 45px -10px rgba(220, 38, 38, 0.5), 0 8px 24px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      box-sizing: border-box;
+      animation: splashIconEntrance 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes splashIconEntrance {
+      0% { opacity: 0; transform: scale(0.5) translateY(28px); }
+      70% { transform: scale(1.06) translateY(-4px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .splash-logo-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .splash-text-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 100%;
+    }
+
+    .splash-app-title {
+      font-size: 1.55rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      color: #ffffff;
+      margin: 0 0 0.35rem 0;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      animation: splashFadeUp 0.6s 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .splash-app-subtitle {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: #94a3b8;
+      margin: 0 0 1.1rem 0;
+      letter-spacing: 0.03em;
+      animation: splashFadeUp 0.6s 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .splash-edition-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: #e2e8f0;
+      padding: 0.32rem 0.9rem;
+      border-radius: 9999px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      animation: splashFadeUp 0.6s 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .splash-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    .splash-loader-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
+      width: 100%;
+      animation: splashFadeUp 0.6s 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .splash-progress-track {
+      width: 175px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .splash-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #dc2626 0%, #f97316 60%, #ef4444 100%);
+      border-radius: 9999px;
+      box-shadow: 0 0 12px rgba(220, 38, 38, 0.9);
+      transition: width 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .splash-status-lbl {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #64748b;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      transition: color 0.3s ease;
+    }
+
+    .splash-skip-hint {
+      position: absolute;
+      bottom: 2.25rem;
+      font-size: 0.7rem;
+      color: #64748b;
+      opacity: 0.65;
+      letter-spacing: 0.04em;
+      animation: splashFadeUp 0.6s 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes splashFadeUp {
+      0% { opacity: 0; transform: translateY(16px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ==========================================
+       ÉCRAN ET FORMULAIRE DE CONNEXION
+       ========================================== */
     body {
       display: flex;
       align-items: center;
@@ -21,6 +250,7 @@
       box-sizing: border-box;
       -webkit-text-size-adjust: 100%;
     }
+
     .login-card {
       background: #ffffff;
       border-radius: 20px;
@@ -30,7 +260,18 @@
       padding: 2.25rem 1.75rem;
       text-align: center;
       box-sizing: border-box;
+      opacity: 0;
+      transform: translateY(28px) scale(0.96);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
     }
+
+    .login-card.is-revealed {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
     .login-logo {
       width: 85px;
       height: 85px;
@@ -38,6 +279,7 @@
       object-fit: contain;
       filter: drop-shadow(0 4px 10px rgba(220, 38, 38, 0.2));
     }
+
     .login-title {
       font-size: 1.3rem;
       font-weight: 800;
@@ -45,6 +287,7 @@
       line-height: 1.2;
       margin-bottom: 0.25rem;
     }
+
     .login-subtitle {
       font-size: 0.82rem;
       color: var(--primary, #dc2626);
@@ -53,12 +296,15 @@
       letter-spacing: 0.06em;
       margin-bottom: 1.75rem;
     }
+
     .login-form {
       text-align: left;
     }
+
     .login-form .form-group {
       margin-bottom: 1.15rem;
     }
+
     .login-form label {
       font-size: 0.85rem;
       font-weight: 700;
@@ -68,6 +314,7 @@
       align-items: center;
       gap: 0.4rem;
     }
+
     .login-form .form-control {
       width: 100%;
       padding: 0.75rem 1rem;
@@ -78,19 +325,23 @@
       transition: all 0.2s ease;
       box-sizing: border-box;
     }
+
     .login-form .form-control:focus {
       background: #ffffff;
       border-color: var(--primary, #dc2626);
       box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
       outline: none;
     }
+
     .password-input-wrapper {
       position: relative;
       width: 100%;
     }
+
     .password-input-wrapper .form-control {
       padding-right: 46px;
     }
+
     .btn-toggle-pwd {
       position: absolute;
       right: 8px;
@@ -106,6 +357,7 @@
       align-items: center;
       justify-content: center;
     }
+
     .login-btn {
       width: 100%;
       padding: 0.85rem;
@@ -126,16 +378,19 @@
       gap: 0.5rem;
       min-height: 48px;
     }
+
     .login-btn:hover {
       background: #b91c1c;
       transform: translateY(-1px);
     }
+
     .login-btn:disabled {
       background: #94a3b8;
       cursor: not-allowed;
       transform: none;
       box-shadow: none;
     }
+
     .login-footer {
       margin-top: 1.75rem;
       padding-top: 1rem;
@@ -149,6 +404,50 @@
 </head>
 <body>
 
+  <!-- ==========================================
+       SPLASH SCREEN NATIVE WEB APP LAUNCHER
+       ========================================== -->
+  <div id="appSplashScreen" class="app-splash-screen" onclick="skipSplash()">
+    <!-- Lueur d'ambiance néon en arrière-plan -->
+    <div class="splash-ambient-glow"></div>
+
+    <div class="splash-content">
+      <!-- Icône App Native iOS/Android en Squircle avec Anneaux Pulsants -->
+      <div class="splash-icon-wrapper">
+        <div class="splash-ring ring-1"></div>
+        <div class="splash-ring ring-2"></div>
+        <div class="splash-app-icon">
+          <img src="assets/logo.svg" alt="Love &amp; Charity" class="splash-logo-img">
+        </div>
+      </div>
+
+      <!-- Marque & Titres -->
+      <div class="splash-text-group">
+        <h1 class="splash-app-title">LOVE &amp; CHARITY</h1>
+        <p class="splash-app-subtitle">Gestion &amp; Contrôle de Kermesse</p>
+        
+        <div class="splash-edition-pill">
+          <span class="splash-dot"></span>
+          <span>Édition 2026 • Portail Opérationnel</span>
+        </div>
+      </div>
+
+      <!-- Barre de progression de lancement style App -->
+      <div class="splash-loader-wrap">
+        <div class="splash-progress-track">
+          <div class="splash-progress-fill" id="splashProgressFill"></div>
+        </div>
+        <div class="splash-status-lbl" id="splashStatusLbl">Démarrage du système...</div>
+      </div>
+    </div>
+
+    <!-- Touche rapide pour passer immédiatement -->
+    <div class="splash-skip-hint">Toucher l'écran pour passer</div>
+  </div>
+
+  <!-- ==========================================
+       CARTE DE CONNEXION PRINCIPALE
+       ========================================== -->
   <div class="login-card">
     <img src="assets/logo.svg" alt="Love and Charity Logo" class="login-logo">
     <h1 class="login-title">Love &amp; Charity</h1>
@@ -165,7 +464,6 @@
           class="form-control" 
           placeholder="Entrez votre identifiant" 
           required 
-          autofocus 
           autocomplete="username">
       </div>
 
@@ -201,21 +499,92 @@
 
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- Scripts -->
-  <script src="js/config.js"></script>
-  <script src="js/notify.js"></script>
-  <script src="js/supabase.js"></script>
-  <script src="js/audit.js"></script>
-  <script src="js/offline.js"></script>
-  <script src="js/auth.js"></script>
+  <!-- Scripts Core -->
+  <script src="js/config.js?v=5.8"></script>
+  <script src="js/notify.js?v=5.8"></script>
+  <script src="js/supabase.js?v=5.8"></script>
+  <script src="js/audit.js?v=5.8"></script>
+  <script src="js/offline.js?v=5.8"></script>
+  <script src="js/auth.js?v=5.8"></script>
 
   <script>
+    let splashClosed = false;
+
+    // Fermeture fluide de l'animation Splash Screen et affichage du formulaire
+    function finishSplash() {
+      if (splashClosed) return;
+      splashClosed = true;
+
+      const splash = document.getElementById('appSplashScreen');
+      const loginCard = document.querySelector('.login-card');
+
+      if (splash) {
+        splash.style.opacity = '0';
+        splash.style.transform = 'scale(1.06)';
+        splash.style.filter = 'blur(8px)';
+        splash.style.pointerEvents = 'none';
+        setTimeout(() => {
+          splash.style.display = 'none';
+        }, 450);
+      }
+
+      if (loginCard) {
+        loginCard.classList.add('is-revealed');
+        // Prise en main directe du curseur sur le champ identifiant
+        setTimeout(() => {
+          const loginInp = document.getElementById('loginInput');
+          if (loginInp && !loginInp.value) {
+            loginInp.focus();
+          }
+        }, 250);
+      }
+    }
+
+    // Permet de passer l'animation instantanément au toucher / clic
+    window.skipSplash = function() {
+      finishSplash();
+    };
+
     window.addEventListener('DOMContentLoaded', () => {
       SupabaseClient.init();
+
+      // Vérifier si l'utilisateur est déjà connecté (sauf en mode prévisualisation)
+      const urlParams = new URLSearchParams(window.location.search);
+      const isPreview = urlParams.has('preview');
       const user = Auth.getCurrentUser();
-      if (user) {
+
+      if (user && !isPreview) {
+        const splash = document.getElementById('appSplashScreen');
+        if (splash) splash.style.display = 'none';
         window.location.href = 'index.html';
+        return;
       }
+
+      // Lancement de la barre de progression native
+      const progressBar = document.getElementById('splashProgressFill');
+      const statusLbl = document.getElementById('splashStatusLbl');
+
+      requestAnimationFrame(() => {
+        if (progressBar) progressBar.style.width = '100%';
+      });
+
+      // Étape 2 : statut prêt
+      setTimeout(() => {
+        if (statusLbl && !splashClosed) {
+          statusLbl.textContent = 'Connexion sécurisée prête';
+          statusLbl.style.color = '#94a3b8';
+        }
+      }, 700);
+
+      // Étape 3 : révélation fluide de la carte de connexion
+      setTimeout(() => {
+        finishSplash();
+      }, 1300);
+
+      // Failsafe de sécurité
+      setTimeout(() => {
+        finishSplash();
+      }, 2500);
     });
 
     function togglePasswordVisibility() {
