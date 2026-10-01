@@ -46,7 +46,7 @@ const LocationsModule = {
     this.cleanup();
 
     container.innerHTML = `
-      <div class="stadium-workspace mobile-view-3d" id="stadiumWorkspaceRoot">
+      <div class="stadium-workspace" id="stadiumWorkspaceRoot">
         <!-- Barre supérieure de KPI -->
         <div class="stadium-kpi-bar">
           <div class="stat-card">
@@ -54,7 +54,7 @@ const LocationsModule = {
             <div class="stat-value" style="font-size: 1.15rem; color: var(--primary);">🏟️ Stade de Mbao (Dakar)</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Dimensions Aire de Jeu</div>
+            <div class="stat-label">Aire Officielle</div>
             <div class="stat-value" style="font-size: 1.15rem; color: #16a34a;">105m × 68m (Pelouse Mbao)</div>
           </div>
           <div class="stat-card">
@@ -63,38 +63,28 @@ const LocationsModule = {
           </div>
           <div class="stat-card">
             <div class="stat-label">Mode d'Aménagement</div>
-            <div class="stat-value" style="font-size: 1.15rem; color: #2563eb;">3D Tactile &amp; Plein Écran</div>
+            <div class="stat-value" style="font-size: 1.15rem; color: #2563eb;">Vue Plan &amp; 3D Tactile</div>
           </div>
         </div>
 
-        <!-- Sélecteur d'onglets pour Mobile & Tablette (Stade 3D vs Inventaire) -->
-        <div class="stadium-mobile-tab-bar" id="stadiumMobileTabBar">
-          <button class="stadium-mobile-tab-btn active" id="btnStadTab3D" onclick="LocationsModule.switchMobileView('3d')">
-            🏟️ Maquette 3D du Stade
-          </button>
-          <button class="stadium-mobile-tab-btn" id="btnStadTabCatalog" onclick="LocationsModule.switchMobileView('catalog')">
-            📦 Structures &amp; Stands (<span id="mobilePlacedCount">0 / 0</span>)
-          </button>
-        </div>
-
-        <!-- Layout principal : Catalogue à gauche + Maquette 3D à droite -->
+        <!-- Layout principal : Catalogue & Maquette (Côté à côte sur PC/Tablette, superposés sur Mobile) -->
         <div class="stadium-main-layout">
           
-          <!-- Tiroir / Catalogue des Éléments -->
+          <!-- Catalogue des Éléments & Stands -->
           <div class="stadium-catalog-card" id="stadiumCatalogCard">
             <div class="stadium-catalog-header">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <h4 style="margin: 0; font-size: 1rem; color: var(--gray-900);">📦 Éléments à Implanter</h4>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h4 style="margin: 0; font-size: 1rem; color: var(--gray-900);">📦 Structures &amp; Stands</h4>
                 <div style="display: flex; gap: 0.35rem;">
-                  <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('decoration')" title="Ajouter d'autres structures ou manèges">
-                    ➕ Créer
+                  <button class="btn btn-secondary btn-sm" onclick="App.navigateTo('stands')" title="Créer un nouveau stand">
+                    🎪 Stand
                   </button>
-                  <button class="btn-icon" id="btnCloseDrawer" style="display: none;" onclick="LocationsModule.toggleCatalogDrawer()" title="Replier le tiroir">
-                    ◀️
+                  <button class="btn btn-primary btn-sm" onclick="App.navigateTo('decoration')" title="Ajouter une structure festive">
+                    ➕ Créer
                   </button>
                 </div>
               </div>
-              <input type="text" id="stadiumSearchInput" class="form-control" style="font-size: 0.82rem; padding: 0.4rem 0.6rem;" placeholder="Filtrer stand, manège, resto..." oninput="LocationsModule.filterCatalog()">
+              <input type="text" id="stadiumSearchInput" class="form-control" style="font-size: 0.85rem; padding: 0.45rem 0.65rem;" placeholder="Filtrer stand, manège, resto..." oninput="LocationsModule.filterCatalog()">
             </div>
 
             <div class="stadium-catalog-list" id="stadiumCatalogList">
@@ -103,7 +93,7 @@ const LocationsModule = {
               </div>
             </div>
 
-            <div style="padding: 0.75rem; border-top: 1px solid var(--gray-200); background: var(--gray-50); display: flex; gap: 0.5rem;">
+            <div style="padding: 0.75rem 1rem; border-top: 1px solid var(--gray-200); background: var(--gray-50); display: flex; gap: 0.5rem;">
               <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="LocationsModule.saveLayoutToServer()">
                 💾 Enregistrer
               </button>
@@ -118,53 +108,23 @@ const LocationsModule = {
 
           <!-- Fenêtre de Rendu 3D du Stade -->
           <div class="stadium-viewport-card" id="stadiumViewportCard">
-            <!-- Barre de caméras préréglées mobile & tablette -->
-            <div class="stadium-mobile-camera-bar">
-              <button class="stadium-cam-chip active" id="mobCam3D" onclick="LocationsModule.setCameraView('perspective')">
-                🏟️ 3D Tribune
-              </button>
-              <button class="stadium-cam-chip" id="mobCamTop" onclick="LocationsModule.setCameraView('top')">
-                🛰️ Vue Ciel (Plan)
-              </button>
-              <button class="stadium-cam-chip" id="mobCamGate" onclick="LocationsModule.setCameraView('entrance')">
-                🚶 Entrée Sud
-              </button>
-              <button class="stadium-cam-chip" id="mobCamBenches" onclick="LocationsModule.setCameraView('benches')">
-                🪑 Bancs Touche
-              </button>
-              <button class="stadium-cam-chip" style="margin-left: auto; background: rgba(37,99,235,0.5); border-color: #60a5fa;" onclick="LocationsModule.toggleFullscreen()">
-                ⛶ Plein Écran
-              </button>
-            </div>
-
-            <!-- Barre d'outils supérieure du viewer (Desktop) -->
+            <!-- Barre d'outils unifiée & épurée -->
             <div class="stadium-viewport-header">
-              <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                <span style="font-weight: 600; font-size: 0.92rem;">🏟️ Maquette 3D — Stade Municipal de Mbao</span>
-                <span class="badge badge-success" style="font-size: 0.72rem;">Pelouse + Piste + Tribune</span>
-                
-                <!-- Sélecteur d'Ambiance Mbao -->
-                <div style="display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.5rem;">
-                  <button class="stadium-tool-btn" id="btnAtmoDay" onclick="LocationsModule.setAtmosphere('day')" title="Plein Soleil de Dakar">
-                    ☀️ Jour
-                  </button>
-                  <button class="stadium-tool-btn" id="btnAtmoSunset" onclick="LocationsModule.setAtmosphere('sunset')" title="Coucher de soleil sur Mbao">
-                    🌅 Couchant
-                  </button>
-                  <button class="stadium-tool-btn" id="btnAtmoNight" onclick="LocationsModule.setAtmosphere('night')" title="Nocturne kermesse avec projecteurs allumés">
-                    🌙 Nuit (Projecteurs)
-                  </button>
-                </div>
+              <div class="stadium-viewport-header-title">
+                <span>🏟️ Stade Municipal de Mbao</span>
               </div>
 
-              <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
-                <button class="stadium-tool-btn" id="btnToggleLabels" onclick="LocationsModule.toggleLabels()">
-                  🏷️ Étiquettes : ON
+              <div class="stadium-viewport-header-tools">
+                <button class="stadium-v-btn active" id="camViewTop" onclick="LocationsModule.setCameraView('top')" title="Vue Ciel (Plan 2D)">
+                  🛰️ Vue Ciel (Plan)
                 </button>
-                <button class="stadium-tool-btn" onclick="LocationsModule.centerView()">
-                  🎯 Recadrer
+                <button class="stadium-v-btn" id="camView3D" onclick="LocationsModule.setCameraView('perspective')" title="Vue 3D Tribune">
+                  🏟️ 3D Tribune
                 </button>
-                <button class="stadium-tool-btn btn-fullscreen-toggle" id="btnToggleFullscreen" onclick="LocationsModule.toggleFullscreen()">
+                <button class="stadium-v-btn" id="btnAtmoCycle" onclick="LocationsModule.toggleAtmosphereCycle()" title="Changer l'ambiance lumineuse (Jour / Couchant / Nuit)">
+                  ☀️ Jour
+                </button>
+                <button class="stadium-v-btn btn-fullscreen-toggle" id="btnToggleFullscreen" onclick="LocationsModule.toggleFullscreen()" title="Mode Plein Écran">
                   ⛶ Plein Écran
                 </button>
               </div>
@@ -172,66 +132,32 @@ const LocationsModule = {
 
             <!-- Conteneur WebGL Three.js -->
             <div class="stadium-canvas-container" id="stadiumCanvasContainer">
-              <!-- Bouton Tiroir pour mode plein écran -->
-              <button class="stadium-drawer-toggle-btn has-drawer-open" id="btnDrawerToggle" onclick="LocationsModule.toggleCatalogDrawer()">
-                📦 Éléments du Stade
-              </button>
-
-              <!-- Caméras Préréglées Flottantes -->
-              <div class="stadium-camera-tools">
-                <button class="stadium-tool-btn active" id="camView3D" onclick="LocationsModule.setCameraView('perspective')">
-                  🏟️ Vue Tribune (3D)
-                </button>
-                <button class="stadium-tool-btn" id="camViewTop" onclick="LocationsModule.setCameraView('top')">
-                  🛰️ Vue Ciel (Plan 2D)
-                </button>
-                <button class="stadium-tool-btn" id="camViewGate" onclick="LocationsModule.setCameraView('entrance')">
-                  🚶 Vue Entrée Mbao
-                </button>
-                <button class="stadium-tool-btn" id="camViewBenches" onclick="LocationsModule.setCameraView('benches')">
-                  🪑 Vue Bancs de Touche
-                </button>
-              </div>
-
-              <!-- Boussole / Indicateur d'orientation -->
-              <div class="stadium-compass-badge">
-                Nord ⬆️ | Tribune Mbao ⬅️ | Entrée Sud ⬇️
-              </div>
-
-              <!-- Pastille d'aide tactile mobile -->
-              <div class="stadium-touch-hint-pill">
-                <span>🖐️ 1 doigt pour pivoter • 2 doigts pour zoomer</span>
-              </div>
-
               <!-- Dock flottant de l'élément sélectionné -->
               <div class="stadium-selection-dock" id="stadiumSelectionDock" style="display: none;">
                 <div style="display: flex; align-items: center; gap: 0.6rem;">
                   <span id="dockItemIcon" style="font-size: 1.4rem;">🎪</span>
                   <div>
-                    <div id="dockItemTitle" style="font-weight: 600; font-size: 0.95rem;">Stand 1</div>
+                    <div id="dockItemTitle" style="font-weight: 700; font-size: 0.95rem;">Stand 1</div>
                     <div id="dockItemCoords" style="font-size: 0.75rem; color: #94a3b8; font-family: monospace;">X: 0m | Z: 0m</div>
                   </div>
                 </div>
 
                 <!-- Outils de déplacement précis -->
                 <div style="display: flex; gap: 0.25rem;">
-                  <button class="stadium-tool-btn" onclick="LocationsModule.nudgeActiveItem(-1, 0)" title="Déplacer vers la gauche">⬅️</button>
-                  <button class="stadium-tool-btn" onclick="LocationsModule.nudgeActiveItem(1, 0)" title="Déplacer vers la droite">➡️</button>
-                  <button class="stadium-tool-btn" onclick="LocationsModule.nudgeActiveItem(0, -1)" title="Avancer vers le haut">⬆️</button>
-                  <button class="stadium-tool-btn" onclick="LocationsModule.nudgeActiveItem(0, 1)" title="Reculer vers le bas">⬇️</button>
+                  <button class="stadium-v-btn" onclick="LocationsModule.nudgeActiveItem(-1, 0)" title="Gauche">⬅️</button>
+                  <button class="stadium-v-btn" onclick="LocationsModule.nudgeActiveItem(1, 0)" title="Droite">➡️</button>
+                  <button class="stadium-v-btn" onclick="LocationsModule.nudgeActiveItem(0, -1)" title="Haut">⬆️</button>
+                  <button class="stadium-v-btn" onclick="LocationsModule.nudgeActiveItem(0, 1)" title="Bas">⬇️</button>
                 </div>
 
-                <!-- Rotation 360 -->
+                <!-- Rotation -->
                 <div style="display: flex; gap: 0.3rem; align-items: center;">
-                  <span style="font-size: 0.75rem; color: #94a3b8;">Angle :</span>
-                  <button class="stadium-tool-btn" onclick="LocationsModule.rotateActiveItem(-45)" title="Pivoter de -45°">↺ 45°</button>
-                  <button class="stadium-tool-btn" onclick="LocationsModule.rotateActiveItem(45)" title="Pivoter de +45°">↻ 45°</button>
-                  <button class="stadium-tool-btn" onclick="LocationsModule.rotateActiveItem(90)" title="Pivoter de +90°">↻ 90°</button>
+                  <button class="stadium-v-btn" onclick="LocationsModule.rotateActiveItem(45)" title="Pivoter de 45°">↻ 45°</button>
                 </div>
 
                 <!-- Action Retirer -->
                 <button class="btn btn-secondary btn-sm danger" onclick="LocationsModule.unplaceActiveItem()" title="Remettre dans l'inventaire">
-                  🗑️ Retirer du terrain
+                  🗑️ Retirer
                 </button>
                 <button class="btn-icon" style="color: #cbd5e1;" onclick="LocationsModule.deselectItem()" title="Fermer">
                   ✕
@@ -248,18 +174,15 @@ const LocationsModule = {
     this.initThreeJS();
   },
 
-  switchMobileView(view) {
-    const root = document.getElementById('stadiumWorkspaceRoot');
-    if (!root) return;
-    root.classList.remove('mobile-view-3d', 'mobile-view-catalog');
-    root.classList.add(`mobile-view-${view}`);
-
-    document.getElementById('btnStadTab3D')?.classList.toggle('active', view === '3d');
-    document.getElementById('btnStadTabCatalog')?.classList.toggle('active', view === 'catalog');
-
-    if (view === '3d' && this.resizeHandler) {
-      setTimeout(() => this.resizeHandler(), 80);
-    }
+  toggleAtmosphereCycle() {
+    const modes = ['day', 'sunset', 'night'];
+    const labels = { day: '☀️ Jour', sunset: '🌅 Couchant', night: '🌙 Nuit' };
+    const current = this.currentAtmosphere || 'day';
+    const nextIdx = (modes.indexOf(current) + 1) % modes.length;
+    const nextMode = modes[nextIdx];
+    this.setAtmosphere(nextMode);
+    const btn = document.getElementById('btnAtmoCycle');
+    if (btn) btn.textContent = labels[nextMode];
   },
 
   async loadItems() {
@@ -389,14 +312,17 @@ const LocationsModule = {
   toggleFullscreen() {
     const root = document.getElementById('stadiumWorkspaceRoot');
     const btn = document.getElementById('btnToggleFullscreen');
-    const closeBtn = document.getElementById('btnCloseDrawer');
 
     this.isFullscreen = !this.isFullscreen;
 
     if (this.isFullscreen) {
       root?.classList.add('is-fullscreen');
-      if (btn) btn.innerHTML = '⛶ Quitter (Échap)';
-      if (closeBtn) closeBtn.style.display = 'inline-flex';
+      if (btn) btn.innerHTML = '✕ Quitter';
+
+      if (this.controls && typeof THREE.TOUCH !== 'undefined') {
+        this.controls.touches.ONE = THREE.TOUCH.ROTATE;
+        this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+      }
 
       // Tenter le vrai plein écran navigateur si permis
       try {
@@ -407,7 +333,11 @@ const LocationsModule = {
     } else {
       root?.classList.remove('is-fullscreen');
       if (btn) btn.innerHTML = '⛶ Plein Écran';
-      if (closeBtn) closeBtn.style.display = 'none';
+
+      if (window.innerWidth <= 768 && this.controls && typeof THREE.TOUCH !== 'undefined') {
+        this.controls.touches.ONE = THREE.TOUCH.NONE;
+        this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+      }
 
       try {
         if (document.fullscreenElement && document.exitFullscreen) {
@@ -456,11 +386,11 @@ const LocationsModule = {
     this.scene.background = new THREE.Color(0x93c5fd); // Ciel bleu Dakar
     this.scene.fog = new THREE.FogExp2(0x93c5fd, 0.0035);
 
-    // 2. Caméra Perspective (Champ de vision optimisé sur Smartphone et Tablette)
-    const fov = isMobile ? 54 : 45;
+    // 2. Caméra Perspective
+    const fov = isMobile ? 50 : 45;
     this.camera = new THREE.PerspectiveCamera(fov, width / height, 1, 1000);
     if (isMobile) {
-      this.camera.position.set(0, 92, 135);
+      this.camera.position.set(0, 160, 0.1); // Démarre en vue aérienne cadrée sur mobile
     } else {
       this.camera.position.set(0, 75, 110);
     }
@@ -483,11 +413,22 @@ const LocationsModule = {
       this.controls.maxDistance = 280;
       this.controls.target.set(0, 0, 0);
 
-      if (typeof THREE.TOUCH !== 'undefined') {
-        this.controls.touches = {
-          ONE: THREE.TOUCH.ROTATE,
-          TWO: THREE.TOUCH.DOLLY_PAN
-        };
+      if (isMobile) {
+        // Défilement de page libre au doigt sur smartphone sans blocage
+        this.renderer.domElement.style.touchAction = 'pan-y';
+        if (typeof THREE.TOUCH !== 'undefined') {
+          this.controls.touches = {
+            ONE: THREE.TOUCH.NONE,
+            TWO: THREE.TOUCH.DOLLY_ROTATE
+          };
+        }
+      } else {
+        if (typeof THREE.TOUCH !== 'undefined') {
+          this.controls.touches = {
+            ONE: THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_PAN
+          };
+        }
       }
     }
 
@@ -1565,35 +1506,18 @@ const LocationsModule = {
   // VUES DE CAMÉRA PRÉRÉGLÉES
   // =========================================================================
   setCameraView(viewType) {
-    document.querySelectorAll('.stadium-camera-tools .stadium-tool-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.stadium-cam-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('#camViewTop, #camView3D').forEach(b => b?.classList.remove('active'));
 
     const isMobile = window.innerWidth <= 768;
 
-    if (viewType === 'perspective') {
+    if (viewType === 'perspective' || viewType === '3d') {
       document.getElementById('camView3D')?.classList.add('active');
-      document.getElementById('mobCam3D')?.classList.add('active');
-      this.controls.target.set(0, 0, 0);
-      if (isMobile) {
-        this.camera.position.set(0, 92, 135);
-      } else {
-        this.camera.position.set(0, 75, 110);
-      }
+      if (this.controls) this.controls.target.set(0, 0, 0);
+      if (this.camera) this.camera.position.set(0, 75, 110);
     } else if (viewType === 'top') {
       document.getElementById('camViewTop')?.classList.add('active');
-      document.getElementById('mobCamTop')?.classList.add('active');
-      this.controls.target.set(0, 0, 0);
-      this.camera.position.set(0, isMobile ? 180 : 160, 0.1);
-    } else if (viewType === 'entrance') {
-      document.getElementById('camViewGate')?.classList.add('active');
-      document.getElementById('mobCamGate')?.classList.add('active');
-      this.controls.target.set(0, 1.5, 0);
-      this.camera.position.set(0, 3, 68); // Devant l'arche Sud
-    } else if (viewType === 'benches') {
-      document.getElementById('camViewBenches')?.classList.add('active');
-      document.getElementById('mobCamBenches')?.classList.add('active');
-      this.controls.target.set(0, 1.5, -20);
-      this.camera.position.set(0, 4, -45); // Devant les bancs de touche face à la pelouse
+      if (this.controls) this.controls.target.set(0, 0, 0);
+      if (this.camera) this.camera.position.set(0, isMobile ? 160 : 150, 0.1);
     }
   },
 

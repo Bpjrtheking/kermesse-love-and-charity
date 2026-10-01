@@ -646,18 +646,19 @@ html, body {
   }
 
   .stadium-viewport-card {
-    min-height: 380px !important;
-    height: 52vh !important;
-    max-height: 500px !important;
+    min-height: 320px !important;
+    height: 340px !important;
+    max-height: 360px !important;
   }
 
   .stadium-canvas-container {
     height: 100% !important;
+    touch-action: pan-y !important;
   }
 
   .stadium-catalog-card {
     width: 100% !important;
-    max-height: 520px !important;
+    max-height: none !important;
   }
 
   .stadium-kpi-bar {

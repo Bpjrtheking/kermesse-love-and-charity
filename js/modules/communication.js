@@ -16,66 +16,65 @@ const CommunicationModule = {
 
   async render(container) {
     container.innerHTML = `
-      <div class="card">
-        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
-          <div class="card-title">
-            <span>📢</span> Pôle 1 : Communication & Affichage
+      <div class="comm-workspace">
+        <!-- En-tête héroïque spacieux et aéré -->
+        <div class="comm-hero-header">
+          <div class="comm-hero-text">
+            <h2>📢 Pôle 1 : Communication &amp; Affichage</h2>
+            <p>Planifiez et diffusez librement toutes vos campagnes, affiches et signalétiques. <strong>Capacité 100% illimitée</strong> sans aucun plafond.</p>
           </div>
-          <div class="card-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.openTemplatesModal()">
-              <span>📋</span> Modèles d'Actions Prêts
+          <div class="comm-hero-actions">
+            <button class="btn btn-secondary" onclick="CommunicationModule.openTemplatesModal()">
+              <span>📋</span> Modèles Prêts
             </button>
-            <button class="btn btn-primary btn-sm" onclick="CommunicationModule.openCreateModal()">
-              <span>➕</span> Nouvelle Action (Illimité)
+            <button class="btn btn-primary" onclick="CommunicationModule.openCreateModal()" style="background: #f97316; border-color: #ea580c;">
+              <span>➕</span> Nouvelle Action
             </button>
           </div>
         </div>
 
-        <div class="card-body">
-          <!-- Bannière informative capacité illimitée -->
-          <div class="alert-banner info" style="margin-bottom: 1.25rem; font-size: 0.86rem; border-left: 5px solid #2563eb;">
-            <div>
-              ♾️ <strong>Pôle Communication & Affichage 100% Illimité :</strong> Planifiez et enregistrez autant d'actions, d'affiches, de flyers, de signalétiques et de campagnes que vous le souhaitez, <strong>sans aucun plafond ni restriction de nombre</strong>.
-            </div>
+        <!-- Grille de métriques KPI aérées et spacieuses -->
+        <div class="comm-stats-grid" id="commStatsGrid">
+          <div class="comm-stat-card">
+            <div class="stat-number" id="commTotalCount" style="color: #2563eb;">0</div>
+            <div class="stat-title">Actions Totales</div>
+            <div class="stat-sub">Supports planifiés</div>
           </div>
-
-          <!-- KPI Summary Strip (Responsive & Compact) -->
-          <div class="comm-stats-strip" id="commStatsGrid">
-            <div class="comm-stat-pill">
-              <div class="pill-val" id="commTotalCount" style="color: #2563eb;">0</div>
-              <div class="pill-lbl">♾️ Total Actions Comm</div>
-            </div>
-            <div class="comm-stat-pill">
-              <div class="pill-val" id="commPendingCount" style="color: #f59e0b;">0</div>
-              <div class="pill-lbl">🟡 À Faire / En cours</div>
-            </div>
-            <div class="comm-stat-pill">
-              <div class="pill-val" id="commDoneCount" style="color: #10b981;">0</div>
-              <div class="pill-lbl">🟢 Validés / Terminés</div>
-            </div>
-            <div class="comm-stat-pill">
-              <div class="pill-val" id="commStandsCount" style="color: #8b5cf6;">0</div>
-              <div class="pill-lbl">🪧 Stands Signalés</div>
-            </div>
+          <div class="comm-stat-card">
+            <div class="stat-number" id="commPendingCount" style="color: #f59e0b;">0</div>
+            <div class="stat-title">À Faire / En cours</div>
+            <div class="stat-sub">En préparation</div>
           </div>
+          <div class="comm-stat-card">
+            <div class="stat-number" id="commDoneCount" style="color: #10b981;">0</div>
+            <div class="stat-title">Validés / Prêts</div>
+            <div class="stat-sub">100% Terminés</div>
+          </div>
+          <div class="comm-stat-card">
+            <div class="stat-number" id="commStandsCount" style="color: #8b5cf6;">0</div>
+            <div class="stat-title">Stands Signalés</div>
+            <div class="stat-sub">Signalétique terrain</div>
+          </div>
+        </div>
 
-          <!-- Navigation Onglets Segmentés Moderne (Segmented Pill Control) -->
+        <!-- Onglets segmentés aérés -->
+        <div class="comm-seg-pills-wrap">
           <div class="comm-seg-pills">
             <button class="comm-seg-btn active" id="tabCommItems" onclick="CommunicationModule.switchTab('items')">
-              📋 Supports & Actions <span class="comm-seg-count" id="tabCommItemsCount">0</span>
+              📋 Supports &amp; Actions <span class="comm-seg-count" id="tabCommItemsCount">0</span>
             </button>
             <button class="comm-seg-btn" id="tabCommSignage" onclick="CommunicationModule.switchTab('signage')">
               🪧 Signalétique Stands <span class="comm-seg-count" id="tabCommSignageCount">0</span>
             </button>
             <button class="comm-seg-btn" id="tabCommWhatsapp" onclick="CommunicationModule.switchTab('whatsapp')">
-              📱 WhatsApp & Réseaux
+              📱 WhatsApp &amp; Réseaux
             </button>
           </div>
+        </div>
 
-          <!-- Tab Content Containers -->
-          <div id="commTabContent">
-            <div style="text-align: center; padding: 2rem; color: var(--gray-500);">Chargement du pôle Communication...</div>
-          </div>
+        <!-- Contenu de l'onglet actif -->
+        <div id="commTabContent">
+          <div style="text-align: center; padding: 2.5rem; color: var(--gray-500);">Chargement du pôle Communication...</div>
         </div>
       </div>
     `;
@@ -226,14 +225,14 @@ const CommunicationModule = {
     const done = this.items.filter(i => i.status === 'termine').length;
 
     container.innerHTML = `
-      <div class="toolbar" style="margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div class="comm-toolbar" style="margin-bottom: 1.25rem;">
         <!-- Ligne supérieure recherche et type -->
-        <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; align-items: center;">
-          <div class="search-box" style="flex: 1; min-width: 220px; position: relative;">
-            <input type="text" id="commSearch" class="form-control" placeholder="Rechercher action, lieu, responsable..." oninput="CommunicationModule.filterItems()">
+        <div style="display: flex; flex-wrap: wrap; gap: 0.65rem; justify-content: space-between; align-items: center;">
+          <div class="search-box" style="flex: 1; min-width: 240px; position: relative;">
+            <input type="text" id="commSearch" class="form-control" style="height: 42px; font-size: 0.88rem;" placeholder="Rechercher action, lieu, responsable..." oninput="CommunicationModule.filterItems()">
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <select id="commTypeFilter" class="form-control" style="font-size: 0.85rem; padding: 0.45rem 0.75rem; width: auto; min-width: 160px;" onchange="CommunicationModule.filterItems()">
+            <select id="commTypeFilter" class="form-control" style="height: 42px; font-size: 0.86rem; width: auto; min-width: 170px;" onchange="CommunicationModule.filterItems()">
               <option value="">Tous les supports</option>
               <option value="affiche">🖼️ Affiches</option>
               <option value="flyer">📄 Flyers</option>
@@ -248,16 +247,16 @@ const CommunicationModule = {
 
         <!-- Puces de filtres tactiles rapides par statut -->
         <div class="comm-filter-chips">
-          <button class="comm-filter-chip ${this.currentStatusFilter === '' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('')">
+          <button class="comm-filter-chip ${this.currentStatusFilter === '' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('', this)">
             Tous (${total})
           </button>
-          <button class="comm-filter-chip ${this.currentStatusFilter === 'a_faire' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('a_faire')">
+          <button class="comm-filter-chip ${this.currentStatusFilter === 'a_faire' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('a_faire', this)">
             ⚪ À faire (${pending})
           </button>
-          <button class="comm-filter-chip ${this.currentStatusFilter === 'en_cours' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('en_cours')">
+          <button class="comm-filter-chip ${this.currentStatusFilter === 'en_cours' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('en_cours', this)">
             🟡 En cours (${inProgress})
           </button>
-          <button class="comm-filter-chip ${this.currentStatusFilter === 'termine' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('termine')">
+          <button class="comm-filter-chip ${this.currentStatusFilter === 'termine' ? 'active' : ''}" onclick="CommunicationModule.setStatusFilter('termine', this)">
             🟢 Terminés (${done})
           </button>
         </div>
@@ -269,10 +268,12 @@ const CommunicationModule = {
     `;
   },
 
-  setStatusFilter(status) {
+  setStatusFilter(status, btnElement) {
     this.currentStatusFilter = status;
     document.querySelectorAll('.comm-filter-chip').forEach(c => c.classList.remove('active'));
-    event?.target?.classList?.add('active');
+    if (btnElement) {
+      btnElement.classList.add('active');
+    }
     this.filterItems();
   },
 
