@@ -754,7 +754,7 @@ const CaisseEntreeModule = {
               🎟️ <span>Vente Entrées</span>
             </button>
             <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'config' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('config')">
-              ⚙️ <span>Tarifs &amp; Billets</span> <span class="subtab-count" data-tab-count="config">${this.entryCatalog.length}</span>
+              ⚙️ <span>Tarifs</span> <span class="subtab-count" data-tab-count="config">${this.entryCatalog.length}</span>
             </button>
             <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('expenses')">
               💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
@@ -1937,7 +1937,7 @@ const CaisseJeuxModule = {
               💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
             </button>
             <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('journal')">
-              🧾 <span>Journal Ventes</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
+              🧾 <span>Journal</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
             </button>
             <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('closure')">
               🔒 <span>Clôture</span>
@@ -2144,11 +2144,11 @@ const CaisseJeuxModule = {
                     <!-- 2. DÉTAILS ET NOM DU JEU EN-DESSOUS -->
                     <div class="card-body">
                       <div class="pos-card-top-row">
-                        <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.7rem; padding: 1px 6px;">
+                        <span class="stand-tag" style="background-color: ${standColor}15; color: ${standColor}; border-color: ${standColor}; font-size: 0.7rem; padding: 1px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%;" title="${standName}">
                           ${standName}
                         </span>
                         <div class="pos-card-price-badge">
-                          <div class="pos-card-price-val" style="color: var(--primary);">${price.toLocaleString()} F</div>
+                          <div class="pos-card-price-val" style="color: var(--primary); white-space: nowrap;">${price.toLocaleString()} F</div>
                         </div>
                       </div>
 
@@ -2837,7 +2837,7 @@ const CaisseJetonsModule = {
           <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
           <div class="caisse-subtabs-nav" id="caisseJetonsTabsNav">
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'change' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('change')">
-              🪙 <span>Émission &amp; Remboursement</span>
+              🪙 <span>Change &amp; Jetons</span>
             </button>
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('expenses')">
               💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
@@ -2936,57 +2936,57 @@ const CaisseJetonsModule = {
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+      <div class="caisse-jetons-actions-grid">
         
         <!-- ÉMISSION DE JETONS -->
-        <div class="card" style="border: 2px solid #f59e0b;">
-          <div class="card-header" style="background: #fef3c7;">
-            <h4 style="margin: 0; color: #b45309;">🪙 Remettre un Jeton (Manque de Monnaie)</h4>
+        <div class="card" style="border: 2px solid #f59e0b; margin-bottom: 0;">
+          <div class="card-header" style="background: #fef3c7; border-bottom: 1px solid #fde68a;">
+            <h4 style="margin: 0; color: #b45309; font-size: 0.98rem; font-weight: 800;">🪙 Remettre un Jeton (Manque de Monnaie)</h4>
           </div>
-          <div class="card-body">
-            <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem;">
-              En cas d'impossibilité de rendre la monnaie exacte, donnez un jeton au visiteur.
+          <div class="card-body" style="padding: 1rem;">
+            <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem; line-height: 1.45;">
+              En cas d'impossibilité de rendre la monnaie exacte, remettez un jeton physique au visiteur.
             </p>
             <div class="form-row">
               <div class="form-group">
-                <label>Valeur du Jeton</label>
-                <select id="jetonIssueVal" class="form-control">
+                <label style="font-weight: 700; font-size: 0.85rem;">Valeur du Jeton</label>
+                <select id="jetonIssueVal" class="form-control" style="font-weight: 700;">
                   ${this.tokenValues.map(v => `<option value="${v}">${v} Francs CFA</option>`).join('')}
                 </select>
               </div>
               <div class="form-group">
-                <label>Quantité</label>
-                <input type="number" id="jetonIssueQty" class="form-control" value="1" min="1">
+                <label style="font-weight: 700; font-size: 0.85rem;">Quantité</label>
+                <input type="number" id="jetonIssueQty" class="form-control" value="1" min="1" style="font-weight: 700;">
               </div>
             </div>
-            <button class="btn btn-primary" style="width: 100%; background: #d97706; border-color: #b45309;" onclick="CaisseJetonsModule.issueToken()">
+            <button class="btn btn-primary jeton-action-btn" style="background: #d97706; border-color: #b45309;" onclick="CaisseJetonsModule.issueToken()">
               🪙 Enregistrer la remise de jeton
             </button>
           </div>
         </div>
 
         <!-- REMBOURSEMENT JETONS -->
-        <div class="card" style="border: 2px solid #10b981;">
-          <div class="card-header" style="background: #dcfce7;">
-            <h4 style="margin: 0; color: #15803d;">💵 Rembourser en Espèces (Restitution Jeton)</h4>
+        <div class="card" style="border: 2px solid #10b981; margin-bottom: 0;">
+          <div class="card-header" style="background: #dcfce7; border-bottom: 1px solid #bbf7d0;">
+            <h4 style="margin: 0; color: #15803d; font-size: 0.98rem; font-weight: 800;">💵 Rembourser en Espèces (Restitution Jeton)</h4>
           </div>
-          <div class="card-body">
-            <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem;">
-              Le visiteur rapporte son jeton physique pour reprendre son liquide.
+          <div class="card-body" style="padding: 1rem;">
+            <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem; line-height: 1.45;">
+              Le visiteur rapporte son jeton physique pour récupérer son argent liquide.
             </p>
             <div class="form-row">
               <div class="form-group">
-                <label>Jeton rapporté</label>
-                <select id="jetonRefundVal" class="form-control">
+                <label style="font-weight: 700; font-size: 0.85rem;">Jeton rapporté</label>
+                <select id="jetonRefundVal" class="form-control" style="font-weight: 700;">
                   ${this.tokenValues.map(v => `<option value="${v}">${v} Francs CFA</option>`).join('')}
                 </select>
               </div>
               <div class="form-group">
-                <label>Quantité</label>
-                <input type="number" id="jetonRefundQty" class="form-control" value="1" min="1">
+                <label style="font-weight: 700; font-size: 0.85rem;">Quantité</label>
+                <input type="number" id="jetonRefundQty" class="form-control" value="1" min="1" style="font-weight: 700;">
               </div>
             </div>
-            <button class="btn btn-primary" style="width: 100%; background: #16a34a; border-color: #15803d;" onclick="CaisseJetonsModule.refundToken()">
+            <button class="btn btn-primary jeton-action-btn" style="background: #16a34a; border-color: #15803d;" onclick="CaisseJetonsModule.refundToken()">
               💵 Rembourser le liquide &amp; Reprendre le jeton
             </button>
           </div>
@@ -3383,7 +3383,7 @@ const CaisseRestaurationModule = {
               💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
             </button>
             <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('journal')">
-              🧾 <span>Journal Ventes</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
+              🧾 <span>Journal</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
             </button>
             <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('closure')">
               🔒 <span>Clôture</span>

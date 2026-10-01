@@ -608,8 +608,91 @@ html, body {
 
   .pos-catalog-grid {
     display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 0.6rem !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Cartes actions Caisse 3 Jetons : empilement vertical 100% largeur sur mobile */
+  .caisse-jetons-actions-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1.25rem !important;
+    width: 100% !important;
+  }
+
+  .jeton-action-btn {
+    width: 100% !important;
+    min-height: 46px !important;
+    font-size: 0.92rem !important;
+    font-weight: 800 !important;
+    border-radius: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+    padding: 0.65rem 0.85rem !important;
+  }
+
+  /* Stepper tactile compact au pouce sans rognage du bouton + */
+  .pos-stepper-box {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 2px 4px !important;
+    gap: 2px !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+  }
+
+  .pos-stepper-btn,
+  .pos-catalog-grid button.btn-sm.pos-stepper-btn,
+  .card button.btn-sm.pos-stepper-btn {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    flex: 0 0 30px !important;
+    border-radius: 6px !important;
+    font-size: 1.2rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .pos-stepper-center {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    text-align: center !important;
+    overflow: hidden !important;
+    padding: 0 2px !important;
+  }
+
+  .pos-stepper-count {
+    font-size: 1.05rem !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    display: block !important;
+  }
+
+  .pos-stepper-unit {
+    display: none !important; /* Libère 60px pour éviter tout rognage du bouton + */
+  }
+
+  .pos-card-price-val {
+    white-space: nowrap !important;
+    font-weight: 800 !important;
+    font-size: 0.95rem !important;
   }
 
   .pos-cart-panel {
@@ -929,15 +1012,15 @@ html, body {
   .tabs-nav,
   .caisse-subtabs-nav {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 4px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
     width: 100% !important;
     max-width: 100% !important;
-    padding: 4px !important;
+    padding: 5px !important;
     background: #f1f5f9 !important;
-    border-radius: 14px !important;
+    border-radius: 12px !important;
     box-sizing: border-box !important;
-    overflow-x: hidden !important;
+    overflow: visible !important;
     margin-bottom: 0.85rem !important;
     border: 1px solid #e2e8f0 !important;
   }
@@ -949,15 +1032,32 @@ html, body {
 
   .tab-btn,
   .caisse-subtab-btn {
-    min-height: 38px !important;
-    padding: 0.4rem 0.25rem !important;
-    font-size: 0.76rem !important;
+    min-height: 40px !important;
+    padding: 0.45rem 0.35rem !important;
+    font-size: 0.78rem !important;
     font-weight: 700 !important;
-    border-radius: 10px !important;
+    border-radius: 9px !important;
+    display: flex !important;
+    align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
-    white-space: nowrap !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    line-height: 1.2 !important;
     box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .tab-btn span,
+  .caisse-subtab-btn span {
+    font-size: 0.78rem !important;
+    white-space: normal !important;
+  }
+
+  .tab-btn:last-child:nth-child(odd),
+  .caisse-subtab-btn:last-child:nth-child(odd) {
+    grid-column: span 2 !important;
   }
 
   /* M. TABLEAUX RESPONSIVES TACTILES SANS DÉFORMATION DE PAGE */
