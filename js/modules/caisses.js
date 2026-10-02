@@ -164,6 +164,43 @@ const CaissesCore = {
     });
   },
 
+  _catalogTicketsMap: {},
+  async getOrCreateCatalogTicket(category, itemName, price) {
+    const key = `${category || 'entree'}_${itemName}_${price || 0}`;
+    if (this._catalogTicketsMap[key]) {
+      return this._catalogTicketsMap[key];
+    }
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        const { data } = await client
+          .from('tickets_catalog')
+          .select('id')
+          .eq('name', itemName)
+          .limit(1);
+        if (data && data.length > 0 && this.isUuid(data[0].id)) {
+          this._catalogTicketsMap[key] = data[0].id;
+          return data[0].id;
+        }
+        // Création automatique si non existant
+        const { data: insData } = await client
+          .from('tickets_catalog')
+          .insert([{
+            type: category || 'entree',
+            name: itemName,
+            value_f: price || 0,
+            is_active: true
+          }])
+          .select('id');
+        if (insData && insData[0] && this.isUuid(insData[0].id)) {
+          this._catalogTicketsMap[key] = insData[0].id;
+          return insData[0].id;
+        }
+      } catch (e) {}
+    }
+    return null;
+  },
+
   // Enregistrement unifié et 100% garanti d'une vente (Entrée, Jeux, Restauration)
   async recordSale(saleData) {
     const client = SupabaseClient.client;
@@ -182,42 +219,67 @@ const CaissesCore = {
       } catch (e) {}
     }
 
+    // 2. Résoudre un UUID de ticket valide pour satisfaire la contrainte Supabase tickets_catalog(id)
+    let ticketId = saleData.ticket_id;
+    if (!this.isUuid(ticketId)) {
+      ticketId = await this.getOrCreateCatalogTicket(saleData.category || 'entree', saleData.item_name || 'Ticket', saleData.unit_price_f || 0);
+    }
+
     let realSaleId = 'sale-' + (saleData.category || 'ticket') + '-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
 
-    // Payload de base conforme au schéma strict de la table ticket_sales
-    const basePayload = {
+    // Payload complet avec colonnes de traçabilité nominative
+    const richPayload = {
       cash_register_id: this.isUuid(regId) ? regId : null,
       stand_id: this.isUuid(saleData.stand_id) ? saleData.stand_id : null,
-      ticket_id: this.isUuid(saleData.ticket_id) ? saleData.ticket_id : null,
+      ticket_id: this.isUuid(ticketId) ? ticketId : null,
       item_name: saleData.item_name || 'Ticket',
       category: saleData.category || 'jeux',
       quantity: Math.max(1, parseInt(saleData.quantity, 10) || 1),
       unit_price_f: Math.max(0, parseInt(saleData.unit_price_f, 10) || 0),
       total_amount_f: Math.max(0, parseInt(saleData.total_amount_f, 10) || 0),
-      sold_by: user ? user.id : null
+      payment_mode: saleData.payment_mode || 'cash',
+      sold_by: user ? user.id : null,
+      seller_name: sellerFullName,
+      seller_login: sellerLogin
     };
 
     if (client) {
       let inserted = false;
 
-      // Tentative 1 : insertion avec les colonnes de traçabilité nominative (seller_name, seller_login)
+      // Tentative 1 : insertion avec toutes les colonnes modernes enrichies
       try {
-        const enriched = {
-          ...basePayload,
-          seller_name: sellerFullName,
-          seller_login: sellerLogin
-        };
-        const { data, error } = await client.from('ticket_sales').insert([enriched]).select('id');
+        const { data, error } = await client.from('ticket_sales').insert([richPayload]).select('id');
         if (!error && data && data[0]) {
           realSaleId = data[0].id;
           inserted = true;
         }
       } catch (e) {}
 
-      // Tentative 2 : repli sur les colonnes standards si les colonnes seller_* n'ont pas encore été migrées
+      // Tentative 2 : sans seller_name/login si les colonnes ne sont pas encore migrées
       if (!inserted) {
         try {
-          const { data, error } = await client.from('ticket_sales').insert([basePayload]).select('id');
+          const { seller_name, seller_login, ...rest } = richPayload;
+          const { data, error } = await client.from('ticket_sales').insert([rest]).select('id');
+          if (!error && data && data[0]) {
+            realSaleId = data[0].id;
+            inserted = true;
+          }
+        } catch (e) {}
+      }
+
+      // Tentative 3 : schéma minimal original (01_schema.sql)
+      if (!inserted) {
+        try {
+          const minimal = {
+            cash_register_id: this.isUuid(regId) ? regId : null,
+            stand_id: this.isUuid(saleData.stand_id) ? saleData.stand_id : null,
+            ticket_id: this.isUuid(ticketId) ? ticketId : null,
+            quantity: Math.max(1, parseInt(saleData.quantity, 10) || 1),
+            unit_price_f: Math.max(0, parseInt(saleData.unit_price_f, 10) || 0),
+            total_amount_f: Math.max(0, parseInt(saleData.total_amount_f, 10) || 0),
+            sold_by: user ? user.id : null
+          };
+          const { data, error } = await client.from('ticket_sales').insert([minimal]).select('id');
           if (!error && data && data[0]) {
             realSaleId = data[0].id;
             inserted = true;
@@ -232,7 +294,7 @@ const CaissesCore = {
 
     // Objet vente complet avec attribution nominative pour la persistance locale et l'affichage
     const completeSale = {
-      ...basePayload,
+      ...richPayload,
       id: realSaleId,
       created_at: new Date().toISOString(),
       seller_name: sellerFullName,
@@ -258,28 +320,51 @@ const CaissesCore = {
       try {
         let query = client
           .from('ticket_sales')
-          .select('id, cash_register_id, stand_id, ticket_id, item_name, category, payment_mode, quantity, unit_price_f, total_amount_f, sold_by, created_at, stand:stands(id, name, number, color_name, color_hex)')
+          .select('id, cash_register_id, stand_id, ticket_id, item_name, category, payment_mode, seller_name, seller_login, quantity, unit_price_f, total_amount_f, sold_by, created_at, stand:stands(id, name, number, color_name, color_hex), ticket:tickets_catalog(id, name, type, color)')
           .order('created_at', { ascending: false });
 
         if (category) {
           query = query.eq('category', category);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+
+        // Repli gracieux si certaines colonnes (ex: seller_name) n'existent pas encore
+        if (error) {
+          query = client
+            .from('ticket_sales')
+            .select('id, cash_register_id, stand_id, ticket_id, quantity, unit_price_f, total_amount_f, sold_by, created_at, stand:stands(id, name, number, color_name, color_hex), ticket:tickets_catalog(id, name, type, color)')
+            .order('created_at', { ascending: false });
+          const res = await query;
+          if (!res.error && res.data) {
+            data = res.data;
+            error = null;
+          }
+        }
+
         if (!error && Array.isArray(data)) {
           sales = data.map(s => {
             const userObj = s.sold_by && usersMap[s.sold_by];
-            const sellerLogin = (userObj && userObj.login) || s.seller_login || 'Caissier';
-            const sellerFullName = (userObj && userObj.full_name) || s.seller_name || sellerLogin;
+            const sellerLogin = s.seller_login || (userObj && userObj.login) || 'Caissier';
+            const sellerFullName = s.seller_name || (userObj && userObj.full_name) || sellerLogin;
             const sellerRole = (userObj && userObj.role_name) || 'Admin';
+            const itemName = s.item_name || (s.ticket && s.ticket.name) || 'Ticket';
+            const itemCat = s.category || (s.ticket && s.ticket.type) || (category || 'jeu');
+
             return {
               ...s,
+              item_name: itemName,
+              category: itemCat,
               seller_login: sellerLogin,
               seller_name: sellerFullName,
               seller_role: sellerRole,
               seller: { login: sellerLogin, full_name: sellerFullName, role_name: sellerRole }
             };
           });
+
+          if (category) {
+            sales = sales.filter(s => s.category === category);
+          }
           sales = this.filterActiveSales(sales, cancelledIds, purgeDate);
         } else if (error) {
           console.warn('[Load Sales DB Warning]', error);
@@ -322,7 +407,7 @@ const CaissesCore = {
     return sales;
   },
 
-  // Abonnement Supabase Realtime pour actualisation en direct
+  // Abonnement Supabase Realtime multi-tables pour actualisation en direct
   subscribeToSales(callback) {
     const client = SupabaseClient.client;
     if (!client) return null;
@@ -334,6 +419,12 @@ const CaissesCore = {
           if (typeof callback === 'function') callback(payload);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'cash_movements' }, (payload) => {
+          if (typeof callback === 'function') callback(payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'token_debts' }, (payload) => {
+          if (typeof callback === 'function') callback(payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets_catalog' }, (payload) => {
           if (typeof callback === 'function') callback(payload);
         })
         .subscribe();
@@ -527,6 +618,38 @@ const CaissesCore = {
       }
     } catch (e) {}
 
+    // 5. Consolidation des Avoirs et Jetons en circulation (Caisse 3)
+    let tokensIssued = 0;
+    let tokensRedeemed = 0;
+    if (client) {
+      try {
+        const { data: tDebts } = await client.from('token_debts').select('token_value_f, quantity_given, quantity_redeemed');
+        if (tDebts) {
+          tDebts.forEach(td => {
+            tokensIssued += (td.quantity_given || 0) * (td.token_value_f || 0);
+            tokensRedeemed += (td.quantity_redeemed || 0) * (td.token_value_f || 0);
+          });
+        }
+        const { data: aMvts } = await client
+          .from('cash_movements')
+          .select('amount_f, type')
+          .in('type', ['emission_jeton', 'restitution_jeton', 'remboursement_jeton']);
+        if (aMvts) {
+          let mvtsIssued = 0;
+          let mvtsRedeemed = 0;
+          aMvts.forEach(am => {
+            if (am.type === 'emission_jeton') mvtsIssued += Math.abs(am.amount_f || 0);
+            else mvtsRedeemed += Math.abs(am.amount_f || 0);
+          });
+          if (mvtsIssued > tokensIssued) tokensIssued = mvtsIssued;
+          if (mvtsRedeemed > tokensRedeemed) tokensRedeemed = mvtsRedeemed;
+        }
+      } catch (e) {
+        console.warn('[Consolidated Finances Tokens Warning]', e);
+      }
+    }
+    const netTokenDebt = Math.max(0, tokensIssued - tokensRedeemed);
+
     const totalExpenses = allExpenses.reduce((sum, e) => sum + Math.abs(e.amount_f), 0);
     const beneficeNet = totalRecettes - totalExpenses;
 
@@ -544,7 +667,10 @@ const CaissesCore = {
       expenses: allExpenses,
       totalExpenses,
       beneficeNet,
-      registers: allRegisters
+      registers: allRegisters,
+      tokensIssued,
+      tokensRedeemed,
+      netTokenDebt
     };
   },
 
@@ -562,40 +688,62 @@ const CaissesCore = {
           .eq('is_active', true)
           .order('value_f', { ascending: true });
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           hasDbRecords = true;
-          if (data.length > 0) {
-            catalog = data.map(d => ({
-              id: d.id,
-              name: d.name,
-              price: d.value_f,
-              icon: d.color || '🎟️',
-              description: d.description || ''
-            }));
-          }
+          catalog = data.map(d => ({
+            id: d.id,
+            name: d.name,
+            price: d.value_f,
+            icon: d.color || '🎟️',
+            description: d.description || ''
+          }));
         }
       } catch (e) {
         console.warn('[CaissesCore DB Warning]', e);
       }
     }
 
-    const stored = localStorage.getItem('kermesse_entry_catalog');
-    if (!hasDbRecords && stored !== null) {
-      try {
-        catalog = JSON.parse(stored);
-      } catch (e) {}
-    } else if (catalog.length > 0) {
-      localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+    // Si la base n'a pas renvoyé d'articles, vérifier le stockage local
+    if (!hasDbRecords) {
+      const stored = localStorage.getItem('kermesse_entry_catalog');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            catalog = parsed;
+          }
+        } catch (e) {}
+      }
     }
 
-    // N'injecter les 4 suggestions QUE si rien n'a JAMAIS été configuré (premier lancement pur)
-    if (!hasDbRecords && stored === null && catalog.length === 0) {
+    // Si toujours vide (première initialisation), charger et propager les 4 tarifs d'entrée de référence
+    if (catalog.length === 0) {
       catalog = [
         { id: 'ent-enf', name: 'Entrée Enfant (-12 ans)', price: 200, icon: '🧒', description: 'Moins de 12 ans' },
         { id: 'ent-adu', name: 'Entrée Adulte', price: 500, icon: '🧑', description: 'Tarif standard' },
         { id: 'ent-fam', name: 'Pass Famille', price: 1200, icon: '👨‍👩‍👧‍👦', description: 'Valable pour 4 personnes' },
         { id: 'ent-don', name: 'Entrée Donateur & Bienfaiteur', price: 2000, icon: '❤️', description: 'Soutien aux œuvres sociales' }
       ];
+      localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+
+      // Les inscrire directement dans Supabase pour que tous les autres terminaux en bénéficient
+      if (client) {
+        try {
+          for (const item of catalog) {
+            const { data } = await client.from('tickets_catalog').insert([{
+              type: 'entree',
+              name: item.name,
+              value_f: item.price,
+              color: item.icon,
+              description: item.description,
+              is_active: true
+            }]).select('id');
+            if (data && data[0]) item.id = data[0].id;
+          }
+          localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+        } catch (e) {}
+      }
+    } else {
       localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
     }
 
@@ -604,6 +752,35 @@ const CaissesCore = {
 
   async saveEntryCatalog(catalog) {
     localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+    const client = SupabaseClient.client;
+    if (client && Array.isArray(catalog)) {
+      try {
+        for (const item of catalog) {
+          if (this.isUuid(item.id)) {
+            await client.from('tickets_catalog').update({
+              name: item.name,
+              value_f: item.price,
+              color: item.icon,
+              description: item.description,
+              is_active: true
+            }).eq('id', item.id);
+          } else {
+            const { data } = await client.from('tickets_catalog').insert([{
+              type: 'entree',
+              name: item.name,
+              value_f: item.price,
+              color: item.icon,
+              description: item.description,
+              is_active: true
+            }]).select('id');
+            if (data && data[0]) item.id = data[0].id;
+          }
+        }
+        localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
+      } catch (e) {
+        console.warn('[Save Entry Catalog DB Error]', e);
+      }
+    }
   },
 
   async getOrCreateRegister(roleKey, defaultName) {
@@ -1012,6 +1189,9 @@ const CaisseEntreeModule = {
     if (this.register) {
       this.expenses = await CaissesCore.loadExpenses(this.register.id);
     }
+    if (!this.entryCatalog || this.entryCatalog.length === 0) {
+      this.entryCatalog = await CaissesCore.loadEntryCatalog();
+    }
   },
 
   renderCurrentTab() {
@@ -1294,6 +1474,7 @@ const CaisseEntreeModule = {
     for (const item of this.cart) {
       const realSale = await CaissesCore.recordSale({
         cash_register_id: regId,
+        ticket_id: item.id,
         item_name: item.name,
         category: 'entree',
         quantity: item.qty,
@@ -3114,14 +3295,16 @@ const CaisseJeuxModule = {
 
 // ==============================================================================
 // 3. MODULE : CAISSE JETONS & MONNAIE (CaisseJetonsModule)
+// Pôle 2 : Caisse 3 — Change & Jetons (Avoirs Clients & Restitutions)
 // ==============================================================================
 const CaisseJetonsModule = {
-  currentTab: 'change', // 'change', 'expenses', 'movements', 'closure'
+  currentTab: 'change', // 'change', 'expenses', 'movements'
   register: null,
   tokens: [],
   expenses: [],
   movements: [],
   tokenValues: [50, 100, 200, 250],
+  _realtimeInit: false,
 
   async render(container) {
     this.register = await CaissesCore.getOrCreateRegister('Jetons', 'Caisse 3 — Change & Jetons');
@@ -3132,7 +3315,7 @@ const CaisseJetonsModule = {
         <div class="card-header caisse-card-header">
           <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
             <div class="card-title" style="margin: 0;">
-              <span>🪙</span> Caisse 3 : Change &amp; Jetons de Monnaie
+              <span>🪙</span> Caisse 3 : Change &amp; Jetons de Monnaie (Avoirs)
             </div>
             <span class="badge ${this.register.status === 'open' ? 'badge-success' : 'badge-gray'}">
               ${this.register.status === 'open' ? '🟢 Ouverte' : '🔴 Clôturée'}
@@ -3142,13 +3325,13 @@ const CaisseJetonsModule = {
           <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête (sans clôture) -->
           <div class="caisse-subtabs-nav" id="caisseJetonsTabsNav">
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'change' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('change')">
-              🪙 <span>Change &amp; Jetons</span>
+              🪙 <span>Change &amp; Avoirs</span>
             </button>
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'expenses' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('expenses')">
               💸 <span>Dépenses</span> <span class="subtab-count" data-tab-count="expenses">${this.expenses.length}</span>
             </button>
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'movements' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('movements')">
-              📋 <span>Mouvements</span>
+              📋 <span>Mouvements &amp; Avoirs</span> <span class="subtab-count" data-tab-count="movements">${this.movements.length}</span>
             </button>
           </div>
         </div>
@@ -3160,6 +3343,24 @@ const CaisseJetonsModule = {
     `;
 
     this.renderCurrentTab();
+
+    // Actualisation temps réel & synchronisation automatique multi-appareils
+    if (!this._realtimeInit) {
+      this._realtimeInit = true;
+      CaissesCore.subscribeToSales(async () => {
+        await this.loadData();
+        this.renderCurrentTab();
+      });
+
+      // Polling transparent de secours toutes les 4 secondes
+      setInterval(async () => {
+        const domCheck = document.getElementById('caisseJetonsTabContainer');
+        if (domCheck) {
+          await this.loadData();
+          this.renderCurrentTab();
+        }
+      }, 4000);
+    }
   },
 
   switchTab(tab) {
@@ -3184,27 +3385,96 @@ const CaisseJetonsModule = {
     if (!nav) return;
     const expBadge = nav.querySelector('[data-tab-count="expenses"]');
     if (expBadge) expBadge.textContent = this.expenses.length;
+    const mvtBadge = nav.querySelector('[data-tab-count="movements"]');
+    if (mvtBadge) mvtBadge.textContent = this.movements.length;
   },
 
   async loadData() {
     const client = SupabaseClient.client;
     if (client && this.register && CaissesCore.isUuid(this.register.id)) {
       try {
-        const { data: tData } = await client.from('token_debts').select('*').eq('cash_register_id', this.register.id);
-        if (tData) this.tokens = tData;
-
-        const { data: mData } = await client
-          .from('cash_movements')
-          .select('id, amount_f, reason, created_at, type')
+        const { data: tData } = await client
+          .from('token_debts')
+          .select('*')
           .eq('cash_register_id', this.register.id)
           .order('created_at', { ascending: false });
-        if (mData) this.movements = mData;
+        if (tData) {
+          this.tokens = tData;
+          localStorage.setItem('kermesse_jetons_debts', JSON.stringify(tData));
+        }
+      } catch (e) {
+        console.warn('[Token Debts Load Warning]', e);
+      }
+
+      try {
+        let mData = null;
+        try {
+          const res = await client
+            .from('cash_movements')
+            .select('id, amount_f, reason, created_at, type, user_id, tokens_detail, user:app_users!cash_movements_user_id_fkey(login, full_name)')
+            .eq('cash_register_id', this.register.id)
+            .order('created_at', { ascending: false });
+          if (!res.error && res.data) mData = res.data;
+        } catch (e1) {}
+
+        if (!mData) {
+          const { data: mData2 } = await client
+            .from('cash_movements')
+            .select('id, amount_f, reason, created_at, type, user_id, tokens_detail')
+            .eq('cash_register_id', this.register.id)
+            .order('created_at', { ascending: false });
+          if (mData2) mData = mData2;
+        }
+
+        if (mData) {
+          this.movements = mData;
+          localStorage.setItem('kermesse_jetons_movements', JSON.stringify(mData));
+        }
+      } catch (e) {
+        console.warn('[Cash Movements Load Warning]', e);
+      }
+    } else {
+      // Fallback local storage
+      try {
+        const storedT = localStorage.getItem('kermesse_jetons_debts');
+        if (storedT) this.tokens = JSON.parse(storedT);
+        const storedM = localStorage.getItem('kermesse_jetons_movements');
+        if (storedM) this.movements = JSON.parse(storedM);
       } catch (e) {}
     }
 
     if (this.register) {
       this.expenses = await CaissesCore.loadExpenses(this.register.id);
     }
+  },
+
+  getAvoirsStats() {
+    let totalAvoirsEmis = 0;
+    let totalAvoirsDecaisses = 0;
+
+    // Calculer depuis les mouvements
+    this.movements.forEach(m => {
+      if (m.type === 'emission_jeton' || m.type === 'emission_avoir') {
+        totalAvoirsEmis += Math.abs(m.amount_f);
+      } else if (m.type === 'restitution_jeton' || m.type === 'remboursement_jeton' || m.type === 'restitution_avoir') {
+        totalAvoirsDecaisses += Math.abs(m.amount_f);
+      }
+    });
+
+    // Comparer avec token_debts au besoin
+    let tokenDebtsIssued = 0;
+    let tokenDebtsRedeemed = 0;
+    this.tokens.forEach(t => {
+      tokenDebtsIssued += (t.quantity_given || 0) * (t.token_value_f || 0);
+      tokenDebtsRedeemed += (t.quantity_redeemed || 0) * (t.token_value_f || 0);
+    });
+
+    if (tokenDebtsIssued > totalAvoirsEmis) totalAvoirsEmis = tokenDebtsIssued;
+    if (tokenDebtsRedeemed > totalAvoirsDecaisses) totalAvoirsDecaisses = tokenDebtsRedeemed;
+
+    const netTokenDebt = Math.max(0, totalAvoirsEmis - totalAvoirsDecaisses);
+
+    return { totalAvoirsEmis, totalAvoirsDecaisses, netTokenDebt };
   },
 
   renderCurrentTab() {
@@ -3217,40 +3487,54 @@ const CaisseJetonsModule = {
     else if (this.currentTab === 'movements') this.renderMovementsTab(container);
   },
 
-  // 1. Onglet Émission & Remboursement
+  // 1. Onglet Émission & Restitution d'Avoirs (Jetons)
   renderChangeTab(container) {
-    let tokenDebt = 0;
-    this.tokens.forEach(t => {
-      if (t.status === 'en_circulation') {
-        tokenDebt += (t.token_value_f * (t.quantity_given - t.quantity_redeemed));
-      }
-    });
+    const { totalAvoirsEmis, totalAvoirsDecaisses, netTokenDebt } = this.getAvoirsStats();
 
     container.innerHTML = `
-      <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <div>
-          <span style="font-weight: 700; color: #92400e;">🪙 Dette Jetons en circulation :</span>
-          <strong style="color: #b45309; font-size: 1.2rem; margin-left: 6px;">${tokenDebt.toLocaleString()} F</strong>
+      <!-- Synthèse Avoirs / Jetons en temps réel -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+        <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: var(--radius-md); padding: 0.85rem 1rem;">
+          <div style="font-size: 0.8rem; color: #92400e; font-weight: 700;">🪙 Total Avoirs Émis (Jetons)</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: #b45309; margin-top: 3px;">
+            +${totalAvoirsEmis.toLocaleString()} F
+          </div>
+          <div style="font-size: 0.72rem; color: #b45309; opacity: 0.85;">Jetons remis par manque de monnaie</div>
         </div>
-        <div style="font-size: 0.8rem; color: #b45309;">
-          Règle : Tout remboursement en espèces exige la remise physique du jeton.
+
+        <div style="background: #dcfce7; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 0.85rem 1rem;">
+          <div style="font-size: 0.8rem; color: #166534; font-weight: 700;">💵 Total Avoirs Décaissés (Honorés)</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: #15803d; margin-top: 3px;">
+            -${totalAvoirsDecaisses.toLocaleString()} F
+          </div>
+          <div style="font-size: 0.72rem; color: #15803d; opacity: 0.85;">Espèces remboursées contre jetons</div>
+        </div>
+
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 0.85rem 1rem;">
+          <div style="font-size: 0.8rem; color: #1e40af; font-weight: 700;">⚖️ Dette Avoirs Nette en Circulation</div>
+          <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin-top: 3px;">
+            ${netTokenDebt.toLocaleString()} F
+          </div>
+          <div style="font-size: 0.72rem; color: #1e40af; opacity: 0.85;">Engagement dû aux visiteurs</div>
         </div>
       </div>
 
       <div class="caisse-jetons-actions-grid">
         
-        <!-- ÉMISSION DE JETONS -->
+        <!-- ÉMISSION D'AVOIR (REMISE DE JETON) -->
         <div class="card" style="border: 2px solid #f59e0b; margin-bottom: 0;">
           <div class="card-header" style="background: #fef3c7; border-bottom: 1px solid #fde68a;">
-            <h4 style="margin: 0; color: #b45309; font-size: 0.98rem; font-weight: 800;">🪙 Remettre un Jeton (Manque de Monnaie)</h4>
+            <h4 style="margin: 0; color: #b45309; font-size: 0.98rem; font-weight: 800;">
+              🪙 Émettre un Avoir Client (Remise de Jeton — Manque de Monnaie)
+            </h4>
           </div>
           <div class="card-body" style="padding: 1rem;">
             <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem; line-height: 1.45;">
-              En cas d'impossibilité de rendre la monnaie exacte, remettez un jeton physique au visiteur.
+              En cas d'impossibilité de rendre la monnaie exacte, remettez un jeton physique comme avoir au visiteur.
             </p>
             <div class="form-row">
               <div class="form-group">
-                <label style="font-weight: 700; font-size: 0.85rem;">Valeur du Jeton</label>
+                <label style="font-weight: 700; font-size: 0.85rem;">Valeur faciale du Jeton</label>
                 <select id="jetonIssueVal" class="form-control" style="font-weight: 700;">
                   ${this.tokenValues.map(v => `<option value="${v}">${v} Francs CFA</option>`).join('')}
                 </select>
@@ -3261,19 +3545,21 @@ const CaisseJetonsModule = {
               </div>
             </div>
             <button class="btn btn-primary jeton-action-btn" style="background: #d97706; border-color: #b45309;" onclick="CaisseJetonsModule.issueToken()">
-              🪙 Enregistrer la remise de jeton
+              🪙 Enregistrer l'Émission d'Avoir (Remise Jeton)
             </button>
           </div>
         </div>
 
-        <!-- REMBOURSEMENT JETONS -->
+        <!-- RESTITUTION D'AVOIR (REMBOURSEMENT ESPÈCES) -->
         <div class="card" style="border: 2px solid #10b981; margin-bottom: 0;">
           <div class="card-header" style="background: #dcfce7; border-bottom: 1px solid #bbf7d0;">
-            <h4 style="margin: 0; color: #15803d; font-size: 0.98rem; font-weight: 800;">💵 Rembourser en Espèces (Restitution Jeton)</h4>
+            <h4 style="margin: 0; color: #15803d; font-size: 0.98rem; font-weight: 800;">
+              💵 Restitution d'Avoir Décaissé (Remboursement Espèces contre Jeton)
+            </h4>
           </div>
           <div class="card-body" style="padding: 1rem;">
             <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem; line-height: 1.45;">
-              Le visiteur rapporte son jeton physique pour récupérer son argent liquide.
+              Le visiteur rapporte son jeton physique pour récupérer son argent liquide. Vérifiez le jeton physique.
             </p>
             <div class="form-row">
               <div class="form-group">
@@ -3288,7 +3574,7 @@ const CaisseJetonsModule = {
               </div>
             </div>
             <button class="btn btn-primary jeton-action-btn" style="background: #16a34a; border-color: #15803d;" onclick="CaisseJetonsModule.refundToken()">
-              💵 Rembourser le liquide &amp; Reprendre le jeton
+              💵 Décaisser l'Avoir en Espèces &amp; Reprendre le Jeton
             </button>
           </div>
         </div>
@@ -3302,7 +3588,12 @@ const CaisseJetonsModule = {
     const qty = parseInt(document.getElementById('jetonIssueQty')?.value, 10);
     if (isNaN(val) || isNaN(qty) || qty <= 0) return;
 
+    const totalF = val * qty;
     const client = SupabaseClient.client;
+    const user = Auth.getCurrentUser();
+    const sellerLogin = user ? user.login : 'Caissier';
+    const sellerFullName = (user && (user.full_name || user.login)) || sellerLogin;
+
     if (client && CaissesCore.isUuid(this.register.id)) {
       try {
         await client.from('token_debts').insert([{
@@ -3312,10 +3603,33 @@ const CaisseJetonsModule = {
           quantity_redeemed: 0,
           status: 'en_circulation'
         }]);
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[Token Debt DB Warning]', e);
+      }
+
+      try {
+        await client.from('cash_movements').insert([{
+          cash_register_id: this.register.id,
+          type: 'emission_jeton',
+          amount_f: totalF,
+          reason: `Avoir émis : Remise de ${qty} jeton(s) de ${val} F par ${sellerFullName} (@${sellerLogin})`,
+          user_id: user ? user.id : null,
+          tokens_detail: {
+            token_value: val,
+            quantity: qty,
+            total_f: totalF,
+            operation: 'emission_avoir',
+            seller_name: sellerFullName,
+            seller_login: sellerLogin
+          }
+        }]);
+      } catch (e) {
+        console.warn('[Cash Movement DB Warning]', e);
+      }
     }
 
-    Notify.success(`🪙 ${qty} jeton(s) de ${val} F remis. Dette enregistrée.`);
+    AuditLogger.log('EMISSION_AVOIR_JETON', 'token_debts', null, `Émission d'avoir : ${qty} jeton(s) de ${val} F (${totalF} F) remis par ${sellerFullName} (@${sellerLogin})`);
+    Notify.success(`🪙 Avoir émis : ${qty} jeton(s) de ${val} F (${totalF.toLocaleString()} F) remis.`);
     await this.loadData();
     this.renderCurrentTab();
   },
@@ -3328,20 +3642,33 @@ const CaisseJetonsModule = {
     const totalF = val * qty;
     const client = SupabaseClient.client;
     const user = Auth.getCurrentUser();
+    const sellerLogin = user ? user.login : 'Caissier';
+    const sellerFullName = (user && (user.full_name || user.login)) || sellerLogin;
 
     if (client && CaissesCore.isUuid(this.register.id)) {
       try {
         await client.from('cash_movements').insert([{
           cash_register_id: this.register.id,
-          type: 'remboursement_jeton',
+          type: 'restitution_jeton',
           amount_f: -totalF,
-          reason: `Remboursement de ${qty} jeton(s) de ${val} F`,
-          user_id: user ? user.id : null
+          reason: `Avoir décaissé : Restitution de ${qty} jeton(s) de ${val} F par ${sellerFullName} (@${sellerLogin})`,
+          user_id: user ? user.id : null,
+          tokens_detail: {
+            token_value: val,
+            quantity: qty,
+            total_f: totalF,
+            operation: 'restitution_avoir',
+            seller_name: sellerFullName,
+            seller_login: sellerLogin
+          }
         }]);
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[Cash Movement Refund Warning]', e);
+      }
     }
 
-    Notify.success(`💵 ${totalF} F remboursés au visiteur. Jeton récupéré.`);
+    AuditLogger.log('RESTITUTION_AVOIR_JETON', 'cash_movements', null, `Restitution d'avoir : ${totalF} F remboursés contre ${qty} jeton(s) de ${val} F par ${sellerFullName} (@${sellerLogin})`);
+    Notify.success(`💵 Avoir décaissé : ${totalF.toLocaleString()} F remboursés au visiteur. Jeton(s) récupéré(s).`);
     await this.loadData();
     this.renderCurrentTab();
   },
@@ -3498,14 +3825,33 @@ const CaisseJetonsModule = {
     this.renderCurrentTab();
   },
 
-  // 3. Onglet Mouvements
+  // 3. Onglet Mouvements & Journal Complet des Avoirs
   renderMovementsTab(container) {
+    const { totalAvoirsEmis, totalAvoirsDecaisses, netTokenDebt } = this.getAvoirsStats();
+
     container.innerHTML = `
+      <!-- Synthèse des Avoirs -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+        <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: var(--radius-md); padding: 0.75rem 1rem;">
+          <div style="font-size: 0.8rem; color: #92400e; font-weight: 700;">🪙 Total Avoirs Émis (Jetons)</div>
+          <div style="font-size: 1.25rem; font-weight: 800; color: #b45309;">+${totalAvoirsEmis.toLocaleString()} F</div>
+        </div>
+        <div style="background: #dcfce7; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 0.75rem 1rem;">
+          <div style="font-size: 0.8rem; color: #166534; font-weight: 700;">💵 Total Avoirs Décaissés (Honorés)</div>
+          <div style="font-size: 1.25rem; font-weight: 800; color: #15803d;">-${totalAvoirsDecaisses.toLocaleString()} F</div>
+        </div>
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 0.75rem 1rem;">
+          <div style="font-size: 0.8rem; color: #1e40af; font-weight: 700;">⚖️ Dette Avoirs Nette en Circulation</div>
+          <div style="font-size: 1.25rem; font-weight: 900; color: #2563eb;">${netTokenDebt.toLocaleString()} F</div>
+        </div>
+      </div>
+
       <div class="table-responsive">
         ${this.movements.length === 0 ? `
           <div class="empty-state">
             <div class="empty-icon">📋</div>
             <div class="empty-title">Aucun mouvement pour le moment</div>
+            <div class="empty-desc">Toutes les émissions et restitutions de jetons apparaîtront ici avec le nom du caissier.</div>
           </div>
         ` : `
           <table class="data-table">
@@ -3513,24 +3859,60 @@ const CaisseJetonsModule = {
               <tr>
                 <th>Date &amp; Heure</th>
                 <th>Type</th>
-                <th>Motif</th>
+                <th>Motif &amp; Justification</th>
                 <th style="text-align: right;">Montant</th>
+                <th>Caissier / Vendeur</th>
                 <th style="text-align: right;">Action</th>
               </tr>
             </thead>
             <tbody>
               ${this.movements.map(m => {
-                const isPos = m.amount_f >= 0;
+                const isEmission = m.type === 'emission_jeton' || m.type === 'emission_avoir';
+                const isRestitution = m.type === 'restitution_jeton' || m.type === 'remboursement_jeton' || m.type === 'restitution_avoir';
+                const isPositive = m.amount_f >= 0;
+
+                // Résolution nominative du caissier
+                let sellerName = m.tokens_detail?.seller_name || (m.user && (m.user.full_name || m.user.login));
+                let sellerLogin = m.tokens_detail?.seller_login || (m.user && m.user.login);
+
+                if (!sellerName && m.reason) {
+                  const match = m.reason.match(/par (.+?) \(@(.+?)\)/);
+                  if (match) {
+                    sellerName = match[1];
+                    sellerLogin = match[2];
+                  }
+                }
+                if (!sellerName) sellerName = 'Caissier';
+                if (!sellerLogin) sellerLogin = 'caisse';
+
+                let badgeHtml = '';
+                if (isEmission) {
+                  badgeHtml = '<span class="badge badge-warning" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">🪙 Émission Avoir</span>';
+                } else if (isRestitution) {
+                  badgeHtml = '<span class="badge badge-success" style="background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;">💵 Restitution Avoir</span>';
+                } else {
+                  badgeHtml = `<span class="badge ${isPositive ? 'badge-success' : 'badge-danger'}">${m.type}</span>`;
+                }
+
                 return `
                   <tr>
-                    <td style="font-size: 0.8rem; color: var(--gray-600);">${new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td><span class="badge ${isPos ? 'badge-success' : 'badge-danger'}">${m.type}</span></td>
-                    <td><strong>${m.reason}</strong></td>
-                    <td style="text-align: right; font-weight: 700; color: ${isPos ? 'var(--success)' : 'var(--danger)'};">
-                      ${isPos ? '+' : ''}${m.amount_f.toLocaleString()} F
+                    <td style="font-size: 0.8rem; color: var(--gray-600); white-space: nowrap;">
+                      ${new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </td>
-                    <td style="text-align: right;">
-                      <button class="btn btn-danger btn-sm" onclick="CaisseJetonsModule.deleteMovement('${m.id}', ${m.amount_f})">🗑️</button>
+                    <td>${badgeHtml}</td>
+                    <td><strong>${m.reason}</strong></td>
+                    <td style="text-align: right; font-weight: 700; color: ${isEmission ? '#b45309' : (isPositive ? 'var(--success)' : 'var(--danger)')};">
+                      ${isPositive ? '+' : ''}${m.amount_f.toLocaleString()} F
+                    </td>
+                    <td>
+                      <span class="badge badge-gray" title="Responsable individuel : ${sellerName} (@${sellerLogin})" style="font-size: 0.75rem;">
+                        👤 ${sellerName}
+                      </span>
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="btn btn-danger btn-sm" onclick="CaisseJetonsModule.deleteMovement('${m.id}', ${m.amount_f}, '${(m.reason || '').replace(/'/g, "\\'")}')" title="Annuler ce mouvement avec motif obligatoire" style="padding: 2px 7px; font-size: 0.75rem;">
+                        <span>🗑️</span> Enlever
+                      </button>
                     </td>
                   </tr>
                 `;
@@ -3542,104 +3924,38 @@ const CaisseJetonsModule = {
     `;
   },
 
-  async deleteMovement(id, amount) {
-    if (!confirm(`Supprimer ce mouvement de ${amount} F ?`)) return;
+  async deleteMovement(id, amount, reason) {
+    const user = Auth.getCurrentUser();
+    const isAdmin = Permissions.isSuperAdmin() || Permissions.canAccessPole(2);
+    if (!isAdmin) {
+      Notify.warning("🔒 Action réservée aux administrateurs ou au SuperAdmin.");
+      return;
+    }
+
+    const cancelReason = prompt(`Suppression du mouvement (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de saisie, jeton restitué, rectification) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Suppression annulée : un motif précis est obligatoire pour la traçabilité administrative.");
+      return;
+    }
+
+    const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'Admin';
     const client = SupabaseClient.client;
     if (client && CaissesCore.isUuid(id)) {
-      try { await client.from('cash_movements').delete().eq('id', id); } catch (e) {}
+      try {
+        await client.from('cash_movements').delete().eq('id', id);
+      } catch (e) {
+        console.warn('[Delete Movement DB Warning]', e);
+      }
     }
-    Notify.success('Mouvement supprimé.');
+
+    this.movements = this.movements.filter(m => m.id !== id);
+    localStorage.setItem('kermesse_jetons_movements', JSON.stringify(this.movements));
+
+    AuditLogger.log('SUPPRESSION_MOUVEMENT_JETON', 'cash_movements', id, `Suppression mouvement jeton/avoir ${amount} F par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Mouvement supprimé. Motif consigné : ${motif}`);
     await this.loadData();
-    this.renderCurrentTab();
-  },
-
-  // 4. Onglet Contrôle & Clôture Caisse Jetons
-  renderClosureTab(container) {
-    const initF = this.register.initial_amount_f || 0;
-    let netMovements = 0;
-    this.movements.forEach(m => netMovements += m.amount_f);
-    const expected = initF + netMovements;
-
-    container.innerHTML = `
-      <div style="max-width: 600px; margin: 0 auto;">
-        <div class="card" style="border: 2px solid var(--primary); padding: 1.25rem;">
-          <h3 style="margin-top: 0; color: var(--primary);">
-            🔒 Contrôle &amp; Clôture — Caisse Jetons &amp; Monnaie
-          </h3>
-
-          <div style="background: var(--gray-50); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.25rem;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; align-items: center;">
-              <span>Fond initial :</span>
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <strong>${initF.toLocaleString()} F</strong>
-                <button class="btn btn-secondary btn-sm" style="padding: 1px 6px; font-size: 0.75rem;" onclick="CaisseJetonsModule.promptEditInitial(${initF})">Modifier</button>
-              </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-              <span>Flux net de monnaie (entrées - remboursements) :</span>
-              <strong>${netMovements > 0 ? '+' : ''}${netMovements.toLocaleString()} F</strong>
-            </div>
-            <hr style="border: none; border-top: 1px solid var(--gray-300); margin: 0.5rem 0;">
-            <div style="display: flex; justify-content: space-between; font-size: 1.15rem;">
-              <span><strong>Montant Théorique Attendu :</strong></span>
-              <span style="font-weight: 800; color: var(--primary); font-size: 1.25rem;">
-                ${expected.toLocaleString()} F
-              </span>
-            </div>
-          </div>
-
-          ${this.register.status === 'closed' ? `
-            <div class="alert-banner info" style="margin-bottom: 1rem;">
-              <div>
-                🔒 <strong>Caisse Clôturée :</strong><br>
-                Compté : <strong>${(this.register.counted_amount_f || 0).toLocaleString()} F</strong> | 
-                Écart : <strong>${(this.register.variance_f || 0).toLocaleString()} F</strong>
-              </div>
-            </div>
-            <button class="btn btn-secondary" style="width: 100%;" onclick="CaisseJetonsModule.reopen()">
-              🔓 Rouvrir cette caisse
-            </button>
-          ` : `
-            <form onsubmit="event.preventDefault(); CaisseJetonsModule.submitClosure(${expected});">
-              <div class="form-group">
-                <label>Montant Réellement Compté (${KermesseConfig.currency}) *</label>
-                <input type="number" id="caisseJetonsCounted" class="form-control" style="font-size: 1.2rem; font-weight: 700;" required>
-              </div>
-              <button class="btn btn-danger" style="width: 100%; font-size: 1rem; font-weight: 800;">
-                🔒 Valider la Clôture Caisse Jetons
-              </button>
-            </form>
-          `}
-        </div>
-      </div>
-    `;
-  },
-
-  async promptEditInitial(current) {
-    const val = prompt('Nouveau fond de caisse initial (FCFA) - Laissez 0 si aucun fond :', current);
-    if (val === null) return;
-    const num = Math.max(0, parseInt(val, 10) || 0);
-    await CaissesCore.updateInitialAmount(this.register.id, num);
-    this.register.initial_amount_f = num;
-    Notify.success(`Fond initial fixé à ${num} F.`);
-    this.renderCurrentTab();
-  },
-
-  async submitClosure(expected) {
-    const counted = parseInt(document.getElementById('caisseJetonsCounted')?.value || '0', 10);
-    if (isNaN(counted)) return;
-    await CaissesCore.closeRegister(this.register.id, this.register.name, expected, counted);
-    Notify.success('Caisse Jetons clôturée.');
-    this.register.status = 'closed';
-    this.register.counted_amount_f = counted;
-    this.register.variance_f = counted - expected;
-    this.renderCurrentTab();
-  },
-
-  async reopen() {
-    await CaissesCore.reopenRegister(this.register.id, this.register.name);
-    Notify.success('Caisse Jetons réouverte.');
-    this.register.status = 'open';
     this.renderCurrentTab();
   }
 };
@@ -3772,6 +4088,39 @@ const CaisseRestaurationModule = {
       if (stored) {
         try { this.products = JSON.parse(stored); } catch (e) {}
       }
+    }
+
+    // Si toujours vide, initialiser avec les produits phares de la kermesse et propager au Cloud
+    if (this.products.length === 0) {
+      this.products = [
+        { id: 'fp-brg', name: 'Burger Maison', selling_price_f: 1500, category: 'Plats & Snacks', is_active: true },
+        { id: 'fp-frt', name: 'Portion de Frites', selling_price_f: 500, category: 'Plats & Snacks', is_active: true },
+        { id: 'fp-sdw', name: 'Sandwich Poulet / Viande', selling_price_f: 1000, category: 'Plats & Snacks', is_active: true },
+        { id: 'fp-sod', name: 'Boisson Gazeuse / Canette', selling_price_f: 500, category: 'Boissons', is_active: true },
+        { id: 'fp-jus', name: 'Jus Local Frais (Bissap/Gingembre)', selling_price_f: 500, category: 'Boissons', is_active: true },
+        { id: 'fp-eau', name: 'Eau Minérale (50 cl)', selling_price_f: 300, category: 'Boissons', is_active: true },
+        { id: 'fp-crp', name: 'Crêpe Sucrée / Chocolat', selling_price_f: 500, category: 'Desserts & Sucreries', is_active: true },
+        { id: 'fp-glc', name: 'Glace / Cornet', selling_price_f: 500, category: 'Desserts & Sucreries', is_active: true }
+      ];
+      localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+
+      if (client) {
+        try {
+          for (const prod of this.products) {
+            const { data } = await client.from('food_products').insert([{
+              name: prod.name,
+              category: prod.category,
+              selling_price_f: prod.selling_price_f,
+              unit: 'portion',
+              is_active: true
+            }]).select('id');
+            if (data && data[0]) prod.id = data[0].id;
+          }
+          localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
+        } catch (e) {}
+      }
+    } else {
+      localStorage.setItem('kermesse_food_products', JSON.stringify(this.products));
     }
 
     if (this.register) {
@@ -4831,11 +5180,11 @@ const CaisseBilanModule = {
 
           <div class="card" style="border: 2px solid #f59e0b; border-top: 6px solid #f59e0b;">
             <div class="card-body" style="padding: 1rem;">
-              <div style="font-weight: 700; color: #92400e; font-size: 0.95rem;">🪙 Caisse 3 : Monnaie &amp; Jetons</div>
+              <div style="font-weight: 700; color: #92400e; font-size: 0.95rem;">🪙 Caisse 3 : Avoirs &amp; Jetons</div>
               <div style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin: 0.35rem 0;">
-                Actif
+                ${(this.finances.netTokenDebt || 0).toLocaleString()} F
               </div>
-              <div style="font-size: 0.8rem; color: var(--gray-500);">Change &amp; rachat jetons</div>
+              <div style="font-size: 0.8rem; color: var(--gray-500);">Dette jetons (${(this.finances.tokensIssued || 0).toLocaleString()} F émis)</div>
               <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_jetons')">Gérer Caisse 3</button>
             </div>
           </div>
