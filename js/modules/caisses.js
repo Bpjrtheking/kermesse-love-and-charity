@@ -120,20 +120,240 @@ const CaissesCore = {
     }
   },
 
-  filterActiveSales(salesList, cancelledIds, cancelledNames, purgeDate) {
+  _usersMap: null,
+  _usersMapTime: 0,
+
+  async getUsersMap() {
+    if (this._usersMap && (Date.now() - this._usersMapTime < 60000)) {
+      return this._usersMap;
+    }
+    const map = {};
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        const { data } = await client.from('app_users').select('id, login, full_name, role:roles(name)');
+        if (data && Array.isArray(data)) {
+          data.forEach(u => {
+            map[u.id] = {
+              id: u.id,
+              login: u.login,
+              full_name: u.full_name || u.login,
+              role_name: (u.role && u.role.name) || 'Admin'
+            };
+          });
+        }
+      } catch (e) {}
+    }
+    this._usersMap = map;
+    this._usersMapTime = Date.now();
+    return map;
+  },
+
+  filterActiveSales(salesList, cancelledIds, ...rest) {
     if (!Array.isArray(salesList)) return [];
+    const purgeDate = rest.find(arg => typeof arg === 'string' && (arg.includes('T') || !isNaN(Date.parse(arg)))) || null;
     return salesList.filter(s => {
       if (!s) return false;
       if (cancelledIds && cancelledIds.includes(s.id)) return false;
-      if (cancelledNames && s.item_name && cancelledNames.includes(s.item_name)) return false;
-      if (purgeDate && s.created_at && new Date(s.created_at) <= purgeDate) return false;
+      if (purgeDate && s.created_at) {
+        const sDate = new Date(s.created_at).getTime();
+        const pDate = new Date(purgeDate).getTime();
+        if (!isNaN(sDate) && !isNaN(pDate) && sDate < (pDate - 5000)) return false;
+      }
       return true;
     });
   },
 
-  // Réinitialisation complète des ventes et tests (Remise à 0 F avant la kermesse)
+  // Enregistrement unifié et 100% garanti d'une vente (Entrée, Jeux, Restauration)
+  async recordSale(saleData) {
+    const client = SupabaseClient.client;
+    const user = Auth.getCurrentUser();
+    const sellerLogin = user ? user.login : 'Caissier';
+    const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
+    let regId = saleData.cash_register_id;
+
+    // 1. S'assurer d'avoir un vrai UUID de caisse si Supabase est actif
+    if (client && !this.isUuid(regId)) {
+      try {
+        const reg = await this.getOrCreateRegister(saleData.category || 'Jeux', 'Caisse ' + (saleData.category || ''));
+        if (reg && this.isUuid(reg.id)) {
+          regId = reg.id;
+        }
+      } catch (e) {}
+    }
+
+    let realSaleId = 'sale-' + (saleData.category || 'ticket') + '-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+
+    // Payload de base conforme au schéma strict de la table ticket_sales
+    const basePayload = {
+      cash_register_id: this.isUuid(regId) ? regId : null,
+      stand_id: this.isUuid(saleData.stand_id) ? saleData.stand_id : null,
+      ticket_id: this.isUuid(saleData.ticket_id) ? saleData.ticket_id : null,
+      item_name: saleData.item_name || 'Ticket',
+      category: saleData.category || 'jeux',
+      quantity: Math.max(1, parseInt(saleData.quantity, 10) || 1),
+      unit_price_f: Math.max(0, parseInt(saleData.unit_price_f, 10) || 0),
+      total_amount_f: Math.max(0, parseInt(saleData.total_amount_f, 10) || 0),
+      sold_by: user ? user.id : null
+    };
+
+    if (client) {
+      let inserted = false;
+
+      // Tentative 1 : insertion avec les colonnes de traçabilité nominative (seller_name, seller_login)
+      try {
+        const enriched = {
+          ...basePayload,
+          seller_name: sellerFullName,
+          seller_login: sellerLogin
+        };
+        const { data, error } = await client.from('ticket_sales').insert([enriched]).select('id');
+        if (!error && data && data[0]) {
+          realSaleId = data[0].id;
+          inserted = true;
+        }
+      } catch (e) {}
+
+      // Tentative 2 : repli sur les colonnes standards si les colonnes seller_* n'ont pas encore été migrées
+      if (!inserted) {
+        try {
+          const { data, error } = await client.from('ticket_sales').insert([basePayload]).select('id');
+          if (!error && data && data[0]) {
+            realSaleId = data[0].id;
+            inserted = true;
+          } else if (error) {
+            console.warn('[CaissesCore DB Insert Error]', error);
+          }
+        } catch (e) {
+          console.warn('[CaissesCore Insert Exception]', e);
+        }
+      }
+    }
+
+    // Objet vente complet avec attribution nominative pour la persistance locale et l'affichage
+    const completeSale = {
+      ...basePayload,
+      id: realSaleId,
+      created_at: new Date().toISOString(),
+      seller_name: sellerFullName,
+      seller_login: sellerLogin,
+      seller: { login: sellerLogin, full_name: sellerFullName },
+      stand: saleData.stand || null
+    };
+
+    return completeSale;
+  },
+
+  // Chargement fiable des ventes avec résolution nominative du vendeur
+  async loadSales(category = null) {
+    const client = SupabaseClient.client;
+    const sync = await this.syncCancellationsFromDb();
+    const cancelledIds = sync.cancelledIds;
+    const purgeDate = sync.purgeBefore;
+    const usersMap = await this.getUsersMap();
+
+    let sales = [];
+
+    if (client) {
+      try {
+        let query = client
+          .from('ticket_sales')
+          .select('id, cash_register_id, stand_id, ticket_id, item_name, category, payment_mode, quantity, unit_price_f, total_amount_f, sold_by, created_at, stand:stands(id, name, number, color_name, color_hex)')
+          .order('created_at', { ascending: false });
+
+        if (category) {
+          query = query.eq('category', category);
+        }
+
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          sales = data.map(s => {
+            const userObj = s.sold_by && usersMap[s.sold_by];
+            const sellerLogin = (userObj && userObj.login) || s.seller_login || 'Caissier';
+            const sellerFullName = (userObj && userObj.full_name) || s.seller_name || sellerLogin;
+            const sellerRole = (userObj && userObj.role_name) || 'Admin';
+            return {
+              ...s,
+              seller_login: sellerLogin,
+              seller_name: sellerFullName,
+              seller_role: sellerRole,
+              seller: { login: sellerLogin, full_name: sellerFullName, role_name: sellerRole }
+            };
+          });
+          sales = this.filterActiveSales(sales, cancelledIds, purgeDate);
+        } else if (error) {
+          console.warn('[Load Sales DB Warning]', error);
+        }
+      } catch (e) {
+        console.warn('[Load Sales Exception]', e);
+      }
+    }
+
+    // Fusion de secours avec les ventes locales pour ne jamais rien perdre
+    const targetKeys = category === 'entree' ? ['kermesse_entry_sales'] 
+      : (category === 'jeu' ? ['kermesse_game_sales'] 
+      : (category === 'restauration' ? ['kermesse_food_sales'] 
+      : ['kermesse_entry_sales', 'kermesse_game_sales', 'kermesse_food_sales']));
+
+    targetKeys.forEach(key => {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          const local = JSON.parse(stored);
+          const filteredLocal = this.filterActiveSales(local, cancelledIds, purgeDate);
+          filteredLocal.forEach(ls => {
+            if (!sales.some(s => s.id === ls.id)) {
+              sales.push(ls);
+            }
+          });
+        } catch (e) {}
+      }
+    });
+
+    // Tri antéchronologique (plus récent en haut)
+    sales.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Si on a chargé une catégorie spécifique, on met à jour son cache local dédié
+    if (category) {
+      const specificKey = category === 'entree' ? 'kermesse_entry_sales' : (category === 'jeu' ? 'kermesse_game_sales' : 'kermesse_food_sales');
+      localStorage.setItem(specificKey, JSON.stringify(sales));
+    }
+
+    return sales;
+  },
+
+  // Abonnement Supabase Realtime pour actualisation en direct
+  subscribeToSales(callback) {
+    const client = SupabaseClient.client;
+    if (!client) return null;
+
+    try {
+      const channel = client
+        .channel('realtime_sales_hub_' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_sales' }, (payload) => {
+          if (typeof callback === 'function') callback(payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cash_movements' }, (payload) => {
+          if (typeof callback === 'function') callback(payload);
+        })
+        .subscribe();
+      return channel;
+    } catch (e) {
+      console.warn('[Realtime Subscription Warning]', e);
+      return null;
+    }
+  },
+
+  // Réinitialisation complète STRICTEMENT RÉSERVÉE au SuperAdmin avec saisie de confirmation
   async resetAllSalesAndTests() {
-    if (!confirm("⚠️ ATTENTION : Vous allez remettre à ZÉRO toutes les ventes enregistrées (Entrée, Jeux, Restauration) et réinitialiser les caisses.\n\nCette action permet d'effacer les essais et tests avant le jour J de la kermesse.\n\nConfirmer la remise à zéro complète ?")) {
+    if (!Permissions.isSuperAdmin()) {
+      Notify.error("Action strictement interdite : Seul le SuperAdministrateur est autorisé à remettre à zéro les chiffres.");
+      return false;
+    }
+
+    const check = prompt("🚨 CONFIRMATION CRITIQUE DE DIRECTION GÉNÉRALE\n\nVous êtes sur le point d'effacer DÉFINITIVEMENT toutes les ventes de test (Entrée, Jeux, Restauration).\n\nPour confirmer, tapez le mot « RESET » en majuscules :");
+    if (check !== 'RESET') {
+      Notify.info("Remise à zéro annulée.");
       return false;
     }
 
@@ -149,7 +369,7 @@ const CaissesCore = {
       try {
         await client.from('tickets_catalog').insert([{
           type: 'purge_all_sales',
-          name: 'Purge avant kermesse du ' + nowIso,
+          name: 'Purge officielle du ' + nowIso,
           value_f: 0,
           is_active: false
         }]);
@@ -163,72 +383,35 @@ const CaissesCore = {
     localStorage.removeItem('kermesse_cancelled_sale_ids');
     localStorage.removeItem('kermesse_cancelled_ticket_names');
 
-    AuditLogger.log('REMISE_A_ZERO_VENTES', 'ticket_sales', null, 'Remise à zéro complète des ventes de test avant kermesse');
-    Notify.success('Toutes les ventes et chiffres de test ont été effacés. Tableau de bord et Bilan sont à 0 F.');
+    AuditLogger.log('REMISE_A_ZERO_VENTES', 'ticket_sales', null, 'Remise à zéro des ventes exécutée par le SuperAdmin');
+    Notify.success('Toutes les ventes de test ont été effacées avec succès.');
     return true;
   },
 
   // MOTEUR FINANCIER CENTRALISÉ & CONSOLIDÉ (Utilisé par Caisses, Bilan, Dashboard et Rapports Officiels)
   async calculateConsolidatedFinances() {
     const client = SupabaseClient.client;
-    const sync = await this.syncCancellationsFromDb();
-    const cancelledIds = sync.cancelledIds;
-    const cancelledNames = sync.cancelledNames;
-    const purgeDate = sync.purgeBefore;
-
-    let allSales = [];
+    let allSales = await this.loadSales();
     let allRegisters = [];
     let allExpenses = [];
-    let isDbOnline = false;
 
-    // 1. Récupération des ventes depuis Supabase
+    // 1. Récupération des caisses
     if (client) {
       try {
-        const { data: s, error: sErr } = await client
-          .from('ticket_sales')
-          .select('id, quantity, total_amount_f, category, item_name, created_at, stand:stands(id, name, color_name, color_hex)');
-        if (!sErr && s) {
-          isDbOnline = true;
-          allSales = this.filterActiveSales(s, cancelledIds, cancelledNames, purgeDate);
-        }
-
         const { data: r } = await client.from('cash_registers').select('*').order('name');
-        if (r) allRegisters = r;
+        if (r && r.length > 0) allRegisters = r;
       } catch (e) {
-        console.warn('[Consolidated Finances DB Sales Warning]', e);
+        console.warn('[Consolidated Finances DB Registers Warning]', e);
       }
     }
-
-    // 2. Fusion avec les ventes locales (Entrée, Jeux, Restauration)
-    const storedEntree = localStorage.getItem('kermesse_entry_sales');
-    const storedJeux = localStorage.getItem('kermesse_game_sales');
-    const storedFood = localStorage.getItem('kermesse_food_sales');
-    let localSales = [];
-    try { if (storedEntree) localSales = [...localSales, ...JSON.parse(storedEntree)]; } catch (e) {}
-    try { if (storedJeux) localSales = [...localSales, ...JSON.parse(storedJeux)]; } catch (e) {}
-    try { if (storedFood) localSales = [...localSales, ...JSON.parse(storedFood)]; } catch (e) {}
-
-    // Filtrer les annulations de la sauvegarde locale
-    localSales = this.filterActiveSales(localSales, cancelledIds, cancelledNames, purgeDate);
-
-    // Dédoublonnage : si la base Supabase est connectée, elle fait foi.
-    // On n'injecte des ventes locales que celles générées hors-ligne (id temporaire non-UUID)
-    // pour éviter de ressusciter d'anciennes ventes supprimées en base.
-    if (isDbOnline) {
-      localSales.forEach(ls => {
-        if (!CaissesCore.isUuid(ls.id) && !allSales.some(s => s.id === ls.id)) {
-          allSales.push(ls);
-        }
-      });
-    } else {
-      localSales.forEach(ls => {
-        if (!allSales.some(s => s.id === ls.id)) {
-          allSales.push(ls);
-        }
-      });
+    if (allRegisters.length === 0) {
+      try {
+        const stored = localStorage.getItem('kermesse_cash_registers');
+        if (stored) allRegisters = JSON.parse(stored);
+      } catch (e) {}
     }
 
-    // 3. Calculs des recettes par caisse et palmarès stands
+    // 2. Calculs des recettes par caisse et palmarès stands
     let revEntree = 0;
     let revJeux = 0;
     let revResto = 0;
@@ -723,13 +906,13 @@ const CaissesCore = {
 // 1. MODULE : CAISSE ENTRÉE (CaisseEntreeModule)
 // ==============================================================================
 const CaisseEntreeModule = {
-  currentTab: 'pos', // 'pos', 'expenses', 'journal', 'closure'
+  currentTab: 'pos', // 'pos', 'config', 'expenses', 'journal'
   register: null,
   sales: [],
   expenses: [],
   cart: [],
-
   entryCatalog: [],
+  _realtimeInit: false,
 
   async render(container) {
     this.register = await CaissesCore.getOrCreateRegister('Entrée', 'Caisse 1 — Entrée & Accueil');
@@ -748,7 +931,7 @@ const CaisseEntreeModule = {
             </span>
           </div>
 
-          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête (sans clôture) -->
           <div class="caisse-subtabs-nav" id="caisseEntreeTabsNav">
             <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('pos')">
               🎟️ <span>Vente Entrées</span>
@@ -762,9 +945,6 @@ const CaisseEntreeModule = {
             <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('journal')">
               🧾 <span>Journal</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
             </button>
-            <button class="caisse-subtab-btn entree-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseEntreeModule.switchTab('closure')">
-              🔒 <span>Clôture</span>
-            </button>
           </div>
         </div>
 
@@ -775,6 +955,28 @@ const CaisseEntreeModule = {
     `;
 
     this.renderCurrentTab();
+
+    // Actualisation temps réel & synchronisation automatique multi-appareils
+    if (!this._realtimeInit) {
+      this._realtimeInit = true;
+      CaissesCore.subscribeToSales(async () => {
+        await this.loadData();
+        if (this.cart.length === 0) {
+          this.renderCurrentTab();
+        } else {
+          this.updateBadgeCounts();
+        }
+      });
+
+      // Polling transparent de secours toutes les 4 secondes
+      setInterval(async () => {
+        const domCheck = document.getElementById('caisseEntreeTabContainer');
+        if (domCheck && this.cart.length === 0) {
+          await this.loadData();
+          this.renderCurrentTab();
+        }
+      }, 4000);
+    }
   },
 
   switchTab(tab) {
@@ -806,38 +1008,7 @@ const CaisseEntreeModule = {
   },
 
   async loadData() {
-    const client = SupabaseClient.client;
-    this.sales = [];
-
-    // Synchronisation cloud des annulations
-    const sync = await CaissesCore.syncCancellationsFromDb();
-    const cancelledIds = sync.cancelledIds;
-    const cancelledNames = sync.cancelledNames;
-    const purgeDate = sync.purgeBefore;
-
-    if (client) {
-      try {
-        const { data: vData } = await client
-          .from('ticket_sales')
-          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, seller:app_users(login, full_name)')
-          .eq('category', 'entree')
-          .order('created_at', { ascending: false });
-        if (vData) {
-          this.sales = CaissesCore.filterActiveSales(vData, cancelledIds, cancelledNames, purgeDate);
-        }
-      } catch (e) {}
-    }
-
-    // Récupération locale de secours
-    const stored = localStorage.getItem('kermesse_entry_sales');
-    if (stored) {
-      try {
-        const local = JSON.parse(stored);
-        const filteredLocal = CaissesCore.filterActiveSales(local, cancelledIds, cancelledNames, purgeDate);
-        this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
-      } catch (e) {}
-    }
-
+    this.sales = await CaissesCore.loadSales('entree');
     if (this.register) {
       this.expenses = await CaissesCore.loadExpenses(this.register.id);
     }
@@ -852,7 +1023,6 @@ const CaisseEntreeModule = {
     else if (this.currentTab === 'config') this.renderConfigTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
     else if (this.currentTab === 'journal') this.renderJournalTab(container);
-    else if (this.currentTab === 'closure') this.renderClosureTab(container);
   },
 
   // 1. Onglet Vente Entrée
@@ -1122,35 +1292,16 @@ const CaisseEntreeModule = {
     const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
 
     for (const item of this.cart) {
-      let realSaleId = 'sale-ent-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
-
-      const saleObj = {
-        cash_register_id: CaissesCore.isUuid(regId) ? regId : null,
+      const realSale = await CaissesCore.recordSale({
+        cash_register_id: regId,
         item_name: item.name,
         category: 'entree',
         quantity: item.qty,
         unit_price_f: item.price,
-        total_amount_f: item.price * item.qty,
-        sold_by: user ? user.id : null,
-        seller_name: sellerFullName,
-        seller_login: sellerLogin
-      };
-
-      if (client) {
-        try {
-          const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
-          if (data && data[0]) realSaleId = data[0].id;
-        } catch (e) {
-          console.warn('[Checkout Entree DB Warning]', e);
-        }
-      }
-
-      this.sales.unshift({
-        ...saleObj,
-        id: realSaleId,
-        created_at: new Date().toISOString(),
-        seller: { login: sellerLogin, full_name: sellerFullName }
+        total_amount_f: item.price * item.qty
       });
+
+      this.sales.unshift(realSale);
     }
 
     // Persistance locale
@@ -1175,25 +1326,26 @@ const CaisseEntreeModule = {
   },
 
   async deleteSale(id, name, amount) {
-    if (!Permissions.isSuperAdmin()) {
-      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à annuler un billet ou une vente validée. Veuillez vous adresser au SuperAdmin.");
+    const user = Auth.getCurrentUser();
+    const isAdmin = Permissions.isSuperAdmin() || Permissions.canAccessPole(2);
+    if (!isAdmin) {
+      Notify.warning("🔒 Action réservée aux administrateurs du Pôle Billetterie ou au SuperAdmin.");
       return;
     }
 
-    const cancelReason = prompt(`Annulation du billet « ${name} » (${amount} F) :\n\nMotif obligatoire de l'annulation (ex: erreur de saisie, visiteur désisté, etc.) :`);
+    const cancelReason = prompt(`Suppression du billet d'entrée « ${name} » (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de saisie, visiteur désisté, ticket abîmé) :`);
     if (cancelReason === null) return;
     const motif = cancelReason.trim();
     if (!motif) {
-      Notify.warning("Annulation interrompue : un motif précis est obligatoire pour la traçabilité nominative.");
+      Notify.warning("Suppression annulée : un motif précis est obligatoire pour la traçabilité administrative.");
       return;
     }
 
-    const admin = Auth.getCurrentUser();
-    const adminLabel = admin ? `${admin.full_name || admin.login} (@${admin.login})` : 'SuperAdmin';
+    const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'Admin';
 
     const client = SupabaseClient.client;
     // 1. Enregistrer dans la liste noire globale des ventes annulées (garantit la suppression dans le Bilan)
-    CaissesCore.addCancelledSaleId(id, name);
+    await CaissesCore.addCancelledSaleId(id, name);
 
     if (client) {
       try {
@@ -1201,13 +1353,13 @@ const CaisseEntreeModule = {
           await client.from('ticket_sales').delete().eq('id', id);
         }
         // Ajouter un mouvement de compensation pour réduire la caisse du montant
-        if (CaissesCore.isUuid(this.register.id)) {
+        if (this.register && CaissesCore.isUuid(this.register.id)) {
           await client.from('cash_movements').insert([{
             cash_register_id: this.register.id,
             type: 'correction',
             amount_f: -Math.abs(amount),
-            reason: `Annulation billet entrée : ${name} (Par ${adminLabel} - Motif : ${motif})`,
-            user_id: admin?.id || null
+            reason: `Suppression billet entrée : ${name} (Par ${adminLabel} - Motif : ${motif})`,
+            user_id: user?.id || null
           }]);
         }
       } catch (e) {
@@ -1218,8 +1370,8 @@ const CaisseEntreeModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('ANNULATION_VENTE_ENTREE', 'ticket_sales', id, `Annulation billet entrée « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
-    Notify.success(`Billet « ${name} » annulé. Motif consigné : ${motif}`);
+    AuditLogger.log('ANNULATION_VENTE_ENTREE', 'ticket_sales', id, `Suppression billet entrée « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Billet « ${name} » supprimé. Motif consigné : ${motif}`);
     this.renderCurrentTab();
   },
 
@@ -1239,9 +1391,6 @@ const CaisseEntreeModule = {
           </button>
           <button class="btn btn-secondary btn-sm" onclick="CaisseEntreeModule.loadDefaultSuggestions()">
             <span>🔄</span> Suggestions par défaut
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) { CaisseEntreeModule.loadData().then(() => CaisseEntreeModule.renderCurrentTab()); } })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
-            <span>🧹</span> Remettre les ventes à 0 F
           </button>
         </div>
       </div>
@@ -1994,7 +2143,7 @@ const CaisseEntreeModule = {
 // 2. MODULE : CAISSE TICKETS DE JEUX & STANDS (CaisseJeuxModule)
 // ==============================================================================
 const CaisseJeuxModule = {
-  currentTab: 'pos', // 'pos', 'expenses', 'journal', 'closure'
+  currentTab: 'pos', // 'pos', 'expenses', 'journal'
   activeStandFilter: 'all',
   register: null,
   games: [],
@@ -2002,6 +2151,7 @@ const CaisseJeuxModule = {
   sales: [],
   expenses: [],
   cart: [],
+  _realtimeInit: false,
 
   async render(container) {
     this.register = await CaissesCore.getOrCreateRegister('Jeux', 'Caisse 2 — Tickets de Jeux & Stands');
@@ -2019,7 +2169,7 @@ const CaisseJeuxModule = {
             </span>
           </div>
 
-          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête (sans clôture) -->
           <div class="caisse-subtabs-nav" id="caisseJeuxTabsNav">
             <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('pos')">
               🎯 <span>Vente Tactile</span>
@@ -2029,9 +2179,6 @@ const CaisseJeuxModule = {
             </button>
             <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('journal')">
               🧾 <span>Journal</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
-            </button>
-            <button class="caisse-subtab-btn jeux-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJeuxModule.switchTab('closure')">
-              🔒 <span>Clôture</span>
             </button>
           </div>
         </div>
@@ -2043,6 +2190,28 @@ const CaisseJeuxModule = {
     `;
 
     this.renderCurrentTab();
+
+    // Actualisation temps réel & synchronisation automatique multi-appareils
+    if (!this._realtimeInit) {
+      this._realtimeInit = true;
+      CaissesCore.subscribeToSales(async () => {
+        await this.loadData();
+        if (this.cart.length === 0) {
+          this.renderCurrentTab();
+        } else {
+          this.updateBadgeCounts();
+        }
+      });
+
+      // Polling transparent de secours toutes les 4 secondes
+      setInterval(async () => {
+        const domCheck = document.getElementById('caisseJeuxTabContainer');
+        if (domCheck && this.cart.length === 0) {
+          await this.loadData();
+          this.renderCurrentTab();
+        }
+      }, 4000);
+    }
   },
 
   switchTab(tab) {
@@ -2072,8 +2241,8 @@ const CaisseJeuxModule = {
   },
 
   async loadData() {
+    this.sales = await CaissesCore.loadSales('jeu');
     const client = SupabaseClient.client;
-    this.sales = [];
 
     if (client) {
       try {
@@ -2110,33 +2279,9 @@ const CaisseJeuxModule = {
 
         const { data: sData } = await client.from('stands').select('id, name, number, color_name, color_hex').order('number');
         if (sData) this.stands = sData;
-
-        const sync = await CaissesCore.syncCancellationsFromDb();
-        const cancelledIds = sync.cancelledIds;
-        const cancelledNames = sync.cancelledNames;
-        const purgeDate = sync.purgeBefore;
-
-        const { data: vData } = await client
-          .from('ticket_sales')
-          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, created_at, stand:stands(name, color_name, color_hex), seller:app_users(login, full_name)')
-          .eq('category', 'jeu')
-          .order('created_at', { ascending: false });
-        if (vData) {
-          this.sales = CaissesCore.filterActiveSales(vData, cancelledIds, cancelledNames, purgeDate);
-        }
       } catch (e) {
         console.warn('[CaisseJeux DB Error]', e);
       }
-    }
-
-    // Récupération locale de secours
-    const stored = localStorage.getItem('kermesse_game_sales');
-    if (stored) {
-      try {
-        const local = JSON.parse(stored);
-        const filteredLocal = CaissesCore.filterActiveSales(local, cancelledIds, cancelledNames, purgeDate);
-        this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
-      } catch (e) {}
     }
 
     if (this.register) {
@@ -2152,7 +2297,6 @@ const CaisseJeuxModule = {
     if (this.currentTab === 'pos') this.renderPosTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
     else if (this.currentTab === 'journal') this.renderJournalTab(container);
-    else if (this.currentTab === 'closure') this.renderClosureTab(container);
   },
 
   // 1. Onglet Vente Tactile Jeux
@@ -2454,38 +2598,18 @@ const CaisseJeuxModule = {
     const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
 
     for (const item of this.cart) {
-      let realSaleId = 'sale-game-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
-
-      const saleObj = {
-        cash_register_id: CaissesCore.isUuid(regId) ? regId : null,
+      const realSale = await CaissesCore.recordSale({
+        cash_register_id: regId,
         stand_id: item.standId || null,
-        game_id: item.gameId || null,
         item_name: item.name,
         category: 'jeu',
         quantity: item.qty,
         unit_price_f: item.price,
         total_amount_f: item.price * item.qty,
-        sold_by: user ? user.id : null,
-        seller_name: sellerFullName,
-        seller_login: sellerLogin
-      };
-
-      if (client) {
-        try {
-          const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
-          if (data && data[0]) realSaleId = data[0].id;
-        } catch (e) {
-          console.warn('[Checkout Jeux DB Warning]', e);
-        }
-      }
-
-      this.sales.unshift({
-        ...saleObj,
-        id: realSaleId,
-        created_at: new Date().toISOString(),
-        stand: { name: item.standName, color_hex: item.standColor },
-        seller: { login: sellerLogin, full_name: sellerFullName }
+        stand: { name: item.standName, color_hex: item.standColor }
       });
+
+      this.sales.unshift(realSale);
     }
 
     localStorage.setItem('kermesse_game_sales', JSON.stringify(this.sales));
@@ -2509,38 +2633,39 @@ const CaisseJeuxModule = {
   },
 
   async deleteSale(id, name, amount) {
-    if (!Permissions.isSuperAdmin()) {
-      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à annuler une vente de ticket de jeu. Veuillez vous adresser au SuperAdmin.");
+    const user = Auth.getCurrentUser();
+    const isAdmin = Permissions.isSuperAdmin() || Permissions.canAccessPole(2);
+    if (!isAdmin) {
+      Notify.warning("🔒 Action réservée aux administrateurs du Pôle Billetterie & Jeux ou au SuperAdmin.");
       return;
     }
 
-    const cancelReason = prompt(`Annuler la vente de « ${name} » (${amount} F) :\n\nMotif obligatoire de l'annulation (ex: erreur de sélection de stand, ticket rendu...) :`);
+    const cancelReason = prompt(`Suppression du ticket de jeu « ${name} » (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de stand, ticket restitué, remboursement) :`);
     if (cancelReason === null) return;
     const motif = cancelReason.trim();
     if (!motif) {
-      Notify.warning("Annulation interrompue : un motif précis est obligatoire pour la traçabilité nominative.");
+      Notify.warning("Suppression annulée : un motif précis est obligatoire pour la traçabilité administrative.");
       return;
     }
 
-    const admin = Auth.getCurrentUser();
-    const adminLabel = admin ? `${admin.full_name || admin.login} (@${admin.login})` : 'SuperAdmin';
+    const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'Admin';
 
     const client = SupabaseClient.client;
     // 1. Ajouter à la liste noire globale des annulations
-    CaissesCore.addCancelledSaleId(id, name);
+    await CaissesCore.addCancelledSaleId(id, name);
 
     if (client) {
       try {
         if (CaissesCore.isUuid(id)) {
           await client.from('ticket_sales').delete().eq('id', id);
         }
-        if (CaissesCore.isUuid(this.register.id)) {
+        if (this.register && CaissesCore.isUuid(this.register.id)) {
           await client.from('cash_movements').insert([{
             cash_register_id: this.register.id,
             type: 'correction',
             amount_f: -Math.abs(amount),
-            reason: `Annulation vente jeu : ${name} (Par ${adminLabel} - Motif : ${motif})`,
-            user_id: admin?.id || null
+            reason: `Suppression ticket jeu : ${name} (Par ${adminLabel} - Motif : ${motif})`,
+            user_id: user?.id || null
           }]);
         }
       } catch (e) {
@@ -2551,8 +2676,8 @@ const CaisseJeuxModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_game_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Annulation vente jeu « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
-    Notify.success(`Vente de « ${name} » enlevée. Motif consigné : ${motif}`);
+    AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Suppression ticket jeu « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Ticket de jeu « ${name} » supprimé. Motif consigné : ${motif}`);
     this.renderCurrentTab();
   },
 
@@ -3014,7 +3139,7 @@ const CaisseJetonsModule = {
             </span>
           </div>
 
-          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête (sans clôture) -->
           <div class="caisse-subtabs-nav" id="caisseJetonsTabsNav">
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'change' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('change')">
               🪙 <span>Change &amp; Jetons</span>
@@ -3024,9 +3149,6 @@ const CaisseJetonsModule = {
             </button>
             <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'movements' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('movements')">
               📋 <span>Mouvements</span>
-            </button>
-            <button class="caisse-subtab-btn jetons-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseJetonsModule.switchTab('closure')">
-              🔒 <span>Clôture</span>
             </button>
           </div>
         </div>
@@ -3093,7 +3215,6 @@ const CaisseJetonsModule = {
     if (this.currentTab === 'change') this.renderChangeTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
     else if (this.currentTab === 'movements') this.renderMovementsTab(container);
-    else if (this.currentTab === 'closure') this.renderClosureTab(container);
   },
 
   // 1. Onglet Émission & Remboursement
@@ -3529,7 +3650,7 @@ const CaisseJetonsModule = {
 // Pôle 4 : Restauration
 // ==============================================================================
 const CaisseRestaurationModule = {
-  currentTab: 'pos', // 'pos', 'expenses', 'journal', 'closure'
+  currentTab: 'pos', // 'pos', 'expenses', 'journal'
   activeCategoryFilter: 'all',
   register: null,
   products: [],
@@ -3537,6 +3658,7 @@ const CaisseRestaurationModule = {
   expenses: [],
   cart: [],
   paymentMethod: 'cash', // 'cash' | 'tokens'
+  _realtimeInit: false,
 
   async render(container) {
     this.register = await CaissesCore.getOrCreateRegister('Restauration', 'Caisse 4 — Restauration & Buvette');
@@ -3554,7 +3676,7 @@ const CaisseRestaurationModule = {
             </span>
           </div>
 
-          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête -->
+          <!-- Navigation des sous-onglets moderne en pills logée dans l'en-tête (sans clôture) -->
           <div class="caisse-subtabs-nav" id="caisseRestoTabsNav">
             <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'pos' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('pos')">
               🍔 <span>Vente Tactile</span>
@@ -3564,9 +3686,6 @@ const CaisseRestaurationModule = {
             </button>
             <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'journal' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('journal')">
               🧾 <span>Journal</span> <span class="subtab-count" data-tab-count="journal">${this.sales.length}</span>
-            </button>
-            <button class="caisse-subtab-btn resto-theme ${this.currentTab === 'closure' ? 'active' : ''}" onclick="CaisseRestaurationModule.switchTab('closure')">
-              🔒 <span>Clôture</span>
             </button>
           </div>
         </div>
@@ -3578,6 +3697,28 @@ const CaisseRestaurationModule = {
     `;
 
     this.renderCurrentTab();
+
+    // Actualisation temps réel & synchronisation automatique multi-appareils
+    if (!this._realtimeInit) {
+      this._realtimeInit = true;
+      CaissesCore.subscribeToSales(async () => {
+        await this.loadData();
+        if (this.cart.length === 0) {
+          this.renderCurrentTab();
+        } else {
+          this.updateBadgeCounts();
+        }
+      });
+
+      // Polling transparent de secours toutes les 4 secondes
+      setInterval(async () => {
+        const domCheck = document.getElementById('caisseRestaurationTabContainer');
+        if (domCheck && this.cart.length === 0) {
+          await this.loadData();
+          this.renderCurrentTab();
+        }
+      }, 4000);
+    }
   },
 
   switchTab(tab) {
@@ -3607,8 +3748,8 @@ const CaisseRestaurationModule = {
   },
 
   async loadData() {
+    this.sales = await CaissesCore.loadSales('restauration');
     const client = SupabaseClient.client;
-    this.sales = [];
     this.products = [];
 
     // Récupérer les produits alimentaires depuis Supabase
@@ -3633,36 +3774,6 @@ const CaisseRestaurationModule = {
       }
     }
 
-    // Ventes Restauration
-    const sync = await CaissesCore.syncCancellationsFromDb();
-    const cancelledIds = sync.cancelledIds;
-    const cancelledNames = sync.cancelledNames;
-    const purgeDate = sync.purgeBefore;
-
-    if (client) {
-      try {
-        const { data: vData } = await client
-          .from('ticket_sales')
-          .select('id, quantity, unit_price_f, total_amount_f, item_name, category, payment_mode, product_id, created_at, seller:app_users(login, full_name)')
-          .eq('category', 'restauration')
-          .order('created_at', { ascending: false });
-        if (vData) {
-          this.sales = CaissesCore.filterActiveSales(vData, cancelledIds, cancelledNames, purgeDate);
-        }
-      } catch (e) {
-        console.warn('[CaisseRestauration Load Sales DB]', e);
-      }
-    }
-
-    const storedSales = localStorage.getItem('kermesse_food_sales');
-    if (storedSales) {
-      try {
-        const local = JSON.parse(storedSales);
-        const filteredLocal = CaissesCore.filterActiveSales(local, cancelledIds, cancelledNames, purgeDate);
-        this.sales = [...this.sales, ...filteredLocal.filter(l => !this.sales.some(s => s.id === l.id))];
-      } catch (e) {}
-    }
-
     if (this.register) {
       this.expenses = await CaissesCore.loadExpenses(this.register.id);
     }
@@ -3676,7 +3787,6 @@ const CaisseRestaurationModule = {
     if (this.currentTab === 'pos') this.renderPosTab(container);
     else if (this.currentTab === 'expenses') this.renderExpensesTab(container);
     else if (this.currentTab === 'journal') this.renderJournalTab(container);
-    else if (this.currentTab === 'closure') this.renderClosureTab(container);
   },
 
   getProductEmoji(name, category) {
@@ -4008,37 +4118,18 @@ const CaisseRestaurationModule = {
     const sellerFullName = user ? (user.full_name || user.login) : 'Caissier';
 
     for (const item of this.cart) {
-      let realSaleId = 'sale-food-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
-
-      const saleObj = {
-        cash_register_id: CaissesCore.isUuid(regId) ? regId : null,
+      const realSale = await CaissesCore.recordSale({
+        cash_register_id: regId,
         item_name: item.name,
         category: 'restauration',
         quantity: item.qty,
         unit_price_f: item.price,
         total_amount_f: item.price * item.qty,
         payment_mode: mode,
-        product_id: CaissesCore.isUuid(item.id) ? item.id : null,
-        sold_by: user ? user.id : null,
-        seller_name: sellerFullName,
-        seller_login: sellerLogin
-      };
-
-      if (client) {
-        try {
-          const { data } = await client.from('ticket_sales').insert([saleObj]).select('id');
-          if (data && data[0]) realSaleId = data[0].id;
-        } catch (e) {
-          console.warn('[Checkout Resto DB Warning]', e);
-        }
-      }
-
-      this.sales.unshift({
-        ...saleObj,
-        id: realSaleId,
-        created_at: new Date().toISOString(),
-        seller: { login: sellerLogin, full_name: sellerFullName }
+        product_id: CaissesCore.isUuid(item.id) ? item.id : null
       });
+
+      this.sales.unshift(realSale);
     }
 
     // Sauvegarde locale
@@ -4064,21 +4155,22 @@ const CaisseRestaurationModule = {
   },
 
   async deleteSale(id, name, amount, productId, quantity) {
-    if (!Permissions.isSuperAdmin()) {
-      Notify.warning("🔒 Action restreinte : Seul un SuperAdministrateur est habilité à annuler une commande ou vente validée. Veuillez vous adresser au SuperAdmin.");
+    const user = Auth.getCurrentUser();
+    const isAdmin = Permissions.isSuperAdmin() || Permissions.canAccessPole(4);
+    if (!isAdmin) {
+      Notify.warning("🔒 Action réservée aux administrateurs du Pôle Restauration ou au SuperAdmin.");
       return;
     }
 
-    const cancelReason = prompt(`Annuler la commande de « ${name} » (${amount} F) :\n\nMotif obligatoire de l'annulation (ex: erreur de saisie, plat indisponible...) :`);
+    const cancelReason = prompt(`Suppression de la commande « ${name} » (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de saisie, plat indisponible, remboursement) :`);
     if (cancelReason === null) return;
     const motif = cancelReason.trim();
     if (!motif) {
-      Notify.warning("Annulation interrompue : un motif précis est obligatoire pour la traçabilité nominative.");
+      Notify.warning("Suppression annulée : un motif précis est obligatoire pour la traçabilité administrative.");
       return;
     }
 
-    const admin = Auth.getCurrentUser();
-    const adminLabel = admin ? `${admin.full_name || admin.login} (@${admin.login})` : 'SuperAdmin';
+    const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'Admin';
 
     const client = SupabaseClient.client;
 
@@ -4091,13 +4183,13 @@ const CaisseRestaurationModule = {
         if (CaissesCore.isUuid(id)) {
           await client.from('ticket_sales').delete().eq('id', id);
         }
-        if (CaissesCore.isUuid(this.register.id)) {
+        if (this.register && CaissesCore.isUuid(this.register.id)) {
           await client.from('cash_movements').insert([{
             cash_register_id: this.register.id,
             type: 'correction',
             amount_f: -Math.abs(amount),
-            reason: `Annulation vente restauration : ${name} (Par ${adminLabel} - Motif : ${motif})`,
-            user_id: admin?.id || null
+            reason: `Suppression vente restauration : ${name} (Par ${adminLabel} - Motif : ${motif})`,
+            user_id: user?.id || null
           }]);
         }
       } catch (e) {
@@ -4108,7 +4200,7 @@ const CaisseRestaurationModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Annulation vente resto « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Suppression vente resto « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
     Notify.success(`Commande « ${name} » enlevée. Motif consigné : ${motif}`);
     this.renderCurrentTab();
   },
@@ -4516,11 +4608,17 @@ const CaisseRestaurationModule = {
 // ==============================================================================
 // 5. MODULE : BILAN FINANCIER GLOBAL KERMESSE (CaisseBilanModule)
 // ==============================================================================
+// 5. MODULE : BILAN FINANCIER GLOBAL KERMESSE (CaisseBilanModule)
+// ==============================================================================
 const CaisseBilanModule = {
   sales: [],
   expenses: [],
   registers: [],
-  registers: [],
+  finances: null,
+  activeCaisseFilter: 'all',
+  activeCashierFilter: 'all',
+  searchQuery: '',
+  _realtimeInit: false,
 
   async render(container) {
     container.innerHTML = `
@@ -4530,11 +4628,8 @@ const CaisseBilanModule = {
             <span>📊</span> Pôle 2 : Bilan Financier Consolidé de la Kermesse
           </div>
           <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
-            <button class="btn btn-secondary btn-sm" onclick="CaisseBilanModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent'))">
-              <span>🔄</span> Actualiser
-            </button>
-            <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) CaisseBilanModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent')); })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
-              <span>🧹</span> Remettre à 0 F
+            <button class="btn btn-secondary btn-sm" onclick="CaisseBilanModule.loadData().then(() => CaisseBilanModule.renderSummary())">
+              <span>🔄</span> Actualiser en direct
             </button>
           </div>
         </div>
@@ -4546,27 +4641,161 @@ const CaisseBilanModule = {
 
     await this.loadData();
     this.renderSummary();
+
+    // Actualisation temps réel & synchronisation automatique multi-appareils
+    if (!this._realtimeInit) {
+      this._realtimeInit = true;
+      CaissesCore.subscribeToSales(async () => {
+        await this.loadData();
+        this.renderSummary();
+      });
+
+      // Polling transparent de secours toutes les 4 secondes
+      setInterval(async () => {
+        const domCheck = document.getElementById('bilanContentContainer');
+        if (domCheck) {
+          await this.loadData();
+          this.renderSummary();
+        }
+      }, 4000);
+    }
   },
 
   async loadData() {
     this.finances = await CaissesCore.calculateConsolidatedFinances();
-    this.sales = this.finances.sales;
-    this.registers = this.finances.registers;
-    this.expenses = this.finances.expenses;
+    this.sales = this.finances.sales || [];
+    this.registers = this.finances.registers || [];
+    this.expenses = this.finances.expenses || [];
+  },
+
+  async deleteSale(id, name, amount) {
+    const user = Auth.getCurrentUser();
+    const isAdmin = Permissions.isSuperAdmin() || Permissions.canAccessPole(2);
+    if (!isAdmin) {
+      Notify.warning("🔒 Action réservée aux administrateurs ou au SuperAdmin.");
+      return;
+    }
+
+    const cancelReason = prompt(`Suppression de la transaction « ${name} » (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de saisie, remboursement, ticket abîmé) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Suppression annulée : un motif explicatif est obligatoire pour la traçabilité administrative.");
+      return;
+    }
+
+    const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'SuperAdmin';
+    const client = SupabaseClient.client;
+
+    await CaissesCore.addCancelledSaleId(id, name);
+
+    if (client) {
+      try {
+        if (CaissesCore.isUuid(id)) {
+          await client.from('ticket_sales').delete().eq('id', id);
+        }
+      } catch (e) {
+        console.warn('[Bilan Delete Sale DB Warning]', e);
+      }
+    }
+
+    ['kermesse_entry_sales', 'kermesse_game_sales', 'kermesse_food_sales'].forEach(k => {
+      try {
+        const stored = localStorage.getItem(k);
+        if (stored) {
+          const list = JSON.parse(stored).filter(s => s.id !== id);
+          localStorage.setItem(k, JSON.stringify(list));
+        }
+      } catch (e) {}
+    });
+
+    AuditLogger.log('SUPPRESSION_VENTE_BILAN', 'ticket_sales', id, `Suppression transaction « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
+    Notify.success(`Transaction « ${name} » supprimée. Motif consigné : ${motif}`);
+    await this.loadData();
+    this.renderSummary();
   },
 
   renderSummary() {
     const container = document.getElementById('bilanContentContainer');
-    if (!container) return;
+    if (!container || !this.finances) return;
 
     const { revEntree, revJeux, revResto, totalRecettes, totalExpenses, beneficeNet, standTotals } = this.finances;
 
+    // 1. Statistiques consolidées par caissier
+    const cashierStats = {};
+    this.sales.forEach(s => {
+      const login = s.seller_login || (s.seller && s.seller.login) || 'caissier';
+      const name = s.seller_name || (s.seller && (s.seller.full_name || s.seller.login)) || login;
+      const role = s.seller_role || (s.seller && s.seller.role_name) || 'Caissier';
+      if (!cashierStats[login]) {
+        cashierStats[login] = {
+          login,
+          name,
+          role,
+          totalSalesCount: 0,
+          totalRevenue: 0,
+          entreeCount: 0,
+          entreeRev: 0,
+          jeuxCount: 0,
+          jeuxRev: 0,
+          restoCount: 0,
+          restoRev: 0,
+          firstSale: s.created_at,
+          lastSale: s.created_at
+        };
+      }
+      const stat = cashierStats[login];
+      const qty = s.quantity || 1;
+      const amt = s.total_amount_f || 0;
+      stat.totalSalesCount += qty;
+      stat.totalRevenue += amt;
+
+      if (s.category === 'entree') {
+        stat.entreeCount += qty;
+        stat.entreeRev += amt;
+      } else if (s.category === 'restauration') {
+        stat.restoCount += qty;
+        stat.restoRev += amt;
+      } else {
+        stat.jeuxCount += qty;
+        stat.jeuxRev += amt;
+      }
+
+      if (new Date(s.created_at) < new Date(stat.firstSale)) stat.firstSale = s.created_at;
+      if (new Date(s.created_at) > new Date(stat.lastSale)) stat.lastSale = s.created_at;
+    });
+
+    const cashierList = Object.values(cashierStats).sort((a, b) => b.totalRevenue - a.totalRevenue);
+    const allCashiers = cashierList.map(c => c.login);
+
+    // 2. Ventes filtrées pour le Grand Livre Omniscient
+    const filteredSales = this.sales.filter(s => {
+      const sCategory = s.category || 'jeux';
+      const sLogin = s.seller_login || (s.seller && s.seller.login) || 'caissier';
+      const sItem = (s.item_name || '').toLowerCase();
+
+      if (this.activeCaisseFilter !== 'all' && sCategory !== this.activeCaisseFilter) {
+        return false;
+      }
+      if (this.activeCashierFilter !== 'all' && sLogin !== this.activeCashierFilter) {
+        return false;
+      }
+      if (this.searchQuery) {
+        const q = this.searchQuery.toLowerCase().trim();
+        if (!sItem.includes(q) && !sLogin.toLowerCase().includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const filteredTotalAmount = filteredSales.reduce((acc, s) => acc + (s.total_amount_f || 0), 0);
+
     container.innerHTML = `
-      <div style="max-width: 860px; margin: 0 auto;">
+      <div style="max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
         
         <!-- Cartes synthétiques des 4 Caisses -->
         <div class="pos-bilan-kpi">
-          
           <div class="card" style="border: 2px solid #10b981; border-top: 6px solid #10b981;">
             <div class="card-body" style="padding: 1rem;">
               <div style="font-weight: 700; color: #065f46; font-size: 0.95rem;">🎟️ Caisse 1 : Entrée &amp; Accueil</div>
@@ -4610,11 +4839,10 @@ const CaisseBilanModule = {
               <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_jetons')">Gérer Caisse 3</button>
             </div>
           </div>
-
         </div>
 
         <!-- Grand Bilan Consolidé Net -->
-        <div style="background: #f8fafc; border: 2px solid var(--gray-300); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 2rem; box-shadow: var(--shadow-md);">
+        <div style="background: #f8fafc; border: 2px solid var(--gray-300); border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-md);">
           <div class="pos-bilan-banner">
             <div>
               <div style="font-size: 0.85rem; color: var(--gray-600);">Total Recettes Brutes</div>
@@ -4635,8 +4863,194 @@ const CaisseBilanModule = {
               </div>
             </div>
           </div>
-          <div style="text-align: center; font-size: 0.85rem; color: var(--gray-500);">
+          <div style="text-align: center; font-size: 0.85rem; color: var(--gray-500); margin-top: 0.5rem;">
             ❤️ Fonds entièrement dédiés aux œuvres sociales de l'association Love and Charity
+          </div>
+        </div>
+
+        <!-- 👑 SUPERVISION & TRAÇABILITÉ NOMINATIVE OMNISCIENTE DES CAISSIERS -->
+        <div class="card" style="border: 2px solid #3b82f6; box-shadow: var(--shadow-md);">
+          <div class="card-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-size: 1.3rem;">👑</span>
+              <div>
+                <h4 style="margin: 0; color: white; font-size: 1rem;">Traçabilité Nominative des Caissiers &amp; Vendeurs</h4>
+                <div style="font-size: 0.75rem; opacity: 0.9;">Supervision intégrale des encaissements individuels en temps réel</div>
+              </div>
+            </div>
+            <span class="badge" style="background: rgba(255,255,255,0.25); color: white; font-weight: 800;">
+              ${cashierList.length} caissier(s) actif(s)
+            </span>
+          </div>
+          <div class="card-body" style="padding: 1rem;">
+            ${cashierList.length === 0 ? `
+              <p style="text-align: center; color: var(--gray-500); padding: 1rem 0;">Aucune vente enregistrée pour l'instant.</p>
+            ` : `
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Caissier / Vendeur</th>
+                      <th>Rôle / Titre</th>
+                      <th style="text-align: center;">Tickets / Articles</th>
+                      <th style="text-align: right;">Total Encaissé</th>
+                      <th style="text-align: center;">Activité</th>
+                      <th>Répartition par Pôle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${cashierList.map(c => `
+                      <tr>
+                        <td>
+                          <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="portal-avatar" style="width: 32px; height: 32px; font-size: 0.85rem; background: #2563eb;">
+                              ${(c.name || c.login || 'C').charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <strong style="color: var(--gray-800);">${c.name}</strong>
+                              <div style="font-size: 0.72rem; color: var(--gray-500);">@${c.login}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span class="badge badge-gray" style="font-size: 0.72rem;">${c.role}</span>
+                        </td>
+                        <td style="text-align: center; font-weight: 700; font-size: 1rem;">
+                          ${c.totalSalesCount}
+                        </td>
+                        <td style="text-align: right;">
+                          <strong style="color: var(--success); font-size: 1.05rem;">${c.totalRevenue.toLocaleString()} F</strong>
+                        </td>
+                        <td style="text-align: center; font-size: 0.75rem; color: var(--gray-600); line-height: 1.3;">
+                          <div>1ère : ${new Date(c.firstSale).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
+                          <div>Dernière : <strong>${new Date(c.lastSale).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                        </td>
+                        <td>
+                          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+                            ${c.entreeRev > 0 ? `<span class="badge badge-success" style="font-size: 0.7rem;">🎟️ ${c.entreeRev.toLocaleString()} F</span>` : ''}
+                            ${c.jeuxRev > 0 ? `<span class="badge badge-primary" style="font-size: 0.7rem;">🎯 ${c.jeuxRev.toLocaleString()} F</span>` : ''}
+                            ${c.restoRev > 0 ? `<span class="badge badge-warning" style="font-size: 0.7rem;">🍔 ${c.restoRev.toLocaleString()} F</span>` : ''}
+                          </div>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `}
+          </div>
+        </div>
+
+        <!-- 📜 GRAND LIVRE OMNISCIENT EN DIRECT DE TOUTES LES VENTES -->
+        <div class="card" style="border: 2px solid var(--gray-300);">
+          <div class="card-header" style="background: var(--gray-50); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.25rem;">📜</span>
+              <div class="card-title" style="margin: 0; font-size: 1rem;">
+                Grand Livre Omniscient en Direct (Toutes Transactions)
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span class="badge badge-success" style="font-size: 0.85rem; padding: 0.35rem 0.65rem;">
+                ${filteredSales.length} transaction(s) — Total : ${filteredTotalAmount.toLocaleString()} F
+              </span>
+            </div>
+          </div>
+          <div class="card-body" style="padding: 1rem;">
+            
+            <!-- Barre de Filtres Interactifs -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; background: var(--gray-50); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+              <div>
+                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Filtrer par Caisse :</label>
+                <select class="form-control form-control-sm" onchange="CaisseBilanModule.activeCaisseFilter = this.value; CaisseBilanModule.renderSummary();">
+                  <option value="all" ${this.activeCaisseFilter === 'all' ? 'selected' : ''}>🌐 Toutes les Caisses</option>
+                  <option value="entree" ${this.activeCaisseFilter === 'entree' ? 'selected' : ''}>🎟️ Caisse 1 : Entrée &amp; Accueil</option>
+                  <option value="jeu" ${this.activeCaisseFilter === 'jeu' ? 'selected' : ''}>🎯 Caisse 2 : Tickets de Jeux</option>
+                  <option value="restauration" ${this.activeCaisseFilter === 'restauration' ? 'selected' : ''}>🍔 Caisse 4 : Restauration &amp; Buvette</option>
+                </select>
+              </div>
+
+              <div>
+                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Filtrer par Caissier :</label>
+                <select class="form-control form-control-sm" onchange="CaisseBilanModule.activeCashierFilter = this.value; CaisseBilanModule.renderSummary();">
+                  <option value="all" ${this.activeCashierFilter === 'all' ? 'selected' : ''}>👥 Tous les caissiers</option>
+                  ${allCashiers.map(cLog => `
+                    <option value="${cLog}" ${this.activeCashierFilter === cLog ? 'selected' : ''}>👤 ${cashierStats[cLog]?.name || cLog} (@${cLog})</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Recherche rapide :</label>
+                <input type="text" class="form-control form-control-sm" placeholder="Rechercher un billet, plat ou vendeur..." value="${this.searchQuery}" oninput="CaisseBilanModule.searchQuery = this.value; CaisseBilanModule.renderSummary();">
+              </div>
+            </div>
+
+            <!-- Table des ventes -->
+            ${filteredSales.length === 0 ? `
+              <div class="empty-state" style="padding: 2rem 1rem;">
+                <div class="empty-icon">🧾</div>
+                <div class="empty-title">Aucune transaction trouvée</div>
+                <div class="empty-desc">Aucune vente ne correspond aux critères de filtre sélectionnés.</div>
+              </div>
+            ` : `
+              <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                <table class="data-table">
+                  <thead style="position: sticky; top: 0; background: white; z-index: 2;">
+                    <tr>
+                      <th>Date &amp; Heure</th>
+                      <th>Caisse / Pôle</th>
+                      <th>Billet ou Article</th>
+                      <th style="text-align: center;">Qté</th>
+                      <th style="text-align: right;">Prix Unit.</th>
+                      <th style="text-align: right;">Total Encaissé</th>
+                      <th>Caissier / Vendeur</th>
+                      <th style="text-align: right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${filteredSales.map(s => {
+                      const sSellerLogin = s.seller_login || (s.seller && s.seller.login) || 'caissier';
+                      const sSellerName = s.seller_name || (s.seller && (s.seller.full_name || s.seller.login)) || sSellerLogin;
+                      const isEntree = s.category === 'entree';
+                      const isResto = s.category === 'restauration';
+                      const caisseBadge = isEntree 
+                        ? '<span class="badge badge-success" style="font-size: 0.72rem;">🎟️ Entrée</span>' 
+                        : (isResto 
+                          ? '<span class="badge badge-warning" style="font-size: 0.72rem;">🍔 Resto</span>' 
+                          : '<span class="badge badge-primary" style="font-size: 0.72rem;">🎯 Jeux</span>');
+
+                      return `
+                        <tr>
+                          <td style="font-size: 0.8rem; color: var(--gray-600); white-space: nowrap;">
+                            ${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td>${caisseBadge}</td>
+                          <td>
+                            <strong>${s.item_name}</strong>
+                            ${s.stand ? `<div style="font-size: 0.7rem; color: var(--gray-500);">🎪 ${s.stand.name}</div>` : ''}
+                          </td>
+                          <td style="text-align: center; font-weight: 700;">${s.quantity}</td>
+                          <td style="text-align: right; font-size: 0.82rem; color: var(--gray-600);">${(s.unit_price_f || 0).toLocaleString()} F</td>
+                          <td style="text-align: right;">
+                            <strong style="color: var(--success); font-size: 0.95rem;">+${(s.total_amount_f || 0).toLocaleString()} F</strong>
+                          </td>
+                          <td>
+                            <div style="font-size: 0.82rem; font-weight: 600; color: var(--gray-800);">👤 ${sSellerName}</div>
+                            <div style="font-size: 0.7rem; color: var(--gray-500);">@${sSellerLogin}</div>
+                          </td>
+                          <td style="text-align: right; white-space: nowrap;">
+                            <button class="btn btn-danger btn-sm" onclick="CaisseBilanModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Supprimer définitivement cette vente avec motif obligatoire" style="padding: 2px 7px; font-size: 0.75rem;">
+                              <span>🗑️</span> Supprimer
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `}
           </div>
         </div>
 

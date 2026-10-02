@@ -28,9 +28,6 @@ const DashboardModule = {
           <button class="btn btn-secondary btn-sm" onclick="DashboardModule.loadRealData()" title="Rafraîchir les indicateurs en direct">
             <span>🔄</span> Actualiser
           </button>
-          <button class="btn btn-danger btn-sm" onclick="CaissesCore.resetAllSalesAndTests().then(ok => { if (ok) DashboardModule.loadRealData(); })" title="Effacer toutes les ventes et tests passés pour repartir de 0 F">
-            <span>🧹</span> Remettre à 0 F
-          </button>
         </div>
         ` : ''}
       </div>
