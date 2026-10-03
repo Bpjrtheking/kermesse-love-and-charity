@@ -8,9 +8,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Supervision &amp; Bilans SuperAdmin — Kermesse Love and Charity</title>
   
-  <link rel="stylesheet" href="css/style.css?v=7.0">
-  <link rel="stylesheet" href="css/responsive.css?v=7.0">
-  <link rel="stylesheet" href="css/portal.css?v=7.0">
+  <link rel="stylesheet" href="css/style.css?v=7.1">
+  <link rel="stylesheet" href="css/responsive.css?v=7.1">
+  <link rel="stylesheet" href="css/portal.css?v=7.1">
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -50,7 +50,7 @@
       <a href="tasks.html" class="btn btn-secondary btn-sm" title="Mes Tâches &amp; Bloc-Notes" style="padding: 0.4rem 0.75rem;">
         <span>📝</span>
       </a>
-      <button class="btn btn-danger btn-sm" onclick="window.confirmResetAllData ? window.confirmResetAllData() : DashboardModule.confirmResetAllData()" title="Remettre à zéro toutes les données de test (SuperAdmin)" style="background: #dc2626; border: 1px solid #b91c1c; font-weight: 800; padding: 0.4rem 0.75rem; color: white;">
+      <button id="headerResetTestsBtn" class="btn btn-danger btn-sm" onclick="window.confirmResetAllData ? window.confirmResetAllData() : DashboardModule.confirmResetAllData()" title="Remettre à zéro toutes les données de test (SuperAdmin)" style="background: #dc2626; border: 1px solid #b91c1c; font-weight: 800; padding: 0.4rem 0.75rem; color: white;">
         <span>⚠️ Reset Tests</span>
       </button>
     </div>
@@ -89,20 +89,20 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=7.0"></script>
-  <script src="js/notify.js?v=7.0"></script>
-  <script src="js/supabase.js?v=7.0"></script>
-  <script src="js/audit.js?v=7.0"></script>
-  <script src="js/offline.js?v=7.0"></script>
-  <script src="js/auth.js?v=7.0"></script>
-  <script src="js/permissions.js?v=7.0"></script>
+  <script src="js/config.js?v=7.1"></script>
+  <script src="js/notify.js?v=7.1"></script>
+  <script src="js/supabase.js?v=7.1"></script>
+  <script src="js/audit.js?v=7.1"></script>
+  <script src="js/offline.js?v=7.1"></script>
+  <script src="js/auth.js?v=7.1"></script>
+  <script src="js/permissions.js?v=7.1"></script>
 
   <!-- Modules Supervision -->
-  <script src="js/modules/dashboard.js?v=7.0"></script>
-  <script src="js/modules/caisses.js?v=7.0"></script>
-  <script src="js/modules/roles.js?v=7.0"></script>
-  <script src="js/modules/history.js?v=7.0"></script>
-  <script src="js/modules/reports.js?v=7.0"></script>
+  <script src="js/modules/dashboard.js?v=7.1"></script>
+  <script src="js/modules/caisses.js?v=7.1"></script>
+  <script src="js/modules/roles.js?v=7.1"></script>
+  <script src="js/modules/history.js?v=7.1"></script>
+  <script src="js/modules/reports.js?v=7.1"></script>
 
   <!-- Contrôleur de Page Supervision -->
   <script>
@@ -131,6 +131,8 @@
         // Contrôle des autorisations d'accès : Réservé exclusivement au SuperAdmin
         await Permissions.syncPolesFromCloud();
         if (!Permissions.isSuperAdmin()) {
+          const resetBtn = document.getElementById('headerResetTestsBtn');
+          if (resetBtn) resetBtn.style.display = 'none';
           const navTabs = document.querySelector('.pole-tabs-bar');
           if (navTabs) navTabs.style.display = 'none';
           document.getElementById('poleContainer').innerHTML = `

@@ -33,7 +33,6 @@ const DashboardModule = {
           </button>
           ` : ''}
         </div>
-        ` : ''}
       </div>
 
       <!-- Zone d'alertes intelligentes -->

@@ -56,7 +56,7 @@ const ReportsModule = {
             <span>📑</span> Rapports &amp; Bilans Officiels — Love and Charity (L&amp;C)
           </div>
           <div class="card-actions" style="display: flex; gap: 0.5rem; align-items: center;">
-            <button class="btn btn-secondary btn-sm" onclick="ReportsModule.render(document.getElementById('mainContent'))" title="Rafraîchir les calculs">
+            <button class="btn btn-secondary btn-sm" onclick="ReportsModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent'))" title="Rafraîchir les calculs">
               <span>🔄</span> Actualiser
             </button>
             <button class="btn btn-primary btn-sm" onclick="window.print()" title="Imprimer ou enregistrer au format PDF">

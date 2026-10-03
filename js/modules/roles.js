@@ -588,7 +588,7 @@ const RolesModule = {
       }
       AuditLogger.log('STATUT_UTILISATEUR', 'user', id, `${newStatus ? 'Activation' : 'Désactivation'} du compte ${login}`);
       Notify.success(`Statut du compte ${login} mis à jour.`);
-      RolesModule.render(document.getElementById('mainContent'));
+      RolesModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent'));
     }
   },
 
@@ -673,7 +673,7 @@ const RolesModule = {
 
           AuditLogger.log('SUPPRESSION_UTILISATEUR', 'user', id, `Suppression du compte ${login}`);
           Notify.success(`Compte ${login} supprimé avec succès.`);
-          RolesModule.render(document.getElementById('mainContent'));
+          RolesModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent'));
         }
       },
       'Supprimer',
@@ -1022,8 +1022,8 @@ const RolesModule = {
         close();
 
         // Rafraîchir la vue des rôles si affichée
-        if (typeof App !== 'undefined' && App.currentModule === 'roles') {
-          RolesModule.render(document.getElementById('mainContent'));
+        if (typeof App !== 'undefined' && (App.currentModule === 'roles' || App.currentTab === 'roles')) {
+          RolesModule.render(document.getElementById('poleContainer') || document.getElementById('mainContent'));
         }
       } catch (err) {
         Notify.error('Erreur inattendue : ' + err.message);
