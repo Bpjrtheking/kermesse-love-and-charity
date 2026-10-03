@@ -120,6 +120,103 @@ const CaissesCore = {
     }
   },
 
+  async recordCancellation({
+    originalId = '',
+    caisseCategory = 'caisse',
+    itemName = '',
+    amountF = 0,
+    motif = '',
+    details = {}
+  }) {
+    const user = Auth.getCurrentUser();
+    const login = user ? (user.login || 'admin') : 'admin';
+    const fullName = (user && (user.full_name || user.login)) || 'Administrateur';
+    const role = user ? (user.role_name || user.role_code || (user.role && user.role.name) || 'Admin') : 'Admin';
+
+    const record = {
+      id: 'canc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+      original_id: originalId ? String(originalId) : '',
+      caisse_category: caisseCategory,
+      item_name: itemName || 'Article / Mouvement',
+      amount_f: Math.abs(parseInt(amountF, 10) || 0),
+      motif: (motif || '').trim() || 'Motif non précisé',
+      cancelled_by_login: login,
+      cancelled_by_name: fullName,
+      cancelled_by_role: role,
+      details: details || {},
+      created_at: new Date().toISOString()
+    };
+
+    // 1. Sauvegarde locale persistante immédiate (fallback / offline)
+    try {
+      const stored = localStorage.getItem('kermesse_cancellations_registry');
+      const list = stored ? JSON.parse(stored) : [];
+      list.unshift(record);
+      localStorage.setItem('kermesse_cancellations_registry', JSON.stringify(list.slice(0, 500)));
+    } catch (e) {}
+
+    // 2. Sauvegarde Cloud Supabase (transaction_cancellations)
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        const { data, error } = await client.from('transaction_cancellations').insert([{
+          original_id: record.original_id,
+          caisse_category: record.caisse_category,
+          item_name: record.item_name,
+          amount_f: record.amount_f,
+          motif: record.motif,
+          cancelled_by_login: record.cancelled_by_login,
+          cancelled_by_name: record.cancelled_by_name,
+          cancelled_by_role: record.cancelled_by_role,
+          details: record.details
+        }]).select('id, created_at');
+        if (!error && data && data[0]) {
+          record.id = data[0].id;
+          if (data[0].created_at) record.created_at = data[0].created_at;
+        }
+      } catch (err) {
+        console.warn('[Cancellation Cloud Record Warning]', err);
+      }
+    }
+
+    // 3. Logger dans AuditLogger
+    AuditLogger.log(
+      'ANNULATION_TRANSACTION',
+      record.caisse_category,
+      record.original_id,
+      `[${record.caisse_category.toUpperCase()}] Annulation « ${record.item_name} » (-${record.amount_f} F) par ${record.cancelled_by_name} (@${record.cancelled_by_login}) [${record.cancelled_by_role}]. Motif : ${record.motif}`
+    );
+
+    return record;
+  },
+
+  async loadCancellations() {
+    let list = [];
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        const { data, error } = await client
+          .from('transaction_cancellations')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data && Array.isArray(data)) {
+          list = data;
+          localStorage.setItem('kermesse_cancellations_registry', JSON.stringify(list));
+          return list;
+        }
+      } catch (e) {
+        console.warn('[Load Cancellations Cloud Warning]', e);
+      }
+    }
+
+    // Fallback local storage
+    try {
+      const stored = localStorage.getItem('kermesse_cancellations_registry');
+      if (stored) list = JSON.parse(stored);
+    } catch (e) {}
+    return list;
+  },
+
   _usersMap: null,
   _usersMapTime: 0,
 
@@ -970,6 +1067,17 @@ const CaissesCore = {
       return;
     }
 
+    const cancelReason = prompt(`Suppression de la dépense sur ${registerName} (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de saisie, dépense annulée, rectification) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Suppression annulée : un motif explicatif est obligatoire pour la traçabilité administrative.");
+      return;
+    }
+
+    const user = Auth.getCurrentUser();
+    const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'SuperAdmin';
+
     const client = SupabaseClient.client;
     if (client && this.isUuid(movementId)) {
       try {
@@ -986,7 +1094,16 @@ const CaissesCore = {
       }
     } catch (e) {}
 
-    AuditLogger.log('SUPPRESSION_DEPENSE', 'cash_movement', movementId, `Suppression dépense de ${amount} F sur ${registerName}`);
+    await this.recordCancellation({
+      originalId: movementId,
+      caisseCategory: 'depense',
+      itemName: `Dépense ${registerName}`,
+      amountF: amount,
+      motif: motif,
+      details: { register_id: registerId, register_name: registerName }
+    });
+
+    AuditLogger.log('SUPPRESSION_DEPENSE', 'cash_movement', movementId, `Suppression dépense de ${amount} F sur ${registerName} par ${adminLabel}. Motif : ${motif}`);
   },
 
   async updateInitialAmount(registerId, newInitial) {
@@ -1550,6 +1667,15 @@ const CaisseEntreeModule = {
 
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_entry_sales', JSON.stringify(this.sales));
+
+    await CaissesCore.recordCancellation({
+      originalId: id,
+      caisseCategory: 'entree',
+      itemName: name,
+      amountF: amount,
+      motif: motif,
+      details: { caisse: 'Caisse 1 — Entrée' }
+    });
 
     AuditLogger.log('ANNULATION_VENTE_ENTREE', 'ticket_sales', id, `Suppression billet entrée « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
     Notify.success(`Billet « ${name} » supprimé. Motif consigné : ${motif}`);
@@ -2857,6 +2983,15 @@ const CaisseJeuxModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_game_sales', JSON.stringify(this.sales));
 
+    await CaissesCore.recordCancellation({
+      originalId: id,
+      caisseCategory: 'jeux',
+      itemName: name,
+      amountF: amount,
+      motif: motif,
+      details: { caisse: 'Caisse 2 — Tickets Jeux' }
+    });
+
     AuditLogger.log('SUPPRESSION_VENTE_JEUX', 'ticket_sale', id, `Suppression ticket jeu « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
     Notify.success(`Ticket de jeu « ${name} » supprimé. Motif consigné : ${motif}`);
     this.renderCurrentTab();
@@ -3452,25 +3587,14 @@ const CaisseJetonsModule = {
     let totalAvoirsEmis = 0;
     let totalAvoirsDecaisses = 0;
 
-    // Calculer depuis les mouvements
-    this.movements.forEach(m => {
+    // Calculer strictement et fidèlement depuis les mouvements enregistrés
+    (this.movements || []).forEach(m => {
       if (m.type === 'emission_jeton' || m.type === 'emission_avoir') {
-        totalAvoirsEmis += Math.abs(m.amount_f);
+        totalAvoirsEmis += Math.abs(m.amount_f || 0);
       } else if (m.type === 'restitution_jeton' || m.type === 'remboursement_jeton' || m.type === 'restitution_avoir') {
-        totalAvoirsDecaisses += Math.abs(m.amount_f);
+        totalAvoirsDecaisses += Math.abs(m.amount_f || 0);
       }
     });
-
-    // Comparer avec token_debts au besoin
-    let tokenDebtsIssued = 0;
-    let tokenDebtsRedeemed = 0;
-    this.tokens.forEach(t => {
-      tokenDebtsIssued += (t.quantity_given || 0) * (t.token_value_f || 0);
-      tokenDebtsRedeemed += (t.quantity_redeemed || 0) * (t.token_value_f || 0);
-    });
-
-    if (tokenDebtsIssued > totalAvoirsEmis) totalAvoirsEmis = tokenDebtsIssued;
-    if (tokenDebtsRedeemed > totalAvoirsDecaisses) totalAvoirsDecaisses = tokenDebtsRedeemed;
 
     const netTokenDebt = Math.max(0, totalAvoirsEmis - totalAvoirsDecaisses);
 
@@ -3942,20 +4066,36 @@ const CaisseJetonsModule = {
 
     const adminLabel = user ? `${user.full_name || user.login} (@${user.login})` : 'Admin';
     const client = SupabaseClient.client;
-    if (client && CaissesCore.isUuid(id)) {
+    if (client) {
       try {
         await client.from('cash_movements').delete().eq('id', id);
+        if (CaissesCore.isUuid(id)) {
+          await client.from('token_debts').delete().eq('id', id);
+        }
       } catch (e) {
         console.warn('[Delete Movement DB Warning]', e);
       }
     }
 
-    this.movements = this.movements.filter(m => m.id !== id);
+    this.movements = (this.movements || []).filter(m => m.id !== id);
+    this.tokens = (this.tokens || []).filter(t => t.id !== id);
     localStorage.setItem('kermesse_jetons_movements', JSON.stringify(this.movements));
+    localStorage.setItem('kermesse_jetons_debts', JSON.stringify(this.tokens));
+
+    await CaissesCore.recordCancellation({
+      originalId: id,
+      caisseCategory: 'jetons',
+      itemName: `Avoir / Mouvement Jeton (${reason || 'Avoir'})`,
+      amountF: Math.abs(amount || 0),
+      motif: motif,
+      details: {
+        caisse: 'Caisse 3 — Change & Jetons',
+        original_reason: reason || ''
+      }
+    });
 
     AuditLogger.log('SUPPRESSION_MOUVEMENT_JETON', 'cash_movements', id, `Suppression mouvement jeton/avoir ${amount} F par ${adminLabel}. Motif : ${motif}`);
     Notify.success(`Mouvement supprimé. Motif consigné : ${motif}`);
-    await this.loadData();
     this.renderCurrentTab();
   }
 };
@@ -4549,6 +4689,19 @@ const CaisseRestaurationModule = {
     this.sales = this.sales.filter(s => s.id !== id);
     localStorage.setItem('kermesse_food_sales', JSON.stringify(this.sales));
 
+    await CaissesCore.recordCancellation({
+      originalId: id,
+      caisseCategory: 'restauration',
+      itemName: name,
+      amountF: amount,
+      motif: motif,
+      details: {
+        caisse: 'Caisse 4 — Restauration',
+        product_id: productId || null,
+        quantity: quantity || 1
+      }
+    });
+
     AuditLogger.log('ANNULATION_VENTE_RESTAURATION', 'ticket_sales', id, `Suppression vente resto « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
     Notify.success(`Commande « ${name} » enlevée. Motif consigné : ${motif}`);
     this.renderCurrentTab();
@@ -5058,6 +5211,15 @@ const CaisseBilanModule = {
       } catch (e) {}
     });
 
+    await CaissesCore.recordCancellation({
+      originalId: id,
+      caisseCategory: 'bilan',
+      itemName: name,
+      amountF: amount,
+      motif: motif,
+      details: { caisse: 'Bilan Consolidé' }
+    });
+
     AuditLogger.log('SUPPRESSION_VENTE_BILAN', 'ticket_sales', id, `Suppression transaction « ${name} » (-${amount} F) par ${adminLabel}. Motif : ${motif}`);
     Notify.success(`Transaction « ${name} » supprimée. Motif consigné : ${motif}`);
     await this.loadData();
@@ -5143,6 +5305,20 @@ const CaisseBilanModule = {
     container.innerHTML = `
       <div style="max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
         
+        <!-- Accès direct au Registre des Annulations & Motifs -->
+        <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: var(--radius-md); padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <span style="font-size: 1.4rem;">🗑️</span>
+            <div>
+              <strong style="color: #9f1239; font-size: 0.95rem;">Contrôle &amp; Registre des Annulations</strong>
+              <div style="font-size: 0.78rem; color: #be123c;">Consultez la liste officielle de toutes les suppressions effectuées avec le motif obligatoire et l'auteur.</div>
+            </div>
+          </div>
+          <button class="btn btn-sm" style="background: #e11d48; color: white; border: none; font-weight: 700; padding: 0.45rem 1rem;" onclick="if (window.PoleApp && PoleApp.tabs && PoleApp.tabs.caisse_annulations) PoleApp.switchTab('caisse_annulations'); else App.navigateTo('caisse_annulations');">
+            <span>📋</span> Voir le Registre des Annulations
+          </button>
+        </div>
+
         <!-- Cartes synthétiques des 4 Caisses -->
         <div class="pos-bilan-kpi">
           <div class="card" style="border: 2px solid #10b981; border-top: 6px solid #10b981;">
@@ -5441,6 +5617,366 @@ const CaisseBilanModule = {
   }
 };
 
+
+// ==============================================================================
+// 6. MODULE : REGISTRE OFFICIEL DES ANNULATIONS & SUPPRESSIONS (CaisseAnnulationsModule)
+// Traçabilité inaltérable avec motif obligatoire et identité de l'auteur
+// ==============================================================================
+const CaisseAnnulationsModule = {
+  cancellations: [],
+  currentFilterCategory: 'all', // 'all', 'entree', 'jeux', 'jetons', 'restauration', 'depense'
+  currentFilterAuthor: 'all',
+  searchQuery: '',
+  _realtimeInit: false,
+
+  async render(container) {
+    await this.loadData();
+
+    container.innerHTML = `
+      <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header caisse-card-header">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div class="card-title" style="margin: 0; font-size: 1.25rem;">
+                <span>🗑️</span> Registre Officiel des Annulations &amp; Motifs
+              </div>
+              <span class="badge badge-danger" id="cancellationsCountBadge" style="font-size: 0.85rem; font-weight: 800;">
+                ${this.cancellations.length} suppression(s)
+              </span>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="CaisseAnnulationsModule.exportCsv()" title="Télécharger le registre en CSV">
+                <span>📥</span> Exporter CSV
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="CaisseAnnulationsModule.refresh()" title="Rafraîchir les données">
+                <span>🔄</span> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body" id="caisseAnnulationsBody">
+          <!-- Le contenu dynamique sera injecté ici -->
+        </div>
+      </div>
+    `;
+
+    this.renderContent();
+
+    // Abonnement temps réel multi-appareils
+    if (!this._realtimeInit) {
+      this._realtimeInit = true;
+      const client = SupabaseClient.client;
+      if (client) {
+        try {
+          client.channel('realtime_trans_canc')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'transaction_cancellations' }, async () => {
+              await this.loadData();
+              this.renderContent();
+            })
+            .subscribe();
+        } catch (e) {}
+      }
+
+      // Polling transparent de secours
+      setInterval(async () => {
+        const dom = document.getElementById('caisseAnnulationsBody');
+        if (dom) {
+          await this.loadData();
+          this.renderContent();
+        }
+      }, 4000);
+    }
+  },
+
+  async refresh() {
+    Notify.info('Actualisation du registre des annulations...');
+    await this.loadData();
+    this.renderContent();
+  },
+
+  async loadData() {
+    this.cancellations = await CaissesCore.loadCancellations();
+  },
+
+  renderContent() {
+    const container = document.getElementById('caisseAnnulationsBody');
+    if (!container) return;
+
+    // Badges en haut
+    const totalCount = this.cancellations.length;
+    const totalAmount = this.cancellations.reduce((sum, c) => sum + (c.amount_f || 0), 0);
+    const authorsSet = new Set(this.cancellations.map(c => c.cancelled_by_login || 'inconnu'));
+    const authorsCount = authorsSet.size;
+
+    const authorOptions = Array.from(authorsSet).filter(Boolean);
+
+    // Filtrage
+    const filtered = this.cancellations.filter(c => {
+      if (this.currentFilterCategory !== 'all') {
+        const cat = (c.caisse_category || '').toLowerCase();
+        if (cat !== this.currentFilterCategory && !(this.currentFilterCategory === 'jeux' && cat === 'jeu')) {
+          return false;
+        }
+      }
+      if (this.currentFilterAuthor !== 'all') {
+        const auth = (c.cancelled_by_login || '').toLowerCase();
+        if (auth !== this.currentFilterAuthor.toLowerCase()) return false;
+      }
+      if (this.searchQuery) {
+        const q = this.searchQuery.toLowerCase().trim();
+        const itemName = (c.item_name || '').toLowerCase();
+        const motif = (c.motif || '').toLowerCase();
+        const authorName = (c.cancelled_by_name || '').toLowerCase();
+        const authorLogin = (c.cancelled_by_login || '').toLowerCase();
+        if (!itemName.includes(q) && !motif.includes(q) && !authorName.includes(q) && !authorLogin.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const filteredAmount = filtered.reduce((sum, c) => sum + (c.amount_f || 0), 0);
+
+    const catCounts = {
+      all: totalCount,
+      entree: this.cancellations.filter(c => (c.caisse_category || '').toLowerCase() === 'entree').length,
+      jeux: this.cancellations.filter(c => ['jeux', 'jeu'].includes((c.caisse_category || '').toLowerCase())).length,
+      jetons: this.cancellations.filter(c => (c.caisse_category || '').toLowerCase() === 'jetons').length,
+      restauration: this.cancellations.filter(c => (c.caisse_category || '').toLowerCase() === 'restauration').length,
+      depense: this.cancellations.filter(c => (c.caisse_category || '').toLowerCase() === 'depense').length
+    };
+
+    container.innerHTML = `
+      <!-- 1. KPI Cards Récapitulatives -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-md); padding: 1rem;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: #991b1b;">Total Suppressions Consignées</div>
+          <div style="font-size: 1.6rem; font-weight: 900; color: #dc2626; margin-top: 4px;">
+            ${totalCount}
+          </div>
+          <div style="font-size: 0.72rem; color: #b91c1c; opacity: 0.85;">Annulations avec motif obligatoire</div>
+        </div>
+
+        <div style="background: #fff7ed; border: 1px solid #ffedd5; border-radius: var(--radius-md); padding: 1rem;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: #9a3412;">Montant Total Annulé</div>
+          <div style="font-size: 1.6rem; font-weight: 900; color: #ea580c; margin-top: 4px;">
+            -${totalAmount.toLocaleString()} F
+          </div>
+          <div style="font-size: 0.72rem; color: #c2410c; opacity: 0.85;">Impact financier soustrait des caisses</div>
+        </div>
+
+        <div style="background: #eff6ff; border: 1px solid #dbeafe; border-radius: var(--radius-md); padding: 1rem;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: #1e40af;">Comptes &amp; Auteurs Audités</div>
+          <div style="font-size: 1.6rem; font-weight: 900; color: #2563eb; margin-top: 4px;">
+            ${authorsCount} compte(s)
+          </div>
+          <div style="font-size: 0.72rem; color: #1d4ed8; opacity: 0.85;">Admins / SuperAdmins identifiés</div>
+        </div>
+
+        <div style="background: #f0fdf4; border: 1px solid #dcfce7; border-radius: var(--radius-md); padding: 1rem;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: #166534;">Conformité &amp; Justification</div>
+          <div style="font-size: 1.6rem; font-weight: 900; color: #16a34a; margin-top: 4px;">
+            100%
+          </div>
+          <div style="font-size: 0.72rem; color: #15803d; opacity: 0.85;">Motif précis exigé sur chaque action</div>
+        </div>
+      </div>
+
+      <!-- 2. Filtres & Barre d'outils -->
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; background: var(--gray-50); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+          <!-- Recherche rapide -->
+          <div style="position: relative; flex: 1; min-width: 240px;">
+            <input type="text" class="form-control" placeholder="🔍 Rechercher par motif, article, auteur (@login)..." value="${this.searchQuery.replace(/"/g, '&quot;')}" oninput="CaisseAnnulationsModule.setSearch(this.value)">
+          </div>
+
+          <!-- Filtre par Auteur -->
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label style="font-size: 0.85rem; font-weight: 700; color: var(--gray-700); margin: 0; white-space: nowrap;">Auteur :</label>
+            <select class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; min-width: 170px;" onchange="CaisseAnnulationsModule.setAuthorFilter(this.value)">
+              <option value="all" ${this.currentFilterAuthor === 'all' ? 'selected' : ''}>Tous les auteurs (${totalCount})</option>
+              ${authorOptions.map(login => {
+                const authorItem = this.cancellations.find(c => c.cancelled_by_login === login);
+                const name = authorItem?.cancelled_by_name || login;
+                return `<option value="${login}" ${this.currentFilterAuthor === login ? 'selected' : ''}>👤 ${name} (@${login})</option>`;
+              }).join('')}
+            </select>
+          </div>
+        </div>
+
+        <!-- Filtres Catégories en Pills modernes -->
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="btn btn-sm ${this.currentFilterCategory === 'all' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseAnnulationsModule.setCategoryFilter('all')">
+            Toutes (${catCounts.all})
+          </button>
+          <button class="btn btn-sm ${this.currentFilterCategory === 'entree' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseAnnulationsModule.setCategoryFilter('entree')">
+            🎟️ Caisse 1 Entrée (${catCounts.entree})
+          </button>
+          <button class="btn btn-sm ${this.currentFilterCategory === 'jeux' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseAnnulationsModule.setCategoryFilter('jeux')">
+            🎯 Caisse 2 Jeux (${catCounts.jeux})
+          </button>
+          <button class="btn btn-sm ${this.currentFilterCategory === 'jetons' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseAnnulationsModule.setCategoryFilter('jetons')">
+            🪙 Caisse 3 Jetons/Avoirs (${catCounts.jetons})
+          </button>
+          <button class="btn btn-sm ${this.currentFilterCategory === 'restauration' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseAnnulationsModule.setCategoryFilter('restauration')">
+            🍔 Caisse 4 Restauration (${catCounts.restauration})
+          </button>
+          <button class="btn btn-sm ${this.currentFilterCategory === 'depense' ? 'btn-primary' : 'btn-secondary'}" onclick="CaisseAnnulationsModule.setCategoryFilter('depense')">
+            💸 Dépenses (${catCounts.depense})
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. Tableau Registre des Suppressions -->
+      <div class="table-responsive">
+        ${filtered.length === 0 ? `
+          <div class="empty-state" style="padding: 3rem 1rem; text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 0.5rem;">📋</div>
+            <div class="empty-title" style="font-weight: 700; font-size: 1.1rem; color: var(--gray-700);">
+              ${totalCount === 0 ? 'Aucune suppression enregistrée dans le système' : 'Aucune suppression ne correspond aux filtres sélectionnés'}
+            </div>
+            <div class="empty-desc" style="font-size: 0.85rem; color: var(--gray-500); margin-top: 4px;">
+              ${totalCount === 0 ? 'Toutes les annulations futures effectuées avec motif obligatoire apparaîtront ici avec la traçabilité complète.' : 'Modifiez vos critères de recherche pour afficher les enregistrements.'}
+            </div>
+          </div>
+        ` : `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.85rem; color: var(--gray-600);">
+            <span>Affichage de <strong>${filtered.length}</strong> suppression(s)</span>
+            <span style="font-weight: 700; color: #dc2626;">Total sélection : -${filteredAmount.toLocaleString()} F</span>
+          </div>
+
+          <table class="data-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: var(--gray-100); text-align: left;">
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Date &amp; Heure</th>
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Caisse / Origine</th>
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Élément Supprimé</th>
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase; text-align: right;">Montant</th>
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Motif Obligatoire Justifié</th>
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Auteur de la Suppression</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(c => {
+                const dateStr = new Date(c.created_at).toLocaleDateString('fr-FR', {
+                  day: '2-digit', month: '2-digit', year: 'numeric',
+                  hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                let caisseBadge = '';
+                const cat = (c.caisse_category || '').toLowerCase();
+                if (cat === 'entree') {
+                  caisseBadge = '<span class="badge" style="background: #d1fae5; color: #065f46; font-weight: 700;">🎟️ Caisse 1 Entrée</span>';
+                } else if (cat === 'jeux' || cat === 'jeu') {
+                  caisseBadge = '<span class="badge" style="background: #e0e7ff; color: #3730a3; font-weight: 700;">🎯 Caisse 2 Jeux</span>';
+                } else if (cat === 'jetons') {
+                  caisseBadge = '<span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 700;">🪙 Caisse 3 Jetons</span>';
+                } else if (cat === 'restauration') {
+                  caisseBadge = '<span class="badge" style="background: #fee2e2; color: #991b1b; font-weight: 700;">🍔 Caisse 4 Resto</span>';
+                } else if (cat === 'depense') {
+                  caisseBadge = '<span class="badge" style="background: #f1f5f9; color: #475569; font-weight: 700;">💸 Dépense</span>';
+                } else {
+                  caisseBadge = `<span class="badge badge-secondary">${c.caisse_category}</span>`;
+                }
+
+                return `
+                  <tr style="border-bottom: 1px solid var(--gray-200);">
+                    <td style="padding: 0.75rem; font-size: 0.8rem; color: var(--gray-600); white-space: nowrap;">
+                      ${dateStr}
+                    </td>
+                    <td style="padding: 0.75rem; white-space: nowrap;">
+                      ${caisseBadge}
+                    </td>
+                    <td style="padding: 0.75rem;">
+                      <div style="font-weight: 700; font-size: 0.9rem; color: var(--gray-900);">${c.item_name}</div>
+                      ${c.original_id ? `<div style="font-size: 0.7rem; color: var(--gray-400); font-family: monospace;">ID: ${c.original_id}</div>` : ''}
+                    </td>
+                    <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #dc2626; white-space: nowrap; font-size: 0.95rem;">
+                      -${(c.amount_f || 0).toLocaleString()} F
+                    </td>
+                    <td style="padding: 0.75rem; min-width: 220px;">
+                      <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #f59e0b; padding: 6px 10px; border-radius: 4px;">
+                        <span style="font-size: 0.85rem; font-weight: 700; color: #92400e;">
+                          💬 « ${c.motif} »
+                        </span>
+                      </div>
+                    </td>
+                    <td style="padding: 0.75rem; white-space: nowrap;">
+                      <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <span style="font-weight: 700; font-size: 0.85rem; color: var(--gray-800);">
+                          👤 ${c.cancelled_by_name || c.cancelled_by_login}
+                        </span>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                          <span style="font-size: 0.72rem; color: var(--gray-500); font-family: monospace;">@${c.cancelled_by_login}</span>
+                          ${c.cancelled_by_role ? `<span class="badge badge-gray" style="font-size: 0.68rem; padding: 1px 5px;">${c.cancelled_by_role}</span>` : ''}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+  },
+
+  setCategoryFilter(cat) {
+    this.currentFilterCategory = cat;
+    this.renderContent();
+  },
+
+  setAuthorFilter(author) {
+    this.currentFilterAuthor = author;
+    this.renderContent();
+  },
+
+  setSearch(val) {
+    this.searchQuery = val || '';
+    this.renderContent();
+  },
+
+  exportCsv() {
+    if (!this.cancellations || this.cancellations.length === 0) {
+      Notify.warning('Aucune donnée à exporter.');
+      return;
+    }
+
+    const headers = ['Date', 'Heure', 'Caisse/Origine', 'Article/Mouvement', 'Montant (F CFA)', 'Motif Obligatoire', 'Auteur (Nom)', 'Auteur (Login)', 'Auteur (Role)', 'ID Origine'];
+    const rows = this.cancellations.map(c => {
+      const d = new Date(c.created_at);
+      const datePart = d.toLocaleDateString('fr-FR');
+      const timePart = d.toLocaleTimeString('fr-FR');
+      return [
+        `"${datePart}"`,
+        `"${timePart}"`,
+        `"${c.caisse_category || ''}"`,
+        `"${(c.item_name || '').replace(/"/g, '""')}"`,
+        `"${c.amount_f || 0}"`,
+        `"${(c.motif || '').replace(/"/g, '""')}"`,
+        `"${(c.cancelled_by_name || '').replace(/"/g, '""')}"`,
+        `"${c.cancelled_by_login || ''}"`,
+        `"${c.cancelled_by_role || ''}"`,
+        `"${c.original_id || ''}"`
+      ];
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `registre_annulations_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    Notify.success('Registre des annulations exporté en CSV.');
+  }
+};
+
 // Export global pour la plateforme
 window.CaissesCore = CaissesCore;
 window.CaisseEntreeModule = CaisseEntreeModule;
@@ -5448,3 +5984,4 @@ window.CaisseJeuxModule = CaisseJeuxModule;
 window.CaisseJetonsModule = CaisseJetonsModule;
 window.CaisseRestaurationModule = CaisseRestaurationModule;
 window.CaisseBilanModule = CaisseBilanModule;
+window.CaisseAnnulationsModule = CaisseAnnulationsModule;

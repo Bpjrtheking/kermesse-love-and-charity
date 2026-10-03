@@ -1043,7 +1043,13 @@ const TicketsModule = {
   },
 
   async deleteSale(saleId, itemName, amount) {
-    if (!confirm(`Voulez-vous supprimer définitivement cette vente de « ${itemName} » (${amount} F) ?`)) return;
+    const cancelReason = prompt(`Suppression de la vente « ${itemName} » (${(amount || 0).toLocaleString()} F) :\n\nMotif obligatoire de la suppression (ex: Erreur de stand, remboursement, billet annulé) :`);
+    if (cancelReason === null) return;
+    const motif = cancelReason.trim();
+    if (!motif) {
+      Notify.warning("Suppression annulée : un motif explicatif est obligatoire pour la traçabilité.");
+      return;
+    }
 
     const client = SupabaseClient.client;
     if (client) {
@@ -1060,8 +1066,19 @@ const TicketsModule = {
     this.sales = this.sales.filter(s => s.id !== saleId);
     localStorage.setItem('kermesse_ticket_sales', JSON.stringify(this.sales));
 
-    AuditLogger.log('SUPPRESSION_VENTE', 'ticket_sale', saleId, `Suppression de la vente ${itemName} (${amount} F)`);
-    Notify.success(`Vente de « ${itemName} » supprimée.`);
+    if (window.CaissesCore && CaissesCore.recordCancellation) {
+      await CaissesCore.recordCancellation({
+        originalId: saleId,
+        caisseCategory: 'jeux',
+        itemName: itemName,
+        amountF: amount,
+        motif: motif,
+        details: { caisse: 'Billetterie / Stands' }
+      });
+    }
+
+    AuditLogger.log('SUPPRESSION_VENTE', 'ticket_sale', saleId, `Suppression de la vente ${itemName} (${amount} F). Motif : ${motif}`);
+    Notify.success(`Vente de « ${itemName} » supprimée. Motif consigné : ${motif}`);
     this.updateKpis();
     this.renderCurrentTab();
   },

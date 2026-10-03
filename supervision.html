@@ -8,9 +8,9 @@
   <meta http-equiv="Expires" content="0">
   <title>Supervision &amp; Bilans SuperAdmin — Kermesse Love and Charity</title>
   
-  <link rel="stylesheet" href="css/style.css?v=6.9">
-  <link rel="stylesheet" href="css/responsive.css?v=6.9">
-  <link rel="stylesheet" href="css/portal.css?v=6.9">
+  <link rel="stylesheet" href="css/style.css?v=7.0">
+  <link rel="stylesheet" href="css/responsive.css?v=7.0">
+  <link rel="stylesheet" href="css/portal.css?v=7.0">
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -70,6 +70,9 @@
     <button class="pole-tab-btn" data-tab="reports" onclick="PoleApp.switchTab('reports')">
       <span>📑</span> Rapports Officiels
     </button>
+    <button class="pole-tab-btn" data-tab="caisse_annulations" onclick="PoleApp.switchTab('caisse_annulations')">
+      <span>🗑️</span> Registre des Annulations
+    </button>
   </nav>
 
   <!-- Zone de Contenu Plein Écran Spacieux -->
@@ -83,20 +86,20 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Scripts Core -->
-  <script src="js/config.js?v=6.9"></script>
-  <script src="js/notify.js?v=6.9"></script>
-  <script src="js/supabase.js?v=6.9"></script>
-  <script src="js/audit.js?v=6.9"></script>
-  <script src="js/offline.js?v=6.9"></script>
-  <script src="js/auth.js?v=6.9"></script>
-  <script src="js/permissions.js?v=6.9"></script>
+  <script src="js/config.js?v=7.0"></script>
+  <script src="js/notify.js?v=7.0"></script>
+  <script src="js/supabase.js?v=7.0"></script>
+  <script src="js/audit.js?v=7.0"></script>
+  <script src="js/offline.js?v=7.0"></script>
+  <script src="js/auth.js?v=7.0"></script>
+  <script src="js/permissions.js?v=7.0"></script>
 
   <!-- Modules Supervision -->
-  <script src="js/modules/dashboard.js?v=6.9"></script>
-  <script src="js/modules/caisses.js?v=6.9"></script>
-  <script src="js/modules/roles.js?v=6.9"></script>
-  <script src="js/modules/history.js?v=6.9"></script>
-  <script src="js/modules/reports.js?v=6.9"></script>
+  <script src="js/modules/dashboard.js?v=7.0"></script>
+  <script src="js/modules/caisses.js?v=7.0"></script>
+  <script src="js/modules/roles.js?v=7.0"></script>
+  <script src="js/modules/history.js?v=7.0"></script>
+  <script src="js/modules/reports.js?v=7.0"></script>
 
   <!-- Contrôleur de Page Supervision -->
   <script>
@@ -107,7 +110,8 @@
         caisse_bilan: { label: 'Bilan Financier', handler: CaisseBilanModule },
         roles: { label: 'Rôles & Comptes', handler: RolesModule },
         history: { label: 'Journal', handler: HistoryModule },
-        reports: { label: 'Rapports', handler: ReportsModule }
+        reports: { label: 'Rapports', handler: ReportsModule },
+        caisse_annulations: { label: 'Registre des Annulations', handler: CaisseAnnulationsModule }
       },
 
       async init() {

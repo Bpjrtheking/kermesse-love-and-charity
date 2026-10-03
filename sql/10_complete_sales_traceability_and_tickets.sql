@@ -103,3 +103,33 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
+-- 7. REGISTRE OFFICIEL DES ANNULATIONS ET SUPPRESSIONS AVEC MOTIFS OBLIGATOIRES
+CREATE TABLE IF NOT EXISTS transaction_cancellations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    original_id TEXT,
+    caisse_category TEXT NOT NULL, -- 'entree', 'jeu', 'jetons', 'restauration', 'depense'
+    item_name TEXT NOT NULL,
+    amount_f INT NOT NULL DEFAULT 0,
+    motif TEXT NOT NULL,
+    cancelled_by_login TEXT NOT NULL,
+    cancelled_by_name TEXT NOT NULL,
+    cancelled_by_role TEXT,
+    details JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trans_cancellations_created ON transaction_cancellations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trans_cancellations_cat ON transaction_cancellations(caisse_category);
+CREATE INDEX IF NOT EXISTS idx_trans_cancellations_user ON transaction_cancellations(cancelled_by_login);
+
+ALTER TABLE transaction_cancellations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Gestion ouverte transaction_cancellations" ON transaction_cancellations;
+CREATE POLICY "Gestion ouverte transaction_cancellations" ON transaction_cancellations FOR ALL USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE transaction_cancellations;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+
