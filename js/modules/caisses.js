@@ -718,33 +718,37 @@ const CaissesCore = {
     // 5. Consolidation des Avoirs et Jetons en circulation (Caisse 3)
     let tokensIssued = 0;
     let tokensRedeemed = 0;
+    let aMvts = null;
+
     if (client) {
       try {
-        const { data: tDebts } = await client.from('token_debts').select('token_value_f, quantity_given, quantity_redeemed');
-        if (tDebts) {
-          tDebts.forEach(td => {
-            tokensIssued += (td.quantity_given || 0) * (td.token_value_f || 0);
-            tokensRedeemed += (td.quantity_redeemed || 0) * (td.token_value_f || 0);
-          });
-        }
-        const { data: aMvts } = await client
+        const { data } = await client
           .from('cash_movements')
           .select('amount_f, type')
-          .in('type', ['emission_jeton', 'restitution_jeton', 'remboursement_jeton']);
-        if (aMvts) {
-          let mvtsIssued = 0;
-          let mvtsRedeemed = 0;
-          aMvts.forEach(am => {
-            if (am.type === 'emission_jeton') mvtsIssued += Math.abs(am.amount_f || 0);
-            else mvtsRedeemed += Math.abs(am.amount_f || 0);
-          });
-          if (mvtsIssued > tokensIssued) tokensIssued = mvtsIssued;
-          if (mvtsRedeemed > tokensRedeemed) tokensRedeemed = mvtsRedeemed;
-        }
+          .in('type', ['emission_jeton', 'emission_avoir', 'restitution_jeton', 'remboursement_jeton', 'restitution_avoir']);
+        if (data) aMvts = data;
       } catch (e) {
         console.warn('[Consolidated Finances Tokens Warning]', e);
       }
     }
+
+    if (!aMvts) {
+      try {
+        const storedM = localStorage.getItem('kermesse_jetons_movements');
+        if (storedM) aMvts = JSON.parse(storedM);
+      } catch (e) {}
+    }
+
+    if (aMvts && Array.isArray(aMvts)) {
+      aMvts.forEach(am => {
+        if (am.type === 'emission_jeton' || am.type === 'emission_avoir') {
+          tokensIssued += Math.abs(am.amount_f || 0);
+        } else if (am.type === 'restitution_jeton' || am.type === 'remboursement_jeton' || am.type === 'restitution_avoir') {
+          tokensRedeemed += Math.abs(am.amount_f || 0);
+        }
+      });
+    }
+
     const netTokenDebt = Math.max(0, tokensIssued - tokensRedeemed);
 
     const totalExpenses = allExpenses.reduce((sum, e) => sum + Math.abs(e.amount_f), 0);
@@ -5163,11 +5167,60 @@ const CaisseBilanModule = {
     }
   },
 
+  poleAdmins: [],
+
+  async loadPole2Admins() {
+    const list = [];
+    const client = SupabaseClient.client;
+    let allUsers = [];
+
+    if (client) {
+      try {
+        const { data } = await client
+          .from('app_users')
+          .select('id, login, full_name, role:roles(name)');
+        if (data && Array.isArray(data)) allUsers = data;
+      } catch (e) {}
+    }
+
+    if (allUsers.length === 0) {
+      try {
+        const stored = localStorage.getItem('kermesse_users');
+        if (stored) allUsers = JSON.parse(stored);
+      } catch (e) {}
+    }
+
+    const cur = Auth.getCurrentUser();
+    if (cur && !allUsers.some(u => (u.login || '').toLowerCase() === (cur.login || '').toLowerCase())) {
+      allUsers.push(cur);
+    }
+
+    allUsers.forEach(u => {
+      const uObj = {
+        id: u.id,
+        login: u.login,
+        full_name: u.full_name || u.login,
+        role_name: (u.role && u.role.name) || u.role_name || 'Admin',
+        role_code: u.role_code || (u.role && u.role.name ? String(u.role.name).toLowerCase() : '')
+      };
+      const isSuper = Permissions.isSuperAdmin(uObj);
+      const canAccessP2 = Permissions.canAccessPole(2, uObj);
+      const isFinances = uObj.role_code === 'admin_finances' || uObj.role_code === 'admin_billetterie';
+
+      if (isSuper || canAccessP2 || isFinances) {
+        list.push({ ...uObj, is_super: isSuper });
+      }
+    });
+
+    return list;
+  },
+
   async loadData() {
     this.finances = await CaissesCore.calculateConsolidatedFinances();
     this.sales = this.finances.sales || [];
     this.registers = this.finances.registers || [];
     this.expenses = this.finances.expenses || [];
+    this.poleAdmins = await this.loadPole2Admins();
   },
 
   async deleteSale(id, name, amount) {
@@ -5230,14 +5283,39 @@ const CaisseBilanModule = {
     const container = document.getElementById('bilanContentContainer');
     if (!container || !this.finances) return;
 
-    const { revEntree, revJeux, revResto, totalRecettes, totalExpenses, beneficeNet, standTotals } = this.finances;
+    const isSuperAdmin = Permissions.isSuperAdmin();
+    const { revEntree, revJeux, totalExpenses, standTotals } = this.finances;
+    const totalRecettesPole = revEntree + revJeux;
+    const beneficeNetPole = totalRecettesPole - totalExpenses;
 
-    // 1. Statistiques consolidées par caissier
+    // Ventes exclusives à Pôle 2 (la restauration est gérée dans le Pôle 4)
+    const p2Sales = (this.sales || []).filter(s => s.category !== 'restauration');
+
+    // 1. Initialisation de TOUS les administrateurs du Pôle 2 comme caissiers
     const cashierStats = {};
-    this.sales.forEach(s => {
+    (this.poleAdmins || []).forEach(adm => {
+      const login = adm.login || 'caissier';
+      cashierStats[login] = {
+        login,
+        name: adm.full_name || login,
+        role: adm.role_name || (adm.is_super ? 'SuperAdministrateur' : 'Caissier (Admin Pôle 2)'),
+        totalSalesCount: 0,
+        totalRevenue: 0,
+        entreeCount: 0,
+        entreeRev: 0,
+        jeuxCount: 0,
+        jeuxRev: 0,
+        firstSale: null,
+        lastSale: null
+      };
+    });
+
+    // 2. Traitement des ventes réelles du Pôle 2
+    p2Sales.forEach(s => {
       const login = s.seller_login || (s.seller && s.seller.login) || 'caissier';
       const name = s.seller_name || (s.seller && (s.seller.full_name || s.seller.login)) || login;
       const role = s.seller_role || (s.seller && s.seller.role_name) || 'Caissier';
+
       if (!cashierStats[login]) {
         cashierStats[login] = {
           login,
@@ -5249,12 +5327,11 @@ const CaisseBilanModule = {
           entreeRev: 0,
           jeuxCount: 0,
           jeuxRev: 0,
-          restoCount: 0,
-          restoRev: 0,
           firstSale: s.created_at,
           lastSale: s.created_at
         };
       }
+
       const stat = cashierStats[login];
       const qty = s.quantity || 1;
       const amt = s.total_amount_f || 0;
@@ -5264,23 +5341,20 @@ const CaisseBilanModule = {
       if (s.category === 'entree') {
         stat.entreeCount += qty;
         stat.entreeRev += amt;
-      } else if (s.category === 'restauration') {
-        stat.restoCount += qty;
-        stat.restoRev += amt;
       } else {
         stat.jeuxCount += qty;
         stat.jeuxRev += amt;
       }
 
-      if (new Date(s.created_at) < new Date(stat.firstSale)) stat.firstSale = s.created_at;
-      if (new Date(s.created_at) > new Date(stat.lastSale)) stat.lastSale = s.created_at;
+      if (!stat.firstSale || new Date(s.created_at) < new Date(stat.firstSale)) stat.firstSale = s.created_at;
+      if (!stat.lastSale || new Date(s.created_at) > new Date(stat.lastSale)) stat.lastSale = s.created_at;
     });
 
     const cashierList = Object.values(cashierStats).sort((a, b) => b.totalRevenue - a.totalRevenue);
     const allCashiers = cashierList.map(c => c.login);
 
-    // 2. Ventes filtrées pour le Grand Livre Omniscient
-    const filteredSales = this.sales.filter(s => {
+    // 3. Ventes filtrées pour le Grand Livre Omniscient (SuperAdmin uniquement, sans Restauration)
+    const filteredSales = p2Sales.filter(s => {
       const sCategory = s.category || 'jeux';
       const sLogin = s.seller_login || (s.seller && s.seller.login) || 'caissier';
       const sItem = (s.item_name || '').toLowerCase();
@@ -5319,8 +5393,8 @@ const CaisseBilanModule = {
           </button>
         </div>
 
-        <!-- Cartes synthétiques des 4 Caisses -->
-        <div class="pos-bilan-kpi">
+        <!-- Cartes synthétiques des 3 Caisses du Pôle 2 (La caisse restauration est gérée dans le Pôle Restauration) -->
+        <div class="pos-bilan-kpi" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
           <div class="card" style="border: 2px solid #10b981; border-top: 6px solid #10b981;">
             <div class="card-body" style="padding: 1rem;">
               <div style="font-weight: 700; color: #065f46; font-size: 0.95rem;">🎟️ Caisse 1 : Entrée &amp; Accueil</div>
@@ -5328,7 +5402,7 @@ const CaisseBilanModule = {
                 ${revEntree.toLocaleString()} F
               </div>
               <div style="font-size: 0.8rem; color: var(--gray-500);">Billets d'entrée encaissés</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_entree')">Gérer Caisse 1</button>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="PoleApp.switchTab('caisse_entree')">Gérer Caisse 1</button>
             </div>
           </div>
 
@@ -5339,18 +5413,7 @@ const CaisseBilanModule = {
                 ${revJeux.toLocaleString()} F
               </div>
               <div style="font-size: 0.8rem; color: var(--gray-500);">Tickets des stands &amp; jeux</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_jeux')">Gérer Caisse 2</button>
-            </div>
-          </div>
-
-          <div class="card" style="border: 2px solid #ec4899; border-top: 6px solid #ec4899;">
-            <div class="card-body" style="padding: 1rem;">
-              <div style="font-weight: 700; color: #9d174d; font-size: 0.95rem;">🍔 Caisse 4 : Restauration</div>
-              <div style="font-size: 1.5rem; font-weight: 800; color: #be185d; margin: 0.35rem 0;">
-                ${revResto.toLocaleString()} F
-              </div>
-              <div style="font-size: 0.8rem; color: var(--gray-500);">Plats &amp; boissons vendus</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_restauration')">Gérer Caisse Resto</button>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="PoleApp.switchTab('caisse_jeux')">Gérer Caisse 2</button>
             </div>
           </div>
 
@@ -5360,67 +5423,65 @@ const CaisseBilanModule = {
               <div style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin: 0.35rem 0;">
                 ${(this.finances.netTokenDebt || 0).toLocaleString()} F
               </div>
-              <div style="font-size: 0.8rem; color: var(--gray-500);">Dette jetons (${(this.finances.tokensIssued || 0).toLocaleString()} F émis)</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="App.navigateTo('caisse_jetons')">Gérer Caisse 3</button>
+              <div style="font-size: 0.8rem; color: var(--gray-500);">Dette jetons nette (${(this.finances.tokensIssued || 0).toLocaleString()} F émis)</div>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 0.5rem;" onclick="PoleApp.switchTab('caisse_jetons')">Gérer Caisse 3</button>
             </div>
           </div>
         </div>
 
-        <!-- Grand Bilan Consolidé Net -->
+        <!-- Bilan Financier Consolidé Pôle 2 -->
         <div style="background: #f8fafc; border: 2px solid var(--gray-300); border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-md);">
           <div class="pos-bilan-banner">
             <div>
-              <div style="font-size: 0.85rem; color: var(--gray-600);">Total Recettes Brutes</div>
+              <div style="font-size: 0.85rem; color: var(--gray-600);">Recettes Billetterie &amp; Jeux (Pôle 2)</div>
               <div style="font-size: 1.4rem; font-weight: 800; color: var(--success); margin-top: 4px;">
-                ${totalRecettes.toLocaleString()} F
+                ${totalRecettesPole.toLocaleString()} F
               </div>
             </div>
             <div>
-              <div style="font-size: 0.85rem; color: var(--gray-600);">Total Dépenses Kermesse</div>
+              <div style="font-size: 0.85rem; color: var(--gray-600);">Total Dépenses Caisses</div>
               <div style="font-size: 1.4rem; font-weight: 800; color: var(--danger); margin-top: 4px;">
                 -${totalExpenses.toLocaleString()} F
               </div>
             </div>
             <div>
-              <div style="font-size: 0.85rem; color: var(--gray-600);">Bénéfice Net Kermesse</div>
-              <div style="font-size: 1.4rem; font-weight: 900; color: ${beneficeNet >= 0 ? 'var(--primary)' : 'var(--danger)'}; margin-top: 4px;">
-                ${beneficeNet.toLocaleString()} ${KermesseConfig.currency}
+              <div style="font-size: 0.85rem; color: var(--gray-600);">Solde Net Caisses Pôle 2</div>
+              <div style="font-size: 1.4rem; font-weight: 900; color: ${beneficeNetPole >= 0 ? 'var(--primary)' : 'var(--danger)'}; margin-top: 4px;">
+                ${beneficeNetPole.toLocaleString()} ${KermesseConfig.currency}
               </div>
             </div>
           </div>
           <div style="text-align: center; font-size: 0.85rem; color: var(--gray-500); margin-top: 0.5rem;">
-            ❤️ Fonds entièrement dédiés aux œuvres sociales de l'association Love and Charity
+            ❤️ Fonds Pôle 2 dédiés aux œuvres sociales de l'association Love and Charity
           </div>
         </div>
 
-        <!-- 👑 SUPERVISION & TRAÇABILITÉ NOMINATIVE OMNISCIENTE DES CAISSIERS -->
-        <div class="card" style="border: 2px solid #3b82f6; box-shadow: var(--shadow-md);">
-          <div class="card-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-            <div style="display: flex; align-items: center; gap: 0.6rem;">
-              <span style="font-size: 1.3rem;">👑</span>
-              <div>
-                <h4 style="margin: 0; color: white; font-size: 1rem;">Traçabilité Nominative des Caissiers &amp; Vendeurs</h4>
-                <div style="font-size: 0.75rem; opacity: 0.9;">Supervision intégrale des encaissements individuels en temps réel</div>
+        <!-- 👑 SUPERVISION & TRAÇABILITÉ NOMINATIVE OMNISCIENTE DES CAISSIERS (RÉSERVÉ EXCLUSIVEMENT AU SUPERADMIN) -->
+        ${isSuperAdmin ? `
+          <div class="card" style="border: 2px solid #3b82f6; box-shadow: var(--shadow-md);">
+            <div class="card-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <span style="font-size: 1.3rem;">👑</span>
+                <div>
+                  <h4 style="margin: 0; color: white; font-size: 1rem;">Traçabilité Nominative des Caissiers &amp; Admins (SuperAdmin)</h4>
+                  <div style="font-size: 0.75rem; opacity: 0.9;">Tous les administrateurs du Pôle 2 sont audités individuellement comme caissiers</div>
+                </div>
               </div>
+              <span class="badge" style="background: rgba(255,255,255,0.25); color: white; font-weight: 800;">
+                ${cashierList.length} caissier(s) / admin(s)
+              </span>
             </div>
-            <span class="badge" style="background: rgba(255,255,255,0.25); color: white; font-weight: 800;">
-              ${cashierList.length} caissier(s) actif(s)
-            </span>
-          </div>
-          <div class="card-body" style="padding: 1rem;">
-            ${cashierList.length === 0 ? `
-              <p style="text-align: center; color: var(--gray-500); padding: 1rem 0;">Aucune vente enregistrée pour l'instant.</p>
-            ` : `
+            <div class="card-body" style="padding: 1rem;">
               <div class="table-responsive">
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th>Caissier / Vendeur</th>
-                      <th>Rôle / Titre</th>
-                      <th style="text-align: center;">Tickets / Articles</th>
+                      <th>Caissier / Administrateur</th>
+                      <th>Rôle &amp; Pôle</th>
+                      <th style="text-align: center;">Tickets Vendu(s)</th>
                       <th style="text-align: right;">Total Encaissé</th>
-                      <th style="text-align: center;">Activité</th>
-                      <th>Répartition par Pôle</th>
+                      <th style="text-align: center;">Dernière Activité</th>
+                      <th>Répartition Billetterie</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5444,17 +5505,20 @@ const CaisseBilanModule = {
                           ${c.totalSalesCount}
                         </td>
                         <td style="text-align: right;">
-                          <strong style="color: var(--success); font-size: 1.05rem;">${c.totalRevenue.toLocaleString()} F</strong>
+                          <strong style="color: ${c.totalRevenue > 0 ? 'var(--success)' : 'var(--gray-500)'}; font-size: 1.05rem;">
+                            ${c.totalRevenue.toLocaleString()} F
+                          </strong>
                         </td>
                         <td style="text-align: center; font-size: 0.75rem; color: var(--gray-600); line-height: 1.3;">
-                          <div>1ère : ${new Date(c.firstSale).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
-                          <div>Dernière : <strong>${new Date(c.lastSale).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                          ${c.lastSale ? `
+                            <div><strong>${new Date(c.lastSale).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                          ` : '<span style="color: var(--gray-400);">Aucune vente</span>'}
                         </td>
                         <td>
                           <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
                             ${c.entreeRev > 0 ? `<span class="badge badge-success" style="font-size: 0.7rem;">🎟️ ${c.entreeRev.toLocaleString()} F</span>` : ''}
                             ${c.jeuxRev > 0 ? `<span class="badge badge-primary" style="font-size: 0.7rem;">🎯 ${c.jeuxRev.toLocaleString()} F</span>` : ''}
-                            ${c.restoRev > 0 ? `<span class="badge badge-warning" style="font-size: 0.7rem;">🍔 ${c.restoRev.toLocaleString()} F</span>` : ''}
+                            ${(c.entreeRev === 0 && c.jeuxRev === 0) ? '<span style="font-size: 0.72rem; color: var(--gray-400);">Prêt à encaisser</span>' : ''}
                           </div>
                         </td>
                       </tr>
@@ -5462,122 +5526,125 @@ const CaisseBilanModule = {
                   </tbody>
                 </table>
               </div>
-            `}
-          </div>
-        </div>
-
-        <!-- 📜 GRAND LIVRE OMNISCIENT EN DIRECT DE TOUTES LES VENTES -->
-        <div class="card" style="border: 2px solid var(--gray-300);">
-          <div class="card-header" style="background: var(--gray-50); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 1.25rem;">📜</span>
-              <div class="card-title" style="margin: 0; font-size: 1rem;">
-                Grand Livre Omniscient en Direct (Toutes Transactions)
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-              <span class="badge badge-success" style="font-size: 0.85rem; padding: 0.35rem 0.65rem;">
-                ${filteredSales.length} transaction(s) — Total : ${filteredTotalAmount.toLocaleString()} F
-              </span>
             </div>
           </div>
-          <div class="card-body" style="padding: 1rem;">
-            
-            <!-- Barre de Filtres Interactifs -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; background: var(--gray-50); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
-              <div>
-                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Filtrer par Caisse :</label>
-                <select class="form-control form-control-sm" onchange="CaisseBilanModule.activeCaisseFilter = this.value; CaisseBilanModule.renderSummary();">
-                  <option value="all" ${this.activeCaisseFilter === 'all' ? 'selected' : ''}>🌐 Toutes les Caisses</option>
-                  <option value="entree" ${this.activeCaisseFilter === 'entree' ? 'selected' : ''}>🎟️ Caisse 1 : Entrée &amp; Accueil</option>
-                  <option value="jeu" ${this.activeCaisseFilter === 'jeu' ? 'selected' : ''}>🎯 Caisse 2 : Tickets de Jeux</option>
-                  <option value="restauration" ${this.activeCaisseFilter === 'restauration' ? 'selected' : ''}>🍔 Caisse 4 : Restauration &amp; Buvette</option>
-                </select>
-              </div>
 
-              <div>
-                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Filtrer par Caissier :</label>
-                <select class="form-control form-control-sm" onchange="CaisseBilanModule.activeCashierFilter = this.value; CaisseBilanModule.renderSummary();">
-                  <option value="all" ${this.activeCashierFilter === 'all' ? 'selected' : ''}>👥 Tous les caissiers</option>
-                  ${allCashiers.map(cLog => `
-                    <option value="${cLog}" ${this.activeCashierFilter === cLog ? 'selected' : ''}>👤 ${cashierStats[cLog]?.name || cLog} (@${cLog})</option>
-                  `).join('')}
-                </select>
+          <!-- 📜 GRAND LIVRE OMNISCIENT EN DIRECT (RÉSERVÉ EXCLUSIVEMENT AU SUPERADMIN) -->
+          <div class="card" style="border: 2px solid var(--gray-300);">
+            <div class="card-header" style="background: var(--gray-50); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.25rem;">📜</span>
+                <div class="card-title" style="margin: 0; font-size: 1rem;">
+                  Grand Livre Omniscient en Direct (SuperAdmin)
+                </div>
               </div>
-
-              <div>
-                <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Recherche rapide :</label>
-                <input type="text" class="form-control form-control-sm" placeholder="Rechercher un billet, plat ou vendeur..." value="${this.searchQuery}" oninput="CaisseBilanModule.searchQuery = this.value; CaisseBilanModule.renderSummary();">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <span class="badge badge-success" style="font-size: 0.85rem; padding: 0.35rem 0.65rem;">
+                  ${filteredSales.length} transaction(s) — Total : ${filteredTotalAmount.toLocaleString()} F
+                </span>
               </div>
             </div>
+            <div class="card-body" style="padding: 1rem;">
+              
+              <!-- Barre de Filtres Interactifs (Sans Restauration) -->
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; background: var(--gray-50); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--gray-200);">
+                <div>
+                  <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Filtrer par Caisse :</label>
+                  <select class="form-control form-control-sm" onchange="CaisseBilanModule.activeCaisseFilter = this.value; CaisseBilanModule.renderSummary();">
+                    <option value="all" ${this.activeCaisseFilter === 'all' ? 'selected' : ''}>🌐 Toutes les Caisses (Pôle 2)</option>
+                    <option value="entree" ${this.activeCaisseFilter === 'entree' ? 'selected' : ''}>🎟️ Caisse 1 : Entrée &amp; Accueil</option>
+                    <option value="jeu" ${this.activeCaisseFilter === 'jeu' ? 'selected' : ''}>🎯 Caisse 2 : Tickets de Jeux</option>
+                  </select>
+                </div>
 
-            <!-- Table des ventes -->
-            ${filteredSales.length === 0 ? `
-              <div class="empty-state" style="padding: 2rem 1rem;">
-                <div class="empty-icon">🧾</div>
-                <div class="empty-title">Aucune transaction trouvée</div>
-                <div class="empty-desc">Aucune vente ne correspond aux critères de filtre sélectionnés.</div>
-              </div>
-            ` : `
-              <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
-                <table class="data-table">
-                  <thead style="position: sticky; top: 0; background: white; z-index: 2;">
-                    <tr>
-                      <th>Date &amp; Heure</th>
-                      <th>Caisse / Pôle</th>
-                      <th>Billet ou Article</th>
-                      <th style="text-align: center;">Qté</th>
-                      <th style="text-align: right;">Prix Unit.</th>
-                      <th style="text-align: right;">Total Encaissé</th>
-                      <th>Caissier / Vendeur</th>
-                      <th style="text-align: right;">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${filteredSales.map(s => {
-                      const sSellerLogin = s.seller_login || (s.seller && s.seller.login) || 'caissier';
-                      const sSellerName = s.seller_name || (s.seller && (s.seller.full_name || s.seller.login)) || sSellerLogin;
-                      const isEntree = s.category === 'entree';
-                      const isResto = s.category === 'restauration';
-                      const caisseBadge = isEntree 
-                        ? '<span class="badge badge-success" style="font-size: 0.72rem;">🎟️ Entrée</span>' 
-                        : (isResto 
-                          ? '<span class="badge badge-warning" style="font-size: 0.72rem;">🍔 Resto</span>' 
-                          : '<span class="badge badge-primary" style="font-size: 0.72rem;">🎯 Jeux</span>');
+                <div>
+                  <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Filtrer par Caissier :</label>
+                  <select class="form-control form-control-sm" onchange="CaisseBilanModule.activeCashierFilter = this.value; CaisseBilanModule.renderSummary();">
+                    <option value="all" ${this.activeCashierFilter === 'all' ? 'selected' : ''}>👥 Tous les caissiers &amp; admins</option>
+                    ${allCashiers.map(cLog => `
+                      <option value="${cLog}" ${this.activeCashierFilter === cLog ? 'selected' : ''}>👤 ${cashierStats[cLog]?.name || cLog} (@${cLog})</option>
+                    `).join('')}
+                  </select>
+                </div>
 
-                      return `
-                        <tr>
-                          <td style="font-size: 0.8rem; color: var(--gray-600); white-space: nowrap;">
-                            ${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                          </td>
-                          <td>${caisseBadge}</td>
-                          <td>
-                            <strong>${s.item_name}</strong>
-                            ${s.stand ? `<div style="font-size: 0.7rem; color: var(--gray-500);">🎪 ${s.stand.name}</div>` : ''}
-                          </td>
-                          <td style="text-align: center; font-weight: 700;">${s.quantity}</td>
-                          <td style="text-align: right; font-size: 0.82rem; color: var(--gray-600);">${(s.unit_price_f || 0).toLocaleString()} F</td>
-                          <td style="text-align: right;">
-                            <strong style="color: var(--success); font-size: 0.95rem;">+${(s.total_amount_f || 0).toLocaleString()} F</strong>
-                          </td>
-                          <td>
-                            <div style="font-size: 0.82rem; font-weight: 600; color: var(--gray-800);">👤 ${sSellerName}</div>
-                            <div style="font-size: 0.7rem; color: var(--gray-500);">@${sSellerLogin}</div>
-                          </td>
-                          <td style="text-align: right; white-space: nowrap;">
-                            <button class="btn btn-danger btn-sm" onclick="CaisseBilanModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Supprimer définitivement cette vente avec motif obligatoire" style="padding: 2px 7px; font-size: 0.75rem;">
-                              <span>🗑️</span> Supprimer
-                            </button>
-                          </td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
+                <div>
+                  <label style="font-size: 0.78rem; font-weight: 700; color: var(--gray-600); margin-bottom: 3px; display: block;">Recherche rapide :</label>
+                  <input type="text" class="form-control form-control-sm" placeholder="Rechercher un billet ou vendeur..." value="${this.searchQuery}" oninput="CaisseBilanModule.searchQuery = this.value; CaisseBilanModule.renderSummary();">
+                </div>
               </div>
-            `}
+
+              <!-- Table des ventes -->
+              ${filteredSales.length === 0 ? `
+                <div class="empty-state" style="padding: 2rem 1rem;">
+                  <div class="empty-icon">🧾</div>
+                  <div class="empty-title">Aucune transaction trouvée</div>
+                  <div class="empty-desc">Aucune vente ne correspond aux critères de filtre sélectionnés.</div>
+                </div>
+              ` : `
+                <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead style="position: sticky; top: 0; background: white; z-index: 2;">
+                      <tr>
+                        <th>Date &amp; Heure</th>
+                        <th>Caisse / Pôle</th>
+                        <th>Billet ou Article</th>
+                        <th style="text-align: center;">Qté</th>
+                        <th style="text-align: right;">Prix Unit.</th>
+                        <th style="text-align: right;">Total Encaissé</th>
+                        <th>Caissier / Vendeur</th>
+                        <th style="text-align: right;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${filteredSales.map(s => {
+                        const sSellerLogin = s.seller_login || (s.seller && s.seller.login) || 'caissier';
+                        const sSellerName = s.seller_name || (s.seller && (s.seller.full_name || s.seller.login)) || sSellerLogin;
+                        const isEntree = s.category === 'entree';
+                        const caisseBadge = isEntree 
+                          ? '<span class="badge badge-success" style="font-size: 0.72rem;">🎟️ Entrée</span>' 
+                          : '<span class="badge badge-primary" style="font-size: 0.72rem;">🎯 Jeux</span>';
+
+                        return `
+                          <tr>
+                            <td style="font-size: 0.8rem; color: var(--gray-600); white-space: nowrap;">
+                              ${new Date(s.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </td>
+                            <td>${caisseBadge}</td>
+                            <td>
+                              <strong>${s.item_name}</strong>
+                              ${s.stand ? `<div style="font-size: 0.7rem; color: var(--gray-500);">🎪 ${s.stand.name}</div>` : ''}
+                            </td>
+                            <td style="text-align: center; font-weight: 700;">${s.quantity}</td>
+                            <td style="text-align: right; font-size: 0.82rem; color: var(--gray-600);">${(s.unit_price_f || 0).toLocaleString()} F</td>
+                            <td style="text-align: right;">
+                              <strong style="color: var(--success); font-size: 0.95rem;">+${(s.total_amount_f || 0).toLocaleString()} F</strong>
+                            </td>
+                            <td>
+                              <div style="font-size: 0.82rem; font-weight: 600; color: var(--gray-800);">👤 ${sSellerName}</div>
+                              <div style="font-size: 0.7rem; color: var(--gray-500);">@${sSellerLogin}</div>
+                            </td>
+                            <td style="text-align: right; white-space: nowrap;">
+                              <button class="btn btn-danger btn-sm" onclick="CaisseBilanModule.deleteSale('${s.id}', '${s.item_name.replace(/'/g, "\\'")}', ${s.total_amount_f})" title="Supprimer définitivement cette vente avec motif obligatoire" style="padding: 2px 7px; font-size: 0.75rem;">
+                                <span>🗑️</span> Supprimer
+                              </button>
+                            </td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `}
+            </div>
           </div>
-        </div>
+        ` : `
+          <!-- Message pour administrateurs réguliers -->
+          <div style="background: #f8fafc; border: 1px dashed var(--gray-300); border-radius: var(--radius-md); padding: 1.5rem; text-align: center; color: var(--gray-500);">
+            <div style="font-size: 1.8rem; margin-bottom: 0.35rem;">🔒</div>
+            <strong style="color: var(--gray-700); font-size: 0.95rem;">Détails Omniscients &amp; Registre des Vendeurs</strong>
+            <p style="margin: 0.25rem 0 0; font-size: 0.82rem;">La surveillance nominative de chaque caissier et le Grand Livre complet des encaissements sont réservés au SuperAdministrateur.</p>
+          </div>
+        `}
 
         <!-- Palmarès des Stands les plus rentables -->
         <div class="card" style="border: 2px solid #e2e8f0;">
@@ -5759,12 +5826,12 @@ const CaisseAnnulationsModule = {
           <div style="font-size: 0.72rem; color: #b91c1c; opacity: 0.85;">Annulations avec motif obligatoire</div>
         </div>
 
-        <div style="background: #fff7ed; border: 1px solid #ffedd5; border-radius: var(--radius-md); padding: 1rem;">
-          <div style="font-size: 0.82rem; font-weight: 700; color: #9a3412;">Montant Total Annulé</div>
-          <div style="font-size: 1.6rem; font-weight: 900; color: #ea580c; margin-top: 4px;">
-            -${totalAmount.toLocaleString()} F
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 1rem;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: #475569;">Phase de Test Active</div>
+          <div style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-top: 4px;">
+            Non Décompté
           </div>
-          <div style="font-size: 0.72rem; color: #c2410c; opacity: 0.85;">Impact financier soustrait des caisses</div>
+          <div style="font-size: 0.72rem; color: #64748b; opacity: 0.85;">Montants exclus des bilans financiers</div>
         </div>
 
         <div style="background: #eff6ff; border: 1px solid #dbeafe; border-radius: var(--radius-md); padding: 1rem;">
@@ -5844,7 +5911,7 @@ const CaisseAnnulationsModule = {
         ` : `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.85rem; color: var(--gray-600);">
             <span>Affichage de <strong>${filtered.length}</strong> suppression(s)</span>
-            <span style="font-weight: 700; color: #dc2626;">Total sélection : -${filteredAmount.toLocaleString()} F</span>
+            <span style="font-weight: 600; color: var(--gray-500); font-size: 0.8rem;">Statut : Traçabilité active (tests non décomptés)</span>
           </div>
 
           <table class="data-table" style="width: 100%; border-collapse: collapse;">
@@ -5853,7 +5920,7 @@ const CaisseAnnulationsModule = {
                 <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Date &amp; Heure</th>
                 <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Caisse / Origine</th>
                 <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Élément Supprimé</th>
-                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase; text-align: right;">Montant</th>
+                <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase; text-align: right;">Valeur Article</th>
                 <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Motif Obligatoire Justifié</th>
                 <th style="padding: 0.75rem; font-size: 0.8rem; text-transform: uppercase;">Auteur de la Suppression</th>
               </tr>
@@ -5893,8 +5960,8 @@ const CaisseAnnulationsModule = {
                       <div style="font-weight: 700; font-size: 0.9rem; color: var(--gray-900);">${c.item_name}</div>
                       ${c.original_id ? `<div style="font-size: 0.7rem; color: var(--gray-400); font-family: monospace;">ID: ${c.original_id}</div>` : ''}
                     </td>
-                    <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #dc2626; white-space: nowrap; font-size: 0.95rem;">
-                      -${(c.amount_f || 0).toLocaleString()} F
+                    <td style="padding: 0.75rem; text-align: right; font-weight: 600; color: var(--gray-700); white-space: nowrap; font-size: 0.9rem;">
+                      ${(c.amount_f || 0).toLocaleString()} F
                     </td>
                     <td style="padding: 0.75rem; min-width: 220px;">
                       <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #f59e0b; padding: 6px 10px; border-radius: 4px;">

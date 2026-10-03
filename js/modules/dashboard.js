@@ -23,11 +23,15 @@ const DashboardModule = {
             Bienvenue, <strong>${user.full_name || user.login}</strong>. Suivi et contrôle en temps réel de la kermesse.
           </p>
         </div>
-        ${canSeeFinance ? `
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
           <button class="btn btn-secondary btn-sm" onclick="DashboardModule.loadRealData()" title="Rafraîchir les indicateurs en direct">
             <span>🔄</span> Actualiser
           </button>
+          ${isSuperAdmin ? `
+          <button class="btn btn-danger btn-sm" onclick="DashboardModule.confirmResetAllData()" style="background: #dc2626; border: 1px solid #b91c1c; font-weight: 800; display: inline-flex; align-items: center; gap: 0.35rem;" title="Zone SuperAdmin : Remettre à zéro toutes les données de test">
+            <span>⚠️</span> Remise à Zéro Complète
+          </button>
+          ` : ''}
         </div>
         ` : ''}
       </div>
@@ -126,6 +130,31 @@ const DashboardModule = {
             ${this.renderPoleShortcuts()}
           </div>
         </div>
+
+        <!-- ZONE DE SÉCURITÉ & MAINTENANCE SUPERADMIN (FIN DES TESTS) -->
+        ${isSuperAdmin ? `
+        <div class="card" style="margin-top: 1.5rem; border: 2px solid #ef4444; background: #fff5f5; box-shadow: var(--shadow-md);">
+          <div class="card-header" style="background: #fee2e2; border-bottom: 1px solid #fecaca; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-size: 1.4rem;">⚠️</span>
+              <div>
+                <h4 style="margin: 0; color: #991b1b; font-size: 1rem; font-weight: 800;">Zone Critique SuperAdmin — Remise à Zéro Totale (Fin des Tests)</h4>
+                <div style="font-size: 0.78rem; color: #b91c1c;">Vidage intégral de toutes les transactions et caisses après vos essais</div>
+              </div>
+            </div>
+            <button class="btn btn-danger btn-sm" style="background: #dc2626; border: 1px solid #b91c1c; font-weight: 800; padding: 0.5rem 1.1rem;" onclick="DashboardModule.confirmResetAllData()">
+              <span>🗑️</span> Tout Remettre à Zéro
+            </button>
+          </div>
+          <div class="card-body" style="padding: 1rem 1.25rem;">
+            <p style="font-size: 0.85rem; color: #7f1d1d; margin: 0; line-height: 1.5;">
+              Cette action est <strong>exclusivement réservée au SuperAdministrateur</strong>. Elle vide toutes les ventes de billets (Entrée, Jeux, Restauration), les dettes/avoirs de jetons, les mouvements de caisse, les dépenses et le registre des annulations pour remettre les compteurs à 0 F.
+              <br><strong>Une confirmation de sécurité avec le mot de passe « CONFIRMER » est obligatoirement exigée.</strong>
+            </p>
+          </div>
+        </div>
+        ` : ''}
+
       </div>
     `;
 
@@ -276,7 +305,102 @@ const DashboardModule = {
         </div>
       `;
     }
+  },
+
+  async confirmResetAllData() {
+    const user = Auth.getCurrentUser();
+    if (!user || (!user.is_original_superadmin && user.role_code !== 'superadmin')) {
+      Notify.warning("🔒 Action strictement réservée au SuperAdministrateur.");
+      return;
+    }
+
+    const promptResponse = prompt(
+      "⚠️ AVERTISSEMENT DE SÉCURITÉ ABSOLUE ⚠️\n\n" +
+      "Vous êtes sur le point de TOUT REMETTRE À ZÉRO dans l'application :\n" +
+      "- Toutes les ventes de billets (Entrée, Jeux, Restauration)\n" +
+      "- Tous les mouvements et avoirs de jetons\n" +
+      "- Toutes les dépenses de caisse\n" +
+      "- Tout le registre des annulations\n" +
+      "- Tous les soldes de caisse\n\n" +
+      "Cette action est IRRÉVERSIBLE et sert à vider les données de test.\n\n" +
+      "Pour exécuter la purge intégrale, tapez exactement 'CONFIRMER' en majuscules :"
+    );
+
+    if (promptResponse === null) return;
+    if (promptResponse.trim() !== 'CONFIRMER') {
+      Notify.warning("Action annulée : vous devez saisir exactement 'CONFIRMER' en majuscules pour autoriser la purge.");
+      return;
+    }
+
+    Notify.info("Purge intégrale des données de test en cours...");
+    const client = SupabaseClient.client;
+
+    // 1. Purge via Supabase RPC si disponible
+    if (client) {
+      try {
+        await client.rpc('purge_test_data');
+      } catch (e) {}
+
+      // 2. Purge directe sécurisée table par table dans Supabase
+      try {
+        await client.from('ticket_sales').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await client.from('cash_movements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await client.from('token_debts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await client.from('transaction_cancellations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await client.from('tickets_catalog').delete().eq('type', 'cancelled_sale');
+        await client.from('tickets_catalog').delete().eq('type', 'cancelled_ticket_name');
+        await client.from('cash_registers').update({
+          initial_amount_f: 0,
+          current_balance_f: 0,
+          expected_amount_f: 0,
+          counted_amount_f: 0,
+          variance_f: 0,
+          status: 'open',
+          closed_at: null,
+          closed_by: null,
+          closing_notes: null
+        }).neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (err) {
+        console.warn('[Supabase Reset Warning]', err);
+      }
+    }
+
+    // 3. Purge intégrale de tous les caches locaux (localStorage)
+    const keysToPurge = [
+      'kermesse_ticket_sales',
+      'kermesse_entry_sales',
+      'kermesse_game_sales',
+      'kermesse_food_sales',
+      'kermesse_jetons_movements',
+      'kermesse_jetons_debts',
+      'kermesse_cancelled_sale_ids',
+      'kermesse_cancelled_ticket_names',
+      'kermesse_cancellations_registry',
+      'kermesse_cash_registers'
+    ];
+    keysToPurge.forEach(k => localStorage.removeItem(k));
+
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('kermesse_expenses_') || k.startsWith('kermesse_sales_'))) {
+        localStorage.removeItem(k);
+      }
+    }
+
+    // 4. Consignation dans le journal d'audit
+    AuditLogger.log(
+      'REMISE_A_ZERO_COMPLETE',
+      'system',
+      user.id,
+      `Purge intégrale des données de test exécutée avec succès par le SuperAdmin ${user.full_name || user.login} (@${user.login})`
+    );
+
+    Notify.success("🎉 Remise à zéro complète réussie ! Toutes les caisses et transactions sont revenues à 0 F.");
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
   }
 };
 
 window.DashboardModule = DashboardModule;
+window.confirmResetAllData = () => DashboardModule.confirmResetAllData();

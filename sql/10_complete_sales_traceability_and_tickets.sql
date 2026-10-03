@@ -132,4 +132,26 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
+-- 8. FONCTION SÉCURISÉE DE REMISE À ZÉRO TOTALE DES DONNÉES DE TEST (SUPERADMIN)
+CREATE OR REPLACE FUNCTION purge_test_data()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM ticket_sales;
+  DELETE FROM cash_movements;
+  DELETE FROM token_debts;
+  DELETE FROM transaction_cancellations;
+  DELETE FROM tickets_catalog WHERE type IN ('cancelled_sale', 'cancelled_ticket_name');
+  UPDATE cash_registers SET 
+    initial_amount_f = 0, 
+    current_balance_f = 0, 
+    expected_amount_f = 0, 
+    counted_amount_f = 0, 
+    variance_f = 0, 
+    status = 'open',
+    closed_at = NULL,
+    closed_by = NULL,
+    closing_notes = NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 
