@@ -119,33 +119,22 @@ const MembersModule = {
       console.warn('[MembersModule] Supabase error:', e);
     }
 
-    // LocalStorage Fallbacks
+    // LocalStorage Fallbacks (Zéro fausse donnée)
     if (!this.members || this.members.length === 0) {
       const storedM = localStorage.getItem('kermesse_members_data');
       if (storedM) {
-        try { this.members = JSON.parse(storedM); } catch (e) {}
+        try { this.members = JSON.parse(storedM); } catch (e) { this.members = []; }
       } else {
-        this.members = [
-          { id: 'mem-1', first_name: 'Mounir', last_name: 'SuperAdmin', phone: '+221 77 100 00 01', primary_role: 'Coordination Générale', is_active: true },
-          { id: 'mem-2', first_name: 'David', last_name: 'Ly', phone: '+221 77 200 00 02', primary_role: 'Responsable Décoration', is_active: true },
-          { id: 'mem-3', first_name: 'Sarah', last_name: 'Mendy', phone: '+221 77 300 00 03', primary_role: 'Responsable Communication', is_active: true },
-          { id: 'mem-4', first_name: 'Mamadou', last_name: 'Sy', phone: '+221 77 400 00 04', primary_role: 'Caissier Billetterie', is_active: true },
-          { id: 'mem-5', first_name: 'Fatou', last_name: 'Diop', phone: '+221 77 500 00 05', primary_role: 'Animatrice Stand', is_active: true }
-        ];
-        localStorage.setItem('kermesse_members_data', JSON.stringify(this.members));
+        this.members = [];
       }
     }
 
     if (!this.schedules || this.schedules.length === 0) {
       const storedSc = localStorage.getItem('kermesse_volunteer_schedules');
       if (storedSc) {
-        try { this.schedules = JSON.parse(storedSc); } catch (e) {}
+        try { this.schedules = JSON.parse(storedSc); } catch (e) { this.schedules = []; }
       } else {
-        this.schedules = [
-          { id: 'sch-1', member_id: 'mem-4', member_name: 'Mamadou Sy', member_phone: '+221 77 400 00 04', location_or_stand: 'Zone 3 : Billetterie Centrale', pole_name: 'Billetterie & Caisses', shift_date: '2026-09-20', start_time: '10:00', end_time: '13:00', role_title: 'Caissier billetterie', status: 'present' },
-          { id: 'sch-2', member_id: 'mem-5', member_name: 'Fatou Diop', member_phone: '+221 77 500 00 05', location_or_stand: 'Stand 1 : Pêche aux canards', pole_name: 'Stands & Jeux', shift_date: '2026-09-20', start_time: '10:00', end_time: '14:00', role_title: 'Arbitre & animateur', status: 'present' }
-        ];
-        localStorage.setItem('kermesse_volunteer_schedules', JSON.stringify(this.schedules));
+        this.schedules = [];
       }
     }
 

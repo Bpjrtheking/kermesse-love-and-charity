@@ -499,3 +499,95 @@ CREATE INDEX IF NOT EXISTS idx_cash_movements_reg ON cash_movements(cash_registe
 CREATE INDEX IF NOT EXISTS idx_stock_movements_prod ON stock_movements(product_id);
 CREATE INDEX IF NOT EXISTS idx_loans_expected_return ON loans(expected_return_date);
 CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+
+-- ------------------------------------------------------------------------------
+-- 29. REGISTRE OFFICIEL DES ANNULATIONS & SUPPRESSIONS
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS transaction_cancellations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    original_id TEXT,
+    caisse_category TEXT NOT NULL,
+    item_name TEXT NOT NULL,
+    amount_f INT NOT NULL DEFAULT 0,
+    motif TEXT NOT NULL,
+    cancelled_by_login TEXT,
+    cancelled_by_name TEXT,
+    cancelled_by_role TEXT,
+    details JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------------------------
+-- 30. PLANNINGS & CRÉNEAUX DES BÉNÉVOLES
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS volunteer_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    member_id UUID REFERENCES members(id) ON DELETE CASCADE,
+    member_name TEXT NOT NULL,
+    member_phone TEXT,
+    location_or_stand TEXT NOT NULL,
+    pole_name TEXT NOT NULL,
+    shift_date DATE NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    role_title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'present',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------------------------
+-- 31. ACTIONS & SUPPORTS DE COMMUNICATION
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS communication_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    type TEXT NOT NULL,
+    responsible_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'a_faire',
+    target_date DATE,
+    display_location TEXT,
+    materials_needed TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------------------------
+-- 32. RONDES DE NETTOYAGE & OBJETS TROUVÉS (PÔLE 9)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cleaning_rounds (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_name TEXT NOT NULL,
+    checker_name TEXT NOT NULL,
+    trash_emptied BOOLEAN DEFAULT TRUE,
+    toilets_clean BOOLEAN DEFAULT TRUE,
+    soap_paper_ok BOOLEAN DEFAULT TRUE,
+    notes TEXT,
+    checked_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lost_and_found (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_name TEXT NOT NULL,
+    description TEXT,
+    location_found TEXT,
+    found_by TEXT,
+    status TEXT NOT NULL DEFAULT 'en_attente',
+    returned_to TEXT,
+    returned_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ------------------------------------------------------------------------------
+-- 33. PLACEMENTS 3D DANS LE STADE DE MBAO (PÔLE 3)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stadium_placements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    pos_x FLOAT NOT NULL DEFAULT 0,
+    pos_z FLOAT NOT NULL DEFAULT 0,
+    rotation_y FLOAT NOT NULL DEFAULT 0,
+    color_hex TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);

@@ -134,8 +134,10 @@ const GiftsModule = {
                   ${g.central_stock} pièce(s)
                 </span>
               </td>
-              <td style="text-align: right;">
-                <button class="btn btn-secondary btn-sm" onclick="GiftsModule.openAllocateModal('${g.id}')">Affecter</button>
+              <td style="text-align: right; white-space: nowrap;">
+                <button class="btn btn-secondary btn-sm" onclick="GiftsModule.openAllocateModal('${g.id}')" title="Affecter aux stands">Affecter</button>
+                <button class="btn btn-secondary btn-sm" onclick="GiftsModule.openEditModal('${g.id}')" title="Modifier ce lot" style="margin-left: 0.35rem;">✏️</button>
+                <button class="btn btn-danger btn-sm" onclick="GiftsModule.deleteGift('${g.id}', '${(g.name || '').replace(/'/g, "\\'")}')" title="Supprimer ce lot" style="margin-left: 0.35rem;">🗑️</button>
               </td>
             </tr>
           `).join('')}
@@ -288,14 +290,155 @@ const GiftsModule = {
         AuditLogger.log('CREATION_LOT', 'gift', null, `Création du lot ${name} (${stock} pièces)`);
         Notify.success(`Lot ${name} enregistré.`);
         close();
-        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
-        if (targetContainer) GiftsModule.render(targetContainer);
+        await GiftsModule.loadData();
         if (window.LiveSync) {
           LiveSync.broadcastLocalEvent('gift_created');
           LiveSync.triggerRefresh('gift_created');
         }
       }
     };
+  },
+
+  async openEditModal(giftId) {
+    const client = SupabaseClient.client;
+    let gift = null;
+
+    if (client) {
+      try {
+        const { data, error } = await client.from('gifts_catalog').select('*').eq('id', giftId).limit(1);
+        if (!error && data && data.length > 0) gift = data[0];
+      } catch (e) {}
+    }
+
+    if (!gift) {
+      Notify.error('Impossible de charger les données du lot.');
+      return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Modifier le Lot / Cadeau</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editGiftForm">
+            <div class="form-group">
+              <label>Nom du Lot / Cadeau *</label>
+              <input type="text" id="editGftName" class="form-control" required value="${(gift.name || '').replace(/"/g, '&quot;')}">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Catégorie</label>
+                <select id="editGftCategory" class="form-control">
+                  <option value="peluche" ${gift.category === 'peluche' ? 'selected' : ''}>Peluche</option>
+                  <option value="jouet" ${gift.category === 'jouet' ? 'selected' : ''}>Jouet / Jeu</option>
+                  <option value="friandise" ${gift.category === 'friandise' ? 'selected' : ''}>Friandise / Bonbon</option>
+                  <option value="grand_lot" ${gift.category === 'grand_lot' ? 'selected' : ''}>Grand Lot / Prestige</option>
+                  <option value="autre" ${gift.category === 'autre' ? 'selected' : ''}>Autre</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Valeur estimée (${KermesseConfig.currency})</label>
+                <input type="number" id="editGftValue" class="form-control" value="${gift.unit_value_f || 0}" min="0" step="100">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Stock Total Initial *</label>
+                <input type="number" id="editGftInitStock" class="form-control" value="${gift.initial_stock || 0}" min="0" required>
+              </div>
+              <div class="form-group">
+                <label>Stock Central Restant *</label>
+                <input type="number" id="editGftCentralStock" class="form-control" value="${gift.central_stock || 0}" min="0" required>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="saveEditGiftBtn">Enregistrer les modifications</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    modal.querySelector('#saveEditGiftBtn').onclick = async () => {
+      const name = document.getElementById('editGftName').value.trim();
+      const cat = document.getElementById('editGftCategory').value;
+      const val = parseInt(document.getElementById('editGftValue').value, 10) || 0;
+      const initStock = parseInt(document.getElementById('editGftInitStock').value, 10);
+      const centralStock = parseInt(document.getElementById('editGftCentralStock').value, 10);
+
+      if (!name || isNaN(initStock) || isNaN(centralStock)) {
+        Notify.error('Veuillez remplir tous les champs obligatoires.');
+        return;
+      }
+
+      if (client) {
+        try {
+          const { error } = await client.from('gifts_catalog').update({
+            name,
+            category: cat,
+            unit_value_f: val,
+            initial_stock: initStock,
+            central_stock: centralStock
+          }).eq('id', giftId);
+
+          if (error) {
+            Notify.error('Erreur mise à jour: ' + error.message);
+            return;
+          }
+
+          AuditLogger.log('MODIFICATION_LOT', 'gift', giftId, `Mise à jour du lot ${name} (Stock central: ${centralStock})`);
+          Notify.success(`Lot « ${name} » modifié avec succès.`);
+          close();
+          await GiftsModule.loadData();
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('gift_updated');
+            LiveSync.triggerRefresh('gift_updated');
+          }
+        } catch (err) {
+          Notify.error('Erreur: ' + err.message);
+        }
+      }
+    };
+  },
+
+  async deleteGift(giftId, giftName) {
+    if (!confirm(`Supprimer définitivement le lot « ${giftName} » du catalogue ?\n\nToutes les affectations associées seront également retirées.`)) {
+      return;
+    }
+
+    const client = SupabaseClient.client;
+    if (client) {
+      try {
+        await client.from('gift_stand_allocations').delete().eq('gift_id', giftId);
+        const { error } = await client.from('gifts_catalog').delete().eq('id', giftId);
+        if (error) {
+          Notify.error('Erreur suppression: ' + error.message);
+          return;
+        }
+
+        AuditLogger.log('SUPPRESSION_LOT', 'gift', giftId, `Suppression du lot ${giftName}`);
+        Notify.success(`Lot « ${giftName} » supprimé.`);
+        await GiftsModule.loadData();
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('gift_deleted');
+          LiveSync.triggerRefresh('gift_deleted');
+        }
+      } catch (err) {
+        Notify.error('Erreur: ' + err.message);
+      }
+    }
   },
 
   async openAllocateModal(preselectedGiftId = null) {

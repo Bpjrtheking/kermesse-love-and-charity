@@ -46,25 +46,72 @@ const LoansModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
-    if (!client) return;
+    let loans = [];
 
-    try {
-      const { data: loans, error } = await client
-        .from('loans')
-        .select(`
-          id, quantity, pickup_location, return_location, pickup_date, expected_return_date, actual_return_date, departure_condition, return_condition, status, rental_cost_f, notes,
-          material:materials(id, name),
-          owner:material_owners(id, name, contact_person, phone),
-          pickup_responsible:members!loans_pickup_responsible_id_fkey(id, first_name, last_name),
-          current_responsible:members!loans_current_responsible_id_fkey(id, first_name, last_name)
-        `)
-        .order('expected_return_date', { ascending: true });
+    if (client) {
+      try {
+        const { data, error } = await client
+          .from('loans')
+          .select(`
+            id, quantity, pickup_location, return_location, pickup_date, expected_return_date, actual_return_date, departure_condition, return_condition, status, rental_cost_f, notes,
+            material:materials(id, name),
+            owner:material_owners(id, name, contact_person, phone),
+            pickup_responsible:members!loans_pickup_responsible_id_fkey(id, first_name, last_name),
+            current_responsible:members!loans_current_responsible_id_fkey(id, first_name, last_name)
+          `)
+          .order('expected_return_date', { ascending: true });
 
-      if (error) throw error;
-      this.renderTable(loans || []);
-    } catch (e) {
-      console.error('[LoansModule Error]', e);
+        if (!error && data && data.length > 0) loans = data;
+      } catch (e) {}
+
+      // Niveau 2 : Sans les contraintes de clés membres nommées
+      if (loans.length === 0) {
+        try {
+          const { data, error } = await client
+            .from('loans')
+            .select(`
+              id, quantity, pickup_location, return_location, pickup_date, expected_return_date, actual_return_date, departure_condition, return_condition, status, rental_cost_f, notes, pickup_responsible_id, current_responsible_id,
+              material:materials(id, name),
+              owner:material_owners(id, name, contact_person, phone)
+            `)
+            .order('expected_return_date', { ascending: true });
+
+          if (!error && data && data.length > 0) {
+            let mems = [];
+            try {
+              const { data: mData } = await client.from('members').select('id, first_name, last_name');
+              if (mData) mems = mData;
+            } catch (err) {}
+            loans = data.map(l => ({
+              ...l,
+              pickup_responsible: mems.find(m => m.id === l.pickup_responsible_id) || null,
+              current_responsible: mems.find(m => m.id === l.current_responsible_id) || null
+            }));
+          }
+        } catch (e) {}
+      }
+
+      // Niveau 3 : Requête brute de secours
+      if (loans.length === 0) {
+        try {
+          const { data } = await client.from('loans').select('*').order('expected_return_date', { ascending: true });
+          if (data && data.length > 0) loans = data;
+        } catch (e) {}
+      }
     }
+
+    if (loans.length === 0) {
+      try {
+        const stored = localStorage.getItem('kermesse_loans');
+        if (stored) loans = JSON.parse(stored);
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.setItem('kermesse_loans', JSON.stringify(loans));
+      } catch (e) {}
+    }
+
+    this.renderTable(loans || []);
   },
 
   renderTable(loans) {

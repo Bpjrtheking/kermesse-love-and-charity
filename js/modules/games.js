@@ -885,6 +885,12 @@ const GamesModule = {
             Notify.error('Erreur: ' + error.message);
             return;
           }
+          try {
+            const cachedGames = JSON.parse(localStorage.getItem('kermesse_games_cache') || '[]');
+            const filtered = cachedGames.filter(g => g.id !== id && g.name !== name);
+            localStorage.setItem('kermesse_games_cache', JSON.stringify(filtered));
+          } catch (e) {}
+
           AuditLogger.log('SUPPRESSION_JEU', 'game', id, `Suppression du jeu ${name}`);
           Notify.success(`Jeu ${name} supprimé.`);
           const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');

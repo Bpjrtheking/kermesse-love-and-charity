@@ -141,21 +141,13 @@ const DecorationModule = {
       this.zones = storedZones ? JSON.parse(storedZones) : this.DEFAULT_10_ZONES;
     }
 
-    // Fallback items
+    // Fallback items (Zéro fausse donnée)
     if (!this.items || this.items.length === 0) {
       const storedItems = localStorage.getItem('kermesse_decor_items');
       if (storedItems) {
-        try { this.items = JSON.parse(storedItems); } catch (e) {}
+        try { this.items = JSON.parse(storedItems); } catch (e) { this.items = []; }
       } else {
-        this.items = [
-          { id: 'dec-1', name: 'Arche de ballons multicolores d\'accueil', category: 'ballons', zone_code: 'entree', qty_needed: 2, qty_available: 2, status: 'installe', responsible_name: 'David L.' },
-          { id: 'dec-2', name: 'Guirlandes fanions Love & Charity (100m)', category: 'guirlandes', zone_code: 'jeux', qty_needed: 5, qty_available: 5, status: 'en_cours', responsible_name: 'Sarah M.' },
-          { id: 'dec-3', name: 'Barnum 3x3m étanche Billetterie', category: 'tentes_barnums', zone_code: 'billetterie', qty_needed: 1, qty_available: 1, status: 'installe', responsible_name: 'Équipe Logistique' },
-          { id: 'dec-4', name: 'Tables pliantes de dégustation snack', category: 'tables_chaises', zone_code: 'restauration', qty_needed: 12, qty_available: 12, status: 'installe', responsible_name: 'Mamadou S.' },
-          { id: 'dec-5', name: 'Chaises pliantes espace repos familles', category: 'tables_chaises', zone_code: 'repos', qty_needed: 40, qty_available: 35, status: 'en_cours', responsible_name: 'Bénévoles' },
-          { id: 'dec-6', name: 'Banderole officielle Love & Charity 2026', category: 'banderoles', zone_code: 'organisation', qty_needed: 2, qty_available: 2, status: 'valide', responsible_name: 'Mounir' }
-        ];
-        localStorage.setItem('kermesse_decor_items', JSON.stringify(this.items));
+        this.items = [];
       }
     }
 

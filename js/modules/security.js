@@ -116,42 +116,31 @@ const SecurityModule = {
       console.warn('[SecurityModule] Supabase error:', e);
     }
 
-    // Fallbacks
+    // Fallbacks (Zéro fausse donnée)
     if (!this.incidents || this.incidents.length === 0) {
       const storedI = localStorage.getItem('kermesse_incidents_data');
       if (storedI) {
-        try { this.incidents = JSON.parse(storedI); } catch (e) {}
+        try { this.incidents = JSON.parse(storedI); } catch (e) { this.incidents = []; }
       } else {
-        this.incidents = [
-          { id: 'inc-1', title: 'File d\'attente billetterie dense', description: 'Affluence forte à l\'entrée, besoin d\'un second caissier', severity: 'moyenne', status: 'ouvert', location: 'Zone 3 : Billetterie', reporter_name: 'Mamadou Sy', created_at: new Date().toISOString() }
-        ];
-        localStorage.setItem('kermesse_incidents_data', JSON.stringify(this.incidents));
+        this.incidents = [];
       }
     }
 
     if (!this.cleaningRounds || this.cleaningRounds.length === 0) {
       const storedC = localStorage.getItem('kermesse_cleaning_rounds');
       if (storedC) {
-        try { this.cleaningRounds = JSON.parse(storedC); } catch (e) {}
+        try { this.cleaningRounds = JSON.parse(storedC); } catch (e) { this.cleaningRounds = []; }
       } else {
-        this.cleaningRounds = [
-          { id: 'cln-1', zone_name: 'Bloc Sanitaires Principaux', checker_name: 'Équipe Propreté', trash_emptied: true, toilets_clean: true, soap_paper_ok: true, notes: 'Savon et papier réapprovisionnés', checked_at: new Date().toISOString() },
-          { id: 'cln-2', zone_name: 'Zone 4 : Restauration & Buvette', checker_name: 'Équipe Propreté', trash_emptied: true, toilets_clean: true, soap_paper_ok: true, notes: 'Poubelles tri vidées et sacs changés', checked_at: new Date().toISOString() }
-        ];
-        localStorage.setItem('kermesse_cleaning_rounds', JSON.stringify(this.cleaningRounds));
+        this.cleaningRounds = [];
       }
     }
 
     if (!this.lostItems || this.lostItems.length === 0) {
       const storedL = localStorage.getItem('kermesse_lost_found');
       if (storedL) {
-        try { this.lostItems = JSON.parse(storedL); } catch (e) {}
+        try { this.lostItems = JSON.parse(storedL); } catch (e) { this.lostItems = []; }
       } else {
-        this.lostItems = [
-          { id: 'lost-1', item_name: 'Casquette bleue enfant "Spiderman"', description: 'Trouvée près du stand Chamboule-tout', location_found: 'Stand 2', found_by: 'Bénévole Stand', status: 'en_attente', created_at: new Date().toISOString() },
-          { id: 'lost-2', item_name: 'Trousseau de 3 clés avec porte-clés rouge', description: 'Restitué à son propriétaire à l\'accueil', location_found: 'Zone Repos', found_by: 'Visiteur', status: 'restitue', returned_to: 'M. Sow', returned_at: new Date().toISOString(), created_at: new Date().toISOString() }
-        ];
-        localStorage.setItem('kermesse_lost_found', JSON.stringify(this.lostItems));
+        this.lostItems = [];
       }
     }
 

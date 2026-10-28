@@ -67,19 +67,46 @@ const MaterialsModule = {
 
     try {
       if (client) {
-        // Matériel lourd
-        const { data: materials, error } = await client
-          .from('materials')
-          .select(`
-            id, name, category, ownership_status, condition, quantity_total, status, notes,
-            owner:material_owners(id, name, type),
-            location:locations(id, name),
-            responsible:members(id, first_name, last_name)
-          `)
-          .order('name');
+        // Matériel lourd : Requête résiliente évitant les erreurs de jointures PostgREST
+        let matData = null;
+        try {
+          const res = await client
+            .from('materials')
+            .select(`
+              id, name, category, ownership_status, condition, quantity_total, status, notes,
+              current_location_id, current_responsible_id, owner_id,
+              owner:material_owners(id, name, type)
+            `)
+            .order('name');
+          if (!res.error && res.data) matData = res.data;
+        } catch (e) {}
 
-        if (!error && materials) {
-          this.materials = materials;
+        if (!matData) {
+          try {
+            const fallback = await client.from('materials').select('*').order('name');
+            if (!fallback.error && fallback.data) matData = fallback.data;
+          } catch (e) {}
+        }
+
+        if (matData) {
+          let locs = [];
+          let mems = [];
+          try {
+            const { data: lData } = await client.from('locations').select('id, name');
+            if (lData) locs = lData;
+          } catch (e) {}
+          try {
+            const { data: mData } = await client.from('members').select('id, first_name, last_name');
+            if (mData) mems = mData;
+          } catch (e) {}
+
+          this.materials = matData.map(m => ({
+            ...m,
+            location: m.location || locs.find(l => l.id === m.current_location_id) || null,
+            responsible: m.responsible || mems.find(mem => mem.id === m.current_responsible_id) || null
+          }));
+
+          localStorage.setItem('kermesse_materials', JSON.stringify(this.materials));
         }
 
         // Demandes transmises par les stands
@@ -93,6 +120,14 @@ const MaterialsModule = {
       }
     } catch (e) {
       console.warn('[MaterialsModule Error]', e);
+    }
+
+    // Récupération locale de secours si Supabase est hors-ligne
+    if (!this.materials || this.materials.length === 0) {
+      try {
+        const stored = localStorage.getItem('kermesse_materials');
+        if (stored) this.materials = JSON.parse(stored);
+      } catch (e) {}
     }
 
     // Récupération locale de secours

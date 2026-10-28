@@ -1015,6 +1015,12 @@ const StandsModule = {
             Notify.error('Erreur: ' + error.message);
             return;
           }
+          try {
+            const cachedStands = JSON.parse(localStorage.getItem('kermesse_stands') || '[]');
+            const filtered = cachedStands.filter(s => s.id !== id && s.name !== name);
+            localStorage.setItem('kermesse_stands', JSON.stringify(filtered));
+          } catch (e) {}
+
           AuditLogger.log('SUPPRESSION_STAND', 'stand', id, `Suppression du stand ${name}`);
           Notify.success(`Stand ${name} supprimé.`);
           const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');

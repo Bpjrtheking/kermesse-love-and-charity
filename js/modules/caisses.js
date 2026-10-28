@@ -805,35 +805,26 @@ const CaissesCore = {
       }
     }
 
-    // Fusionner les articles locaux pour ne JAMAIS perdre un billet créé
+    // Fusionner les articles locaux pour ne JAMAIS perdre un billet créé hors-ligne
     const stored = localStorage.getItem('kermesse_entry_catalog');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach(localItem => {
-            if (localItem && localItem.name && !cancelledNames.includes(localItem.name)) {
-              const alreadyInCatalog = catalog.some(c => 
-                c.id === localItem.id || c.name.trim().toLowerCase() === localItem.name.trim().toLowerCase()
-              );
-              if (!alreadyInCatalog) {
-                catalog.push(localItem);
-                // Sauvegarder automatiquement en base pour les autres utilisateurs
-                if (client) {
-                  client.from('tickets_catalog').insert([{
-                    type: 'entree',
-                    name: localItem.name,
-                    value_f: localItem.price || 0,
-                    color: localItem.icon || '🎟️',
-                    description: localItem.description || '',
-                    is_active: true
-                  }]).then(res => {
-                    if (res.data && res.data[0]) localItem.id = res.data[0].id;
-                  }).catch(() => {});
+          if (catalog.length === 0) {
+            catalog = parsed.filter(localItem => localItem && localItem.name && !cancelledNames.includes(localItem.name));
+          } else {
+            parsed.forEach(localItem => {
+              if (localItem && localItem.name && !cancelledNames.includes(localItem.name)) {
+                const match = catalog.find(c => 
+                  c.id === localItem.id || c.name.trim().toLowerCase() === localItem.name.trim().toLowerCase()
+                );
+                if (!match) {
+                  catalog.push(localItem);
                 }
               }
-            }
-          });
+            });
+          }
         }
       } catch (e) {}
     }
@@ -870,11 +861,13 @@ const CaissesCore = {
   },
 
   async saveEntryCatalog(catalog) {
+    if (!Array.isArray(catalog)) return;
     localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
     const client = SupabaseClient.client;
-    if (client && Array.isArray(catalog)) {
+    if (client) {
       try {
         for (const item of catalog) {
+          if (!item || !item.name) continue;
           if (this.isUuid(item.id)) {
             await client.from('tickets_catalog').update({
               name: item.name,
@@ -884,15 +877,35 @@ const CaissesCore = {
               is_active: true
             }).eq('id', item.id);
           } else {
-            const { data } = await client.from('tickets_catalog').insert([{
-              type: 'entree',
-              name: item.name,
-              value_f: item.price,
-              color: item.icon,
-              description: item.description,
-              is_active: true
-            }]).select('id');
-            if (data && data[0]) item.id = data[0].id;
+            // Chercher d'abord si un ticket avec ce nom existe déjà en base
+            const { data: exist } = await client.from('tickets_catalog')
+              .select('id')
+              .eq('type', 'entree')
+              .ilike('name', item.name)
+              .limit(1);
+
+            if (exist && exist.length > 0 && this.isUuid(exist[0].id)) {
+              item.id = exist[0].id;
+              await client.from('tickets_catalog').update({
+                name: item.name,
+                value_f: item.price,
+                color: item.icon,
+                description: item.description,
+                is_active: true
+              }).eq('id', item.id);
+            } else {
+              const { data } = await client.from('tickets_catalog').insert([{
+                type: 'entree',
+                name: item.name,
+                value_f: item.price,
+                color: item.icon,
+                description: item.description,
+                is_active: true
+              }]).select('id');
+              if (data && data[0] && this.isUuid(data[0].id)) {
+                item.id = data[0].id;
+              }
+            }
           }
         }
         localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
@@ -1955,28 +1968,76 @@ const CaisseEntreeModule = {
       }
       const price = Math.max(0, parseInt(priceStr, 10) || 0);
 
+      const oldName = ticket.name;
       ticket.name = name;
       ticket.price = price;
       ticket.icon = icon;
       ticket.description = desc;
 
       const client = SupabaseClient.client;
-      if (client && CaissesCore.isUuid(ticketId)) {
-        try {
-          await client.from('tickets_catalog').update({
-            name: name,
-            value_f: price,
-            color: icon,
-            description: desc
-          }).eq('id', ticketId);
-        } catch (e) {
-          console.warn('[Edit Ticket DB Warning]', e);
+      if (client) {
+        let updated = false;
+        // 1. Essai par UUID direct
+        if (CaissesCore.isUuid(ticket.id)) {
+          try {
+            const { error } = await client.from('tickets_catalog').update({
+              name: name,
+              value_f: price,
+              color: icon,
+              description: desc,
+              is_active: true
+            }).eq('id', ticket.id);
+            if (!error) updated = true;
+          } catch (e) {
+            console.warn('[Edit Ticket DB Warning UUID]', e);
+          }
+        }
+        // 2. Si pas un UUID ou échec, recherche par ancien nom
+        if (!updated) {
+          try {
+            const { data, error } = await client.from('tickets_catalog')
+              .update({
+                name: name,
+                value_f: price,
+                color: icon,
+                description: desc,
+                is_active: true
+              })
+              .eq('type', 'entree')
+              .ilike('name', oldName)
+              .select('id');
+            if (!error && data && data.length > 0) {
+              ticket.id = data[0].id;
+              updated = true;
+            }
+          } catch (e) {
+            console.warn('[Edit Ticket DB Warning Name]', e);
+          }
+        }
+        // 3. Si introuvable en base, insertion propre pour obtenir un vrai UUID
+        if (!updated) {
+          try {
+            const { data, error } = await client.from('tickets_catalog').insert([{
+              type: 'entree',
+              name: name,
+              value_f: price,
+              color: icon,
+              description: desc,
+              is_active: true
+            }]).select('id');
+            if (!error && data && data[0]) {
+              ticket.id = data[0].id;
+            }
+          } catch (e) {
+            console.warn('[Edit Ticket DB Warning Insert]', e);
+          }
         }
       }
 
       // Si le billet était dans le panier en cours, mettre à jour son nom et son prix
-      const cartItem = this.cart.find(c => c.id === ticketId);
+      const cartItem = this.cart.find(c => c.id === ticketId || c.id === ticket.id);
       if (cartItem) {
+        cartItem.id = ticket.id;
         cartItem.name = name;
         cartItem.price = price;
       }
@@ -2005,6 +2066,8 @@ const CaisseEntreeModule = {
       try {
         if (CaissesCore.isUuid(ticketId)) {
           await client.from('tickets_catalog').delete().eq('id', ticketId);
+        } else {
+          await client.from('tickets_catalog').delete().eq('type', 'entree').ilike('name', ticket.name);
         }
         // Supprimer également les ventes passées pour ce billet (nettoie immédiatement le Dashboard et le Bilan)
         await client.from('ticket_sales').delete().eq('item_name', ticket.name);

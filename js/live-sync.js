@@ -249,33 +249,33 @@ const LiveSync = {
       }
 
       // 2. Pôle 2 (Billetterie & Caisses)
-      if (typeof CaisseEntreeModule !== 'undefined' && document.getElementById('entryCatalogGrid')) {
+      if (typeof CaisseEntreeModule !== 'undefined' && (document.getElementById('caisseEntreeTabContainer') || document.getElementById('caisseEntreeTabsNav') || document.getElementById('entryCatalogGrid'))) {
         await CaisseEntreeModule.loadData();
         if (!CaisseEntreeModule.cart || CaisseEntreeModule.cart.length === 0) CaisseEntreeModule.renderCurrentTab();
       }
-      if (typeof CaisseJeuxModule !== 'undefined' && document.getElementById('caisseJeuxProductsGrid')) {
+      if (typeof CaisseJeuxModule !== 'undefined' && (document.getElementById('caisseJeuxTabContainer') || document.getElementById('caisseJeuxTabsNav') || document.getElementById('caisseJeuxProductsGrid'))) {
         await CaisseJeuxModule.loadData();
         if (!CaisseJeuxModule.cart || CaisseJeuxModule.cart.length === 0) CaisseJeuxModule.renderCurrentTab();
       }
-      if (typeof CaisseJetonsModule !== 'undefined' && document.getElementById('caisseJetonsSummaryCard')) {
+      if (typeof CaisseJetonsModule !== 'undefined' && (document.getElementById('caisseJetonsTabContainer') || document.getElementById('caisseJetonsTabsNav') || document.getElementById('caisseJetonsSummaryCard'))) {
         await CaisseJetonsModule.loadData();
         CaisseJetonsModule.renderCurrentTab();
       }
-      if (typeof CaisseBilanModule !== 'undefined' && document.getElementById('totalGlobalRevenue')) {
+      if (typeof CaisseBilanModule !== 'undefined' && (document.getElementById('bilanContentContainer') || document.getElementById('totalGlobalRevenue') || document.getElementById('caisseBilanTabContainer'))) {
         await CaisseBilanModule.loadData();
         CaisseBilanModule.renderSummary();
       }
-      if (typeof CaisseAnnulationsModule !== 'undefined' && document.getElementById('caisseAnnulationsCount')) {
+      if (typeof CaisseAnnulationsModule !== 'undefined' && (document.getElementById('caisseAnnulationsBody') || document.getElementById('cancellationsCountBadge') || document.getElementById('caisseAnnulationsCount'))) {
         await CaisseAnnulationsModule.loadData();
         CaisseAnnulationsModule.renderContent();
       }
 
       // 3. Pôle 4 (Restauration & Buvette)
-      if (typeof CaisseRestaurationModule !== 'undefined' && document.getElementById('foodMenuGrid')) {
+      if (typeof CaisseRestaurationModule !== 'undefined' && (document.getElementById('caisseRestoTabContainer') || document.getElementById('caisseRestoTabsNav') || document.getElementById('foodMenuGrid'))) {
         await CaisseRestaurationModule.loadData();
         if (!CaisseRestaurationModule.cart || CaisseRestaurationModule.cart.length === 0) CaisseRestaurationModule.renderCurrentTab();
       }
-      if (typeof StocksModule !== 'undefined' && document.getElementById('foodProductsTableContainer')) {
+      if (typeof StocksModule !== 'undefined' && (document.getElementById('productsTableContainer') || document.getElementById('foodProductsTableContainer'))) {
         await StocksModule.loadData();
         StocksModule.renderProducts();
       }
@@ -313,7 +313,7 @@ const LiveSync = {
       }
 
       // 7. Pôle 9 (Sécurité & Incidents)
-      if (typeof SecurityModule !== 'undefined' && (document.getElementById('incidentsTableContainer') || document.getElementById('securityStatsGrid'))) {
+      if (typeof SecurityModule !== 'undefined' && (document.getElementById('securityTabContent') || document.getElementById('incidentsTableContainer') || document.getElementById('securityStatsGrid'))) {
         await SecurityModule.loadData();
         SecurityModule.renderCurrentTab();
       }
@@ -322,19 +322,19 @@ const LiveSync = {
       }
 
       // 8. Pôle 1 (Communication)
-      if (typeof CommunicationModule !== 'undefined' && document.getElementById('commStatsGrid')) {
+      if (typeof CommunicationModule !== 'undefined' && (document.getElementById('commTabContent') || document.getElementById('commStatsGrid'))) {
         await CommunicationModule.loadData();
         CommunicationModule.renderCurrentTab();
       }
 
       // 9. Pôle 3 (Décoration & Stade 3D)
-      if (typeof DecorationModule !== 'undefined' && document.getElementById('decorStatsGrid')) {
+      if (typeof DecorationModule !== 'undefined' && (document.getElementById('decorTabContent') || document.getElementById('decorStatsGrid'))) {
         await DecorationModule.loadData();
         DecorationModule.renderCurrentTab();
       }
 
       // 10. Supervision (SuperAdmin)
-      if (typeof DashboardModule !== 'undefined' && document.getElementById('kpiTotalRevenue')) {
+      if (typeof DashboardModule !== 'undefined' && (document.getElementById('kpiGrid') || document.getElementById('kpiTotalRevenue'))) {
         await DashboardModule.loadRealData();
       }
       if (typeof RolesModule !== 'undefined' && document.getElementById('rolesUsersTableContainer')) {

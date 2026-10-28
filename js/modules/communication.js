@@ -126,56 +126,9 @@ const CommunicationModule = {
     if (!this.items || this.items.length === 0) {
       const stored = localStorage.getItem('kermesse_communication_items');
       if (stored) {
-        try { this.items = JSON.parse(stored); } catch (e) {}
+        try { this.items = JSON.parse(stored); } catch (e) { this.items = []; }
       } else {
-        // Données d'exemple initiales
-        this.items = [
-          {
-            id: 'comm-1',
-            title: 'Affiches officielles A3 de la Kermesse',
-            type: 'affiche',
-            responsible_name: 'Équipe Communication',
-            status: 'termine',
-            target_date: '2026-09-20',
-            display_location: 'Églises partenaires, commerces du quartier, école',
-            materials_needed: 'Impression 50 exemplaires couleur A3, scotch résistant',
-            notes: 'Affiches imprimées et distribuées'
-          },
-          {
-            id: 'comm-2',
-            title: 'Flyers de présentation & tombola',
-            type: 'flyer',
-            responsible_name: 'Sarah M.',
-            status: 'en_cours',
-            target_date: '2026-09-21',
-            display_location: 'Distribution sortie des classes & accueil kermesse',
-            materials_needed: '1000 flyers A5 quadri',
-            notes: 'En cours d\'impression'
-          },
-          {
-            id: 'comm-3',
-            title: 'Panneaux de signalétique stands & jeux',
-            type: 'signaletique_panneau',
-            responsible_name: 'David L.',
-            status: 'a_faire',
-            target_date: '2026-09-22',
-            display_location: 'Sur chaque stand (Couleur + N°)',
-            materials_needed: 'Cartons rigides, feutres larges, œillets de fixation',
-            notes: 'À finaliser la veille de la kermesse'
-          },
-          {
-            id: 'comm-4',
-            title: 'Plan officiel de la Kermesse & Délimitation des 10 zones',
-            type: 'plan_kermesse',
-            responsible_name: 'Mounir (SuperAdmin)',
-            status: 'en_cours',
-            target_date: '2026-09-22',
-            display_location: 'Grand panneau d\'accueil à l\'entrée & stand Billetterie',
-            materials_needed: 'Bâche imprimée 2x1m',
-            notes: 'Plan avec les 10 zones et repères numérotés'
-          }
-        ];
-        localStorage.setItem('kermesse_communication_items', JSON.stringify(this.items));
+        this.items = [];
       }
     }
 
@@ -356,6 +309,9 @@ const CommunicationModule = {
                   <td>${item.target_date || '-'}</td>
                   <td><span class="comm-status-pill ${st.badgeClass}">${st.icon} ${st.label}</span></td>
                   <td style="text-align: right; white-space: nowrap;">
+                    <button class="btn-icon" onclick="CommunicationModule.openEditModal('${item.id}')" title="Modifier cette action">
+                      ✏️
+                    </button>
                     <button class="btn-icon" onclick="CommunicationModule.toggleStatus('${item.id}')" title="${item.status === 'termine' ? 'Marquer en cours' : 'Marquer comme terminé'}">
                       ${item.status === 'termine' ? '↩️' : '✅'}
                     </button>
@@ -413,6 +369,9 @@ const CommunicationModule = {
               <div class="comm-card-actions">
                 <button class="btn ${isDone ? 'btn-secondary' : 'btn-success'} btn-main-status" onclick="CommunicationModule.toggleStatus('${item.id}')">
                   ${isDone ? '↩️ En cours' : '✅ Valider'}
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.openEditModal('${item.id}')" title="Modifier">
+                  ✏️ Modifier
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="CommunicationModule.duplicateItem('${item.id}')" title="Dupliquer">
                   📋 Copier
@@ -797,6 +756,134 @@ const CommunicationModule = {
     Notify.success('Action dupliquée avec succès.');
     this.updateStats();
     this.renderCurrentTab();
+  },
+
+  openEditModal(itemId) {
+    const item = this.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop open';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Modifier l'Action / Support Communication</h3>
+          <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editCommForm">
+            <div class="form-group">
+              <label>Intitulé du support / de l'action *</label>
+              <input type="text" id="editCommTitle" class="form-control" required value="${(item.title || '').replace(/"/g, '&quot;')}">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Type de support *</label>
+                <select id="editCommType" class="form-control" required>
+                  <option value="affiche" ${item.type === 'affiche' ? 'selected' : ''}>🖼️ Affiche</option>
+                  <option value="flyer" ${item.type === 'flyer' ? 'selected' : ''}>📄 Flyer</option>
+                  <option value="signaletique_panneau" ${item.type === 'signaletique_panneau' ? 'selected' : ''}>🪧 Signalétique & Panneau</option>
+                  <option value="plan_kermesse" ${item.type === 'plan_kermesse' ? 'selected' : ''}>🗺️ Plan de la kermesse</option>
+                  <option value="whatsapp" ${item.type === 'whatsapp' ? 'selected' : ''}>📱 Message WhatsApp</option>
+                  <option value="reseaux_sociaux" ${item.type === 'reseaux_sociaux' ? 'selected' : ''}>🌐 Réseaux Sociaux</option>
+                  <option value="annonce" ${item.type === 'annonce' ? 'selected' : ''}>📣 Annonce / Invitation</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Statut *</label>
+                <select id="editCommStatus" class="form-control" required>
+                  <option value="a_faire" ${item.status === 'a_faire' ? 'selected' : ''}>À faire</option>
+                  <option value="en_cours" ${item.status === 'en_cours' ? 'selected' : ''}>En cours</option>
+                  <option value="termine" ${item.status === 'termine' ? 'selected' : ''}>Terminé</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Responsable *</label>
+                <input type="text" id="editCommResponsible" class="form-control" required value="${(item.responsible_name || '').replace(/"/g, '&quot;')}">
+              </div>
+              <div class="form-group">
+                <label>Date prévue</label>
+                <input type="date" id="editCommTargetDate" class="form-control" value="${item.target_date || ''}">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Emplacement d'affichage / Cible</label>
+              <input type="text" id="editCommLocation" class="form-control" value="${(item.display_location || '').replace(/"/g, '&quot;')}" placeholder="Ex: Entrée principale, stand billetterie...">
+            </div>
+
+            <div class="form-group">
+              <label>Matériel nécessaire (impression, scotch, piquets...)</label>
+              <input type="text" id="editCommMaterials" class="form-control" value="${(item.materials_needed || '').replace(/"/g, '&quot;')}" placeholder="Ex: Papier 160g, scotch...">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary close-btn">Annuler</button>
+          <button class="btn btn-primary" id="saveEditCommBtn">Enregistrer les modifications</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.modal-close-btn').onclick = close;
+    modal.querySelector('.close-btn').onclick = close;
+
+    modal.querySelector('#saveEditCommBtn').onclick = async () => {
+      const title = document.getElementById('editCommTitle').value.trim();
+      const type = document.getElementById('editCommType').value;
+      const status = document.getElementById('editCommStatus').value;
+      const responsible = document.getElementById('editCommResponsible').value.trim();
+      const targetDate = document.getElementById('editCommTargetDate').value;
+      const location = document.getElementById('editCommLocation').value.trim();
+      const materials = document.getElementById('editCommMaterials').value.trim();
+
+      if (!title || !responsible) {
+        Notify.error('Veuillez renseigner les champs obligatoires.');
+        return;
+      }
+
+      item.title = title;
+      item.type = type;
+      item.status = status;
+      item.responsible_name = responsible;
+      item.target_date = targetDate || null;
+      item.display_location = location || null;
+      item.materials_needed = materials || null;
+
+      const client = SupabaseClient.client;
+      if (client) {
+        try {
+          await client.from('communication_items').update({
+            title: item.title,
+            type: item.type,
+            status: item.status,
+            responsible_name: item.responsible_name,
+            target_date: item.target_date,
+            display_location: item.display_location,
+            materials_needed: item.materials_needed
+          }).eq('id', item.id);
+        } catch (e) {
+          console.warn('[CommunicationModule] Update DB warning:', e);
+        }
+      }
+
+      localStorage.setItem('kermesse_communication_items', JSON.stringify(this.items));
+      AuditLogger.log('MODIFICATION_COMMUNICATION', 'communication', item.id, `Mise à jour support ${title}`);
+      Notify.success(`Action « ${title} » modifiée avec succès.`);
+      close();
+      this.updateStats();
+      this.renderCurrentTab();
+      if (window.LiveSync) {
+        LiveSync.broadcastLocalEvent('comm_updated');
+        LiveSync.triggerRefresh('comm_updated');
+      }
+    };
   },
 
   getPacksList() {

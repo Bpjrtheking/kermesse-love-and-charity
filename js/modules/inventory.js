@@ -43,23 +43,68 @@ const InventoryModule = {
 
   async loadData() {
     const client = SupabaseClient.client;
-    if (!client) return;
+    let inventories = [];
 
-    try {
-      const { data: inventories, error } = await client
-        .from('inventories')
-        .select(`
-          id, title, type, phase, status, created_at, validated_at, notes,
-          creator:app_users!inventories_created_by_fkey(login),
-          items:inventory_items(id, item_name, theoretical_qty, counted_qty, variance_qty)
-        `)
-        .order('created_at', { ascending: false });
+    if (client) {
+      try {
+        // Niveau 1 : Requête avec jointure creator et items
+        const res = await client
+          .from('inventories')
+          .select(`
+            id, title, type, phase, status, created_at, validated_at, notes,
+            creator:app_users(login),
+            items:inventory_items(id, item_name, theoretical_qty, counted_qty, variance_qty)
+          `)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      this.renderInventories(inventories || []);
-    } catch (e) {
-      console.error('[InventoryModule Error]', e);
+        if (!res.error && res.data && res.data.length > 0) {
+          inventories = res.data;
+        }
+      } catch (e) {}
+
+      // Niveau 2 : Si la jointure creator échoue, requête sans creator
+      if (inventories.length === 0) {
+        try {
+          const res2 = await client
+            .from('inventories')
+            .select(`
+              id, title, type, phase, status, created_at, validated_at, notes, created_by,
+              items:inventory_items(id, item_name, theoretical_qty, counted_qty, variance_qty)
+            `)
+            .order('created_at', { ascending: false });
+          if (!res2.error && res2.data && res2.data.length > 0) {
+            inventories = res2.data;
+          }
+        } catch (e) {}
+      }
+
+      // Niveau 3 : Requête standard sans jointure
+      if (inventories.length === 0) {
+        try {
+          const res3 = await client
+            .from('inventories')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!res3.error && res3.data) {
+            inventories = res3.data;
+          }
+        } catch (e) {}
+      }
     }
+
+    // Repli de secours local si la base est vide ou hors-ligne
+    if (inventories.length === 0) {
+      try {
+        const stored = localStorage.getItem('kermesse_inventories');
+        if (stored) inventories = JSON.parse(stored);
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.setItem('kermesse_inventories', JSON.stringify(inventories));
+      } catch (e) {}
+    }
+
+    this.renderInventories(inventories || []);
   },
 
   renderInventories(inventories) {
