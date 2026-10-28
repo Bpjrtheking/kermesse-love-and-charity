@@ -89,36 +89,21 @@ const LiveSync = {
    * Vérifie si le re-rendu de l'interface peut se faire en toute sécurité
    * sans déranger l'utilisateur (ex: formulaire en cours, modale ouverte).
    */
+  /**
+   * Vérifie si le rafraîchissement peut s'exécuter sans gêner l'utilisateur.
+   */
   isSafeToRefresh() {
-    // 1. Si une modale est ouverte, ne JAMAIS toucher au DOM
-    const openModal = document.querySelector('.modal-backdrop.open, .modal.open, .modal-dialog, [role="dialog"]');
+    // 1. Si une modale est activement ouverte à l'écran, on ne touche à rien
+    const openModal = document.querySelector('.modal-backdrop, .modal.open');
     if (openModal) return false;
 
-    // 2. Si l'utilisateur est activement en train de taper dans un champ de texte
-    const activeEl = document.activeElement;
-    if (activeEl) {
-      const tag = activeEl.tagName;
-      const isTextInput = (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes(activeEl.type)) || tag === 'TEXTAREA';
-      if (isTextInput) {
-        // Si c'est un champ de recherche sans texte, autoriser le rafraîchissement
-        if (activeEl.id && activeEl.id.toLowerCase().includes('search') && !activeEl.value.trim()) {
-          // OK pour rafraîchir
-        } else if (activeEl.value && activeEl.value.trim().length > 0) {
-          // Saisie utilisateur active dans un formulaire ou recherche non vide
-          return false;
-        }
+    // 2. Si l'utilisateur est activement en train de taper dans un champ de formulaire
+    const el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+      const isSearch = el.id && el.id.toLowerCase().includes('search');
+      if (!isSearch && el.value && el.value.trim().length > 0) {
+        return false; // Ne pas couper la saisie en cours
       }
-    }
-
-    // 3. Si l'utilisateur a des articles dans un panier de caisse actif
-    if (typeof CaisseEntreeModule !== 'undefined' && CaisseEntreeModule.cart && CaisseEntreeModule.cart.length > 0) {
-      return 'cart_active'; // Indique qu'on doit seulement rafraîchir les données sans réinitialiser le panier
-    }
-    if (typeof CaisseJeuxModule !== 'undefined' && CaisseJeuxModule.cart && CaisseJeuxModule.cart.length > 0) {
-      return 'cart_active';
-    }
-    if (typeof CaisseRestaurationModule !== 'undefined' && CaisseRestaurationModule.cart && CaisseRestaurationModule.cart.length > 0) {
-      return 'cart_active';
     }
 
     return true;
@@ -227,9 +212,12 @@ const LiveSync = {
   },
 
   /**
-   * Rafraîchit intelligemment le module actuellement affiché à l'écran.
+   * Rafraîchit directement et automatiquement les données affichées à l'écran.
+   * Cible immédiatement le tableau présent dans le DOM (Jeux, Stands, Caisses, etc.).
    */
   async refreshActiveModule() {
+    if (!this.isSafeToRefresh()) return;
+
     const now = Date.now();
     if (this.isRefreshing) {
       // Sécurité anti-blocage : si un rafraîchissement est suspendu depuis plus de 3.5s, on force la libération
@@ -239,13 +227,11 @@ const LiveSync = {
         return;
       }
     }
-    const safety = this.isSafeToRefresh();
-    if (safety === false) return; // Modale ouverte ou saisie active en cours
 
     this.isRefreshing = true;
     this.lastRefreshStartTime = now;
 
-    // Animation discrète de rotation de l'icône actualiser
+    // Animation discrète de rotation de l'icône actualiser 🔄
     const spin = document.getElementById('liveSyncSpinIcon');
     if (spin) {
       this.spinAngle = (this.spinAngle || 0) + 180;
@@ -254,213 +240,118 @@ const LiveSync = {
     }
 
     try {
-      // 1. Pages gérées par PoleApp (pôles 1 à 9 et supervision)
-      if (typeof PoleApp !== 'undefined' && PoleApp.tabs && PoleApp.currentTab) {
-        const currentTab = PoleApp.currentTab;
-        const handler = PoleApp.tabs[currentTab]?.handler;
-
-        // Pôle 2 : Caisse Entrée
-        if (handler === CaisseEntreeModule || currentTab === 'caisse_entree') {
-          if (typeof CaisseEntreeModule !== 'undefined') {
-            await CaisseEntreeModule.loadData();
-            if (safety !== 'cart_active' && CaisseEntreeModule.cart.length === 0) {
-              CaisseEntreeModule.renderCurrentTab();
-            } else {
-              CaisseEntreeModule.updateBadgeCounts();
-            }
-          }
-        }
-        // Pôle 2 : Caisse Jeux
-        else if (handler === CaisseJeuxModule || currentTab === 'caisse_jeux') {
-          if (typeof CaisseJeuxModule !== 'undefined') {
-            await CaisseJeuxModule.loadData();
-            if (safety !== 'cart_active' && CaisseJeuxModule.cart.length === 0) {
-              CaisseJeuxModule.renderCurrentTab();
-            } else {
-              CaisseJeuxModule.updateBadgeCounts();
-            }
-          }
-        }
-        // Pôle 2 : Caisse Jetons & Avoirs
-        else if (handler === CaisseJetonsModule || currentTab === 'caisse_jetons') {
-          if (typeof CaisseJetonsModule !== 'undefined') {
-            await CaisseJetonsModule.loadData();
-            if (safety !== 'cart_active') {
-              CaisseJetonsModule.renderCurrentTab();
-            } else {
-              CaisseJetonsModule.updateBadgeCounts();
-            }
-          }
-        }
-        // Pôle 2 & Supervision : Bilan Financier Consolidé
-        else if (handler === CaisseBilanModule || currentTab === 'caisse_bilan') {
-          if (typeof CaisseBilanModule !== 'undefined') {
-            await CaisseBilanModule.loadData();
-            CaisseBilanModule.renderSummary();
-          }
-        }
-        // Pôle 2 & Supervision : Registre des Annulations
-        else if (handler === CaisseAnnulationsModule || currentTab === 'caisse_annulations') {
-          if (typeof CaisseAnnulationsModule !== 'undefined') {
-            await CaisseAnnulationsModule.loadData();
-            CaisseAnnulationsModule.renderContent();
-          }
-        }
-        // Pôle 4 : Caisse Restauration
-        else if (handler === CaisseRestaurationModule || currentTab === 'caisse_restauration') {
-          if (typeof CaisseRestaurationModule !== 'undefined') {
-            await CaisseRestaurationModule.loadData();
-            if (safety !== 'cart_active' && CaisseRestaurationModule.cart.length === 0) {
-              CaisseRestaurationModule.renderCurrentTab();
-            } else {
-              CaisseRestaurationModule.updateBadgeCounts();
-            }
-          }
-        }
-        // Pôle 4 : Stocks & Carte
-        else if (handler === StocksModule || currentTab === 'stocks') {
-          if (typeof StocksModule !== 'undefined') {
-            await StocksModule.loadData();
-          }
-        }
-        // Pôle 4 : Inventaires
-        else if (handler === InventoryModule || currentTab === 'inventory') {
-          if (typeof InventoryModule !== 'undefined') {
-            await InventoryModule.loadData();
-          }
-        }
-        // Pôle 5 : Stands
-        else if (handler === StandsModule || currentTab === 'stands') {
-          if (typeof StandsModule !== 'undefined') {
-            await StandsModule.loadData();
-          }
-        }
-        // Pôle 5 : Jeux
-        else if (handler === GamesModule || currentTab === 'games') {
-          if (typeof GamesModule !== 'undefined') {
-            await GamesModule.loadData();
-          }
-        }
-        // Pôle 1 : Communication
-        else if (typeof CommunicationModule !== 'undefined' && (handler === CommunicationModule || currentTab === 'communication')) {
-          await CommunicationModule.loadData();
-          CommunicationModule.renderCurrentTab();
-        }
-        // Pôle 3 : Décoration
-        else if (handler === DecorationModule || currentTab === 'decoration') {
-          if (typeof DecorationModule !== 'undefined') {
-            await DecorationModule.loadData();
-            DecorationModule.renderCurrentTab();
-          }
-        }
-        // Pôle 3 : Stade 3D
-        else if (handler === LocationsModule || currentTab === 'locations') {
-          if (typeof LocationsModule !== 'undefined') {
-            await LocationsModule.loadData();
-          }
-        }
-        // Pôle 6 : Lots
-        else if (handler === GiftsModule || currentTab === 'gifts') {
-          if (typeof GiftsModule !== 'undefined') {
-            await GiftsModule.loadData();
-          }
-        }
-        // Pôle 7 : Bénévoles
-        else if (handler === MembersModule || currentTab === 'members') {
-          if (typeof MembersModule !== 'undefined') {
-            await MembersModule.loadData();
-            MembersModule.renderCurrentTab();
-          }
-        }
-        // Pôle 7 : Équipes
-        else if (handler === TeamsModule || currentTab === 'teams') {
-          if (typeof TeamsModule !== 'undefined') {
-            await TeamsModule.loadData();
-          }
-        }
-        // Pôle 8 : Matériel
-        else if (handler === MaterialsModule || currentTab === 'materials') {
-          if (typeof MaterialsModule !== 'undefined') {
-            await MaterialsModule.loadData();
-            MaterialsModule.renderCurrentTab();
-          }
-        }
-        // Pôle 8 : Emprunts
-        else if (handler === LoansModule || currentTab === 'loans') {
-          if (typeof LoansModule !== 'undefined') {
-            await LoansModule.loadData();
-          }
-        }
-        // Pôle 8 : Mouvements
-        else if (handler === MovementsModule || currentTab === 'movements') {
-          if (typeof MovementsModule !== 'undefined') {
-            await MovementsModule.loadData();
-          }
-        }
-        // Pôle 8 : Retours
-        else if (handler === ReturnsModule || currentTab === 'returns') {
-          if (typeof ReturnsModule !== 'undefined') {
-            await ReturnsModule.loadData();
-          }
-        }
-        // Pôle 9 : Sécurité
-        else if (handler === SecurityModule || currentTab === 'security') {
-          if (typeof SecurityModule !== 'undefined') {
-            await SecurityModule.loadData();
-            SecurityModule.renderCurrentTab();
-          }
-        }
-        // Pôle 9 : Incidents
-        else if (handler === IncidentsModule || currentTab === 'incidents') {
-          if (typeof IncidentsModule !== 'undefined') {
-            await IncidentsModule.loadData();
-          }
-        }
-        // Supervision : Dashboard
-        else if (handler === DashboardModule || currentTab === 'dashboard') {
-          if (typeof DashboardModule !== 'undefined') {
-            await DashboardModule.loadRealData();
-          }
-        }
-        // Supervision : Rôles & Comptes
-        else if (handler === RolesModule || currentTab === 'roles') {
-          if (typeof RolesModule !== 'undefined') {
-            await RolesModule.loadData();
-            RolesModule.renderUsersTable();
-            RolesModule.renderPolesMatrix();
-          }
-        }
-        // Supervision : Journal d'Activité
-        else if (handler === HistoryModule || currentTab === 'history') {
-          if (typeof HistoryModule !== 'undefined') {
-            await HistoryModule.loadData();
-          }
-        }
+      // 1. Pôle 5 (Stands & Jeux)
+      if (typeof GamesModule !== 'undefined' && document.getElementById('gamesTableContainer')) {
+        await GamesModule.loadData();
+      }
+      if (typeof StandsModule !== 'undefined' && document.getElementById('standsTableContainer')) {
+        await StandsModule.loadData();
       }
 
-      // 2. Pôle 1 Communication si affiché directement sur poleContainer
+      // 2. Pôle 2 (Billetterie & Caisses)
+      if (typeof CaisseEntreeModule !== 'undefined' && document.getElementById('entryCatalogGrid')) {
+        await CaisseEntreeModule.loadData();
+        if (!CaisseEntreeModule.cart || CaisseEntreeModule.cart.length === 0) CaisseEntreeModule.renderCurrentTab();
+      }
+      if (typeof CaisseJeuxModule !== 'undefined' && document.getElementById('caisseJeuxProductsGrid')) {
+        await CaisseJeuxModule.loadData();
+        if (!CaisseJeuxModule.cart || CaisseJeuxModule.cart.length === 0) CaisseJeuxModule.renderCurrentTab();
+      }
+      if (typeof CaisseJetonsModule !== 'undefined' && document.getElementById('caisseJetonsSummaryCard')) {
+        await CaisseJetonsModule.loadData();
+        CaisseJetonsModule.renderCurrentTab();
+      }
+      if (typeof CaisseBilanModule !== 'undefined' && document.getElementById('totalGlobalRevenue')) {
+        await CaisseBilanModule.loadData();
+        CaisseBilanModule.renderSummary();
+      }
+      if (typeof CaisseAnnulationsModule !== 'undefined' && document.getElementById('caisseAnnulationsCount')) {
+        await CaisseAnnulationsModule.loadData();
+        CaisseAnnulationsModule.renderContent();
+      }
+
+      // 3. Pôle 4 (Restauration & Buvette)
+      if (typeof CaisseRestaurationModule !== 'undefined' && document.getElementById('foodMenuGrid')) {
+        await CaisseRestaurationModule.loadData();
+        if (!CaisseRestaurationModule.cart || CaisseRestaurationModule.cart.length === 0) CaisseRestaurationModule.renderCurrentTab();
+      }
+      if (typeof StocksModule !== 'undefined' && document.getElementById('foodProductsTableContainer')) {
+        await StocksModule.loadData();
+        StocksModule.renderProducts();
+      }
+      if (typeof InventoryModule !== 'undefined' && document.getElementById('inventoryTableContainer')) {
+        await InventoryModule.loadData();
+      }
+
+      // 4. Pôle 6 (Lots & Cadeaux)
+      if (typeof GiftsModule !== 'undefined' && (document.getElementById('giftsCatalogContainer') || document.getElementById('giftsAllocationsContainer'))) {
+        await GiftsModule.loadData();
+      }
+
+      // 5. Pôle 7 (Bénévoles & Planning)
+      if (typeof MembersModule !== 'undefined' && (document.getElementById('membersTableContainer') || document.getElementById('planningTableContainer'))) {
+        await MembersModule.loadData();
+        MembersModule.renderCurrentTab();
+      }
+      if (typeof TeamsModule !== 'undefined' && document.getElementById('teamsGridContainer')) {
+        await TeamsModule.loadData();
+      }
+
+      // 6. Pôle 8 (Logistique & Matériel)
+      if (typeof MaterialsModule !== 'undefined' && (document.getElementById('materialsTabContent') || document.getElementById('materialsTableContainer'))) {
+        await MaterialsModule.loadData();
+        MaterialsModule.renderCurrentTab();
+      }
+      if (typeof LoansModule !== 'undefined' && (document.getElementById('loansTableContainer') || document.getElementById('loansAlertsContainer'))) {
+        await LoansModule.loadData();
+      }
+      if (typeof MovementsModule !== 'undefined' && document.getElementById('movementsTableContainer')) {
+        await MovementsModule.loadData();
+      }
+      if (typeof ReturnsModule !== 'undefined' && (document.getElementById('returnsItineraryContainer') || document.getElementById('returnsTableContainer'))) {
+        await ReturnsModule.loadData();
+      }
+
+      // 7. Pôle 9 (Sécurité & Incidents)
+      if (typeof SecurityModule !== 'undefined' && (document.getElementById('incidentsTableContainer') || document.getElementById('securityStatsGrid'))) {
+        await SecurityModule.loadData();
+        SecurityModule.renderCurrentTab();
+      }
+      if (typeof IncidentsModule !== 'undefined' && document.getElementById('incidentsTableBody')) {
+        await IncidentsModule.loadData();
+      }
+
+      // 8. Pôle 1 (Communication)
       if (typeof CommunicationModule !== 'undefined' && document.getElementById('commStatsGrid')) {
         await CommunicationModule.loadData();
         CommunicationModule.renderCurrentTab();
       }
 
-      // 3. Messagerie instantanée WhatsApp
+      // 9. Pôle 3 (Décoration & Stade 3D)
+      if (typeof DecorationModule !== 'undefined' && document.getElementById('decorStatsGrid')) {
+        await DecorationModule.loadData();
+        DecorationModule.renderCurrentTab();
+      }
+
+      // 10. Supervision (SuperAdmin)
+      if (typeof DashboardModule !== 'undefined' && document.getElementById('kpiTotalRevenue')) {
+        await DashboardModule.loadRealData();
+      }
+      if (typeof RolesModule !== 'undefined' && document.getElementById('rolesUsersTableContainer')) {
+        await RolesModule.loadData();
+        RolesModule.renderUsersTable();
+      }
+      if (typeof HistoryModule !== 'undefined' && document.getElementById('auditLogTableBody')) {
+        await HistoryModule.loadData();
+      }
+
+      // 11. Messages & Tâches
       if (typeof MessagesModule !== 'undefined' && document.getElementById('whatsappContainer')) {
         await MessagesModule.checkNewMessages();
       }
-
-      // 4. Carnet de bord & Tâches
       if (typeof TasksModule !== 'undefined' && document.getElementById('tasksWorkspace')) {
         await TasksModule.loadData(true);
       }
-
-      // 5. Hub général
-      if (typeof App !== 'undefined' && document.querySelector('.portal-wrapper')) {
-        if (typeof applyPolePermissionsUI === 'function') {
-          applyPolePermissionsUI().catch(() => {});
-        }
-      }
-
     } catch (err) {
       console.warn('[LiveSync Refresh Warning]', err);
     } finally {

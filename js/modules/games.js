@@ -132,8 +132,11 @@ const GamesModule = {
           } catch (e) {}
         }
 
-        if (gData) {
+        if (gData !== null && gData !== undefined) {
           this.games = gData;
+          try {
+            localStorage.setItem('kermesse_games_cache', JSON.stringify(gData));
+          } catch (e) {}
         }
 
         // Chargement des demandes matérielles
@@ -148,14 +151,14 @@ const GamesModule = {
       console.warn('[GamesModule Load Warning]', e);
     }
 
-    // Fallbacks locaux et synchronisation des images locales
+    // Fallback local uniquement si la connexion Supabase a échoué (client null ou erreur totale)
     const storedG = localStorage.getItem('kermesse_games_cache');
     let localGames = [];
     if (storedG) {
       try { localGames = JSON.parse(storedG); } catch (e) {}
     }
 
-    if (!this.games || this.games.length === 0) {
+    if (this.games === null || this.games === undefined) {
       this.games = localGames;
     } else {
       // Si une image a été mise en cache localement pour un jeu, la préserver
@@ -322,6 +325,11 @@ const GamesModule = {
         </tbody>
       </table>
     `;
+
+    // Ré-appliquer la recherche / filtre si présent
+    if (document.getElementById('gameSearch') || document.getElementById('gameStandFilter')) {
+      this.filterTable();
+    }
   },
 
   filterTable() {
