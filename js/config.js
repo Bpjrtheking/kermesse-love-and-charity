@@ -7,7 +7,7 @@ const KermesseConfig = {
   appName: 'Love and Charity (L&C)',
   appSubTitle: 'Gestion et Contrôle de Kermesse',
   currency: 'F', // Francs
-  version: '7.1',
+  version: '7.2',
 
   // Identifiants officiels Supabase du projet Love and Charity
   supabaseUrl: 'https://msfyqwxizvesljlsdxqb.supabase.co',

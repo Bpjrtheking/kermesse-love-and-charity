@@ -777,8 +777,8 @@ const CaissesCore = {
 
   async loadEntryCatalog() {
     const client = SupabaseClient.client;
+    const cancelledNames = this.getCancelledTicketNames();
     let catalog = [];
-    let hasDbRecords = false;
 
     if (client) {
       try {
@@ -786,35 +786,56 @@ const CaissesCore = {
           .from('tickets_catalog')
           .select('id, name, value_f, color, description, is_active')
           .eq('type', 'entree')
-          .eq('is_active', true)
           .order('value_f', { ascending: true });
 
         if (!error && data && data.length > 0) {
-          hasDbRecords = true;
-          catalog = data.map(d => ({
-            id: d.id,
-            name: d.name,
-            price: d.value_f,
-            icon: d.color || '🎟️',
-            description: d.description || ''
-          }));
+          // Filtrer uniquement les articles non annulés et is_active != false
+          catalog = data
+            .filter(d => d.is_active !== false && !cancelledNames.includes(d.name))
+            .map(d => ({
+              id: d.id,
+              name: d.name,
+              price: d.value_f,
+              icon: d.color || '🎟️',
+              description: d.description || ''
+            }));
         }
       } catch (e) {
         console.warn('[CaissesCore DB Warning]', e);
       }
     }
 
-    // Si la base n'a pas renvoyé d'articles, vérifier le stockage local
-    if (!hasDbRecords) {
-      const stored = localStorage.getItem('kermesse_entry_catalog');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            catalog = parsed;
-          }
-        } catch (e) {}
-      }
+    // Fusionner les articles locaux pour ne JAMAIS perdre un billet créé
+    const stored = localStorage.getItem('kermesse_entry_catalog');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          parsed.forEach(localItem => {
+            if (localItem && localItem.name && !cancelledNames.includes(localItem.name)) {
+              const alreadyInCatalog = catalog.some(c => 
+                c.id === localItem.id || c.name.trim().toLowerCase() === localItem.name.trim().toLowerCase()
+              );
+              if (!alreadyInCatalog) {
+                catalog.push(localItem);
+                // Sauvegarder automatiquement en base pour les autres utilisateurs
+                if (client) {
+                  client.from('tickets_catalog').insert([{
+                    type: 'entree',
+                    name: localItem.name,
+                    value_f: localItem.price || 0,
+                    color: localItem.icon || '🎟️',
+                    description: localItem.description || '',
+                    is_active: true
+                  }]).then(res => {
+                    if (res.data && res.data[0]) localItem.id = res.data[0].id;
+                  }).catch(() => {});
+                }
+              }
+            }
+          });
+        }
+      } catch (e) {}
     }
 
     // Si toujours vide (première initialisation), charger et propager les 4 tarifs d'entrée de référence
@@ -825,7 +846,6 @@ const CaissesCore = {
         { id: 'ent-fam', name: 'Pass Famille', price: 1200, icon: '👨‍👩‍👧‍👦', description: 'Valable pour 4 personnes' },
         { id: 'ent-don', name: 'Entrée Donateur & Bienfaiteur', price: 2000, icon: '❤️', description: 'Soutien aux œuvres sociales' }
       ];
-      localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
 
       // Les inscrire directement dans Supabase pour que tous les autres terminaux en bénéficient
       if (client) {
@@ -841,13 +861,11 @@ const CaissesCore = {
             }]).select('id');
             if (data && data[0]) item.id = data[0].id;
           }
-          localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
         } catch (e) {}
       }
-    } else {
-      localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
     }
 
+    localStorage.setItem('kermesse_entry_catalog', JSON.stringify(catalog));
     return catalog;
   },
 
@@ -1310,9 +1328,7 @@ const CaisseEntreeModule = {
     if (this.register) {
       this.expenses = await CaissesCore.loadExpenses(this.register.id);
     }
-    if (!this.entryCatalog || this.entryCatalog.length === 0) {
-      this.entryCatalog = await CaissesCore.loadEntryCatalog();
-    }
+    this.entryCatalog = await CaissesCore.loadEntryCatalog();
   },
 
   renderCurrentTab() {
