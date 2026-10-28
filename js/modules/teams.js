@@ -200,7 +200,12 @@ const TeamsModule = {
         AuditLogger.log('CREATION_EQUIPE', 'team', null, `Création de l'équipe ${name} (${colorName})`);
         Notify.success(`Équipe ${name} créée avec succès.`);
         close();
-        TeamsModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) TeamsModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('team_created');
+          LiveSync.triggerRefresh('team_created');
+        }
       }
     };
   },
@@ -219,7 +224,12 @@ const TeamsModule = {
           }
           AuditLogger.log('SUPPRESSION_EQUIPE', 'team', id, `Suppression de l'équipe ${name}`);
           Notify.success(`Équipe ${name} supprimée.`);
-          TeamsModule.render(document.getElementById('mainContent'));
+          const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+          if (targetContainer) TeamsModule.render(targetContainer);
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('team_deleted');
+            LiveSync.triggerRefresh('team_deleted');
+          }
         }
       },
       'Supprimer',

@@ -259,7 +259,12 @@ const MovementsModule = {
         AuditLogger.log('MOUVEMENT_MATERIEL', 'material', matId, `Transfert de ${qty} unité(s) vers ${toLoc} sous responsabilité de ${toResp || 'Inconnu'}`);
         Notify.success('Transfert de matériel enregistré.');
         close();
-        MovementsModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) MovementsModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('material_movement_created');
+          LiveSync.triggerRefresh('material_movement_created');
+        }
       }
     };
   }

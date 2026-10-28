@@ -548,7 +548,16 @@ const GamesModule = {
       AuditLogger.log('CREATION_JEU', 'game', newGameId, `Création du jeu ${name}`);
       Notify.success(`Jeu "${name}" enregistré avec succès.`);
       close();
-      GamesModule.render(document.getElementById('mainContent'));
+      const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (!document.getElementById('gamesTableContainer') && targetContainer) {
+        await GamesModule.render(targetContainer);
+      } else {
+        await GamesModule.loadData();
+      }
+      if (window.LiveSync) {
+        LiveSync.broadcastLocalEvent('game_created');
+        LiveSync.triggerRefresh('game_created');
+      }
     };
   },
 
@@ -749,7 +758,16 @@ const GamesModule = {
 
       Notify.success(`Jeu "${name}" mis à jour.`);
       close();
-      GamesModule.render(document.getElementById('mainContent'));
+      const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (!document.getElementById('gamesTableContainer') && targetContainer) {
+        await GamesModule.render(targetContainer);
+      } else {
+        await GamesModule.loadData();
+      }
+      if (window.LiveSync) {
+        LiveSync.broadcastLocalEvent('game_updated');
+        LiveSync.triggerRefresh('game_updated');
+      }
     };
   },
 
@@ -830,7 +848,16 @@ const GamesModule = {
           }
           AuditLogger.log('SUPPRESSION_JEU', 'game', id, `Suppression du jeu ${name}`);
           Notify.success(`Jeu ${name} supprimé.`);
-          GamesModule.render(document.getElementById('mainContent'));
+          const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+          if (!document.getElementById('gamesTableContainer') && targetContainer) {
+            await GamesModule.render(targetContainer);
+          } else {
+            await GamesModule.loadData();
+          }
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('game_deleted');
+            LiveSync.triggerRefresh('game_deleted');
+          }
         }
       },
       'Supprimer',

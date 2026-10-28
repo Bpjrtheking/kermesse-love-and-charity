@@ -318,7 +318,12 @@ const LoansModule = {
         AuditLogger.log('CREATION_EMPRUNT', 'loan', newLoan.id, `Enregistrement d'emprunt de ${qty} unité(s) pour retour le ${rDate}`);
         Notify.success('Emprunt enregistré et ajouté au plan de restitution.');
         close();
-        LoansModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) LoansModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('loan_created');
+          LiveSync.triggerRefresh('loan_created');
+        }
       }
     };
   },
@@ -342,7 +347,12 @@ const LoansModule = {
 
           AuditLogger.log('RESTITUTION_MATERIEL', 'loan', loanId, `Restitution confirmée de ${quantity} ${materialName}`);
           Notify.success('Restitution enregistrée avec succès.');
-          LoansModule.render(document.getElementById('mainContent'));
+          const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+          if (targetContainer) LoansModule.render(targetContainer);
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('loan_returned');
+            LiveSync.triggerRefresh('loan_returned');
+          }
         }
       },
       'Confirmer la restitution'

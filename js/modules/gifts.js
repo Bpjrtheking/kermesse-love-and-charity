@@ -288,7 +288,12 @@ const GiftsModule = {
         AuditLogger.log('CREATION_LOT', 'gift', null, `Création du lot ${name} (${stock} pièces)`);
         Notify.success(`Lot ${name} enregistré.`);
         close();
-        GiftsModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) GiftsModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('gift_created');
+          LiveSync.triggerRefresh('gift_created');
+        }
       }
     };
   },
@@ -397,7 +402,12 @@ const GiftsModule = {
         AuditLogger.log('AFFECTATION_LOT', 'gift', giftId, `Affectation de ${qty} lot(s) vers le stand ID ${standId}`);
         Notify.success(`Affectation de ${qty} lot(s) enregistrée.`);
         close();
-        GiftsModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) GiftsModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('gift_allocated');
+          LiveSync.triggerRefresh('gift_allocated');
+        }
       }
     };
   },
@@ -486,7 +496,12 @@ const GiftsModule = {
           AuditLogger.log('RETOUR_LOT_CENTRAL', 'gift_allocation', allocId, `Retour de ${qty} lot(s) ${giftName} depuis ${standName} vers le Stock Central`);
           Notify.success(`Retour de ${qty} lot(s) enregistré.`);
           close();
-          GiftsModule.render(document.getElementById('mainContent'));
+          const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+          if (targetContainer) GiftsModule.render(targetContainer);
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('gift_returned');
+            LiveSync.triggerRefresh('gift_returned');
+          }
         }
       }
     };

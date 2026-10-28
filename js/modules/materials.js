@@ -484,7 +484,12 @@ const MaterialsModule = {
         AuditLogger.log('CREATION_MATERIEL', 'material', null, `Création du matériel ${name} (${qty} unités)`);
         Notify.success(`Matériel ${name} enregistré.`);
         close();
-        MaterialsModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) MaterialsModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('material_created');
+          LiveSync.triggerRefresh('material_created');
+        }
       }
     };
   },

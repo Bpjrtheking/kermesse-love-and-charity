@@ -16,6 +16,7 @@ const LiveSync = {
   pollTimer: null,
   isRefreshing: false,
   lastRefreshTime: 0,
+  lastRefreshStartTime: 0,
   permissionSyncCounter: 0,
 
   init() {
@@ -30,16 +31,57 @@ const LiveSync = {
     // 3. Injecter l'indicateur visuel "En direct 🟢" dans l'en-tête de la page
     this.injectLiveBadge();
 
-    // 4. Détecter le retour de veille / changement d'onglet
-    document.addEventListener('visibilitychange', () => {
+    // 4. Détecter le retour de veille et déverrouillage écran (iPhone, iPad, Android, Mac, PC)
+    const handleWakeUp = (eventReason) => {
       if (document.visibilityState === 'visible') {
-        this.triggerRefresh('visibility_change');
+        this.verifyAndReconnect();
+        this.triggerRefresh(eventReason);
       }
-    });
+    };
 
+    document.addEventListener('visibilitychange', () => handleWakeUp('visibility_change'));
+    window.addEventListener('focus', () => handleWakeUp('window_focus'));
+    window.addEventListener('pageshow', () => handleWakeUp('page_show'));
     window.addEventListener('online', () => {
+      this.verifyAndReconnect();
       this.triggerRefresh('network_online');
     });
+
+    // 5. Bus local multi-onglets / multi-fenêtres (BroadcastChannel pour Mac, iPad, PC)
+    if (typeof window.BroadcastChannel !== 'undefined') {
+      try {
+        this.localBus = new BroadcastChannel('lc_livesync_bus');
+        this.localBus.onmessage = (e) => {
+          if (e.data && e.data.action === 'REFRESH_NOW') {
+            this.triggerRefresh('local_bus_' + (e.data.cause || 'event'));
+          }
+        };
+      } catch (err) {}
+    }
+  },
+
+  /**
+   * Vérifie et relance la connexion WebSocket si l'appareil sort de veille.
+   */
+  verifyAndReconnect() {
+    const client = SupabaseClient.client;
+    if (!client) return;
+    try {
+      if (!this.channel || this.channel.state === 'closed' || this.channel.state === 'errored') {
+        this.initRealtimeChannel();
+      }
+    } catch (e) {}
+  },
+
+  /**
+   * Diffuse un signal instantané aux autres onglets ouverts sur le même appareil (Mac, PC, iPad).
+   */
+  broadcastLocalEvent(cause = 'event') {
+    if (this.localBus) {
+      try {
+        this.localBus.postMessage({ action: 'REFRESH_NOW', cause });
+      } catch (e) {}
+    }
   },
 
   /**
@@ -51,14 +93,19 @@ const LiveSync = {
     const openModal = document.querySelector('.modal-backdrop.open, .modal.open, .modal-dialog, [role="dialog"]');
     if (openModal) return false;
 
-    // 2. Si l'utilisateur est en train de taper dans un champ de texte
+    // 2. Si l'utilisateur est activement en train de taper dans un champ de texte
     const activeEl = document.activeElement;
-    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
-      // Tolérer uniquement si ce n'est pas un champ de recherche vide
-      if (activeEl.id && activeEl.id.toLowerCase().includes('search') && !activeEl.value) {
-        // Recherche vide, ok
-      } else {
-        return false;
+    if (activeEl) {
+      const tag = activeEl.tagName;
+      const isTextInput = (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes(activeEl.type)) || tag === 'TEXTAREA';
+      if (isTextInput) {
+        // Si c'est un champ de recherche sans texte, autoriser le rafraîchissement
+        if (activeEl.id && activeEl.id.toLowerCase().includes('search') && !activeEl.value.trim()) {
+          // OK pour rafraîchir
+        } else if (activeEl.value && activeEl.value.trim().length > 0) {
+          // Saisie utilisateur active dans un formulaire ou recherche non vide
+          return false;
+        }
       }
     }
 
@@ -102,6 +149,9 @@ const LiveSync = {
         'food_products',
         'stands',
         'games',
+        'stand_material_requests',
+        'stand_staff',
+        'locations',
         'gifts_catalog',
         'gift_stand_allocations',
         'members',
@@ -111,6 +161,8 @@ const LiveSync = {
         'loans',
         'material_movements',
         'incidents',
+        'inventories',
+        'inventory_items',
         'communication_items',
         'pole_tasks',
         'admin_notes',
@@ -177,11 +229,20 @@ const LiveSync = {
    * Rafraîchit intelligemment le module actuellement affiché à l'écran.
    */
   async refreshActiveModule() {
-    if (this.isRefreshing) return;
+    const now = Date.now();
+    if (this.isRefreshing) {
+      // Sécurité anti-blocage : si un rafraîchissement est suspendu depuis plus de 3.5s, on force la libération
+      if (now - this.lastRefreshStartTime > 3500) {
+        this.isRefreshing = false;
+      } else {
+        return;
+      }
+    }
     const safety = this.isSafeToRefresh();
-    if (safety === false) return; // Modale ouverte ou saisie en cours
+    if (safety === false) return; // Modale ouverte ou saisie active en cours
 
     this.isRefreshing = true;
+    this.lastRefreshStartTime = now;
 
     try {
       // 1. Pages gérées par PoleApp (pôles 1 à 9 et supervision)

@@ -215,7 +215,12 @@ const ReturnsModule = {
       Notify.info('Le plan de restitution est déjà à jour.');
     }
 
-    this.render(document.getElementById('mainContent'));
+    const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+    if (targetContainer) this.render(targetContainer);
+    if (window.LiveSync) {
+      LiveSync.broadcastLocalEvent('returns_plan_updated');
+      LiveSync.triggerRefresh('returns_plan_updated');
+    }
   },
 
   async updateStationStatus(planId, newStatus, matName) {
@@ -251,7 +256,12 @@ const ReturnsModule = {
       Notify.success('Restitution validée avec succès.');
     }
 
-    this.render(document.getElementById('mainContent'));
+    const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+    if (targetContainer) this.render(targetContainer);
+    if (window.LiveSync) {
+      LiveSync.broadcastLocalEvent('returns_station_updated');
+      LiveSync.triggerRefresh('returns_station_updated');
+    }
   }
 };
 

@@ -301,7 +301,12 @@ const IncidentsModule = {
         AuditLogger.log('DECLARATION_INCIDENT', 'incident', null, `Déclaration de l'incident ${num} (${title}) par ${user?.full_name || user?.login}`);
         Notify.success(`Incident ${num} consigné au registre.`);
         close();
-        IncidentsModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) IncidentsModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('incident_created');
+          LiveSync.triggerRefresh('incident_created');
+        }
       }
     };
   },
@@ -326,7 +331,12 @@ const IncidentsModule = {
 
           AuditLogger.log('RESOLUTION_INCIDENT', 'incident', incId, `Résolution de l'incident ${incNum} par ${resolverName}: ${notes}`);
           Notify.success(`Incident ${incNum} marqué comme résolu.`);
-          IncidentsModule.render(document.getElementById('mainContent'));
+          const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+          if (targetContainer) IncidentsModule.render(targetContainer);
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('incident_resolved');
+            LiveSync.triggerRefresh('incident_resolved');
+          }
         }
       },
       'Résoudre l\'incident'

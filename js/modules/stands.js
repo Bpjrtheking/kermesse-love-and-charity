@@ -490,7 +490,16 @@ const StandsModule = {
       AuditLogger.log('CREATION_STAND', 'stand', newStandId, `Création du stand ${name} (${colorName} ${number}) avec ${selectedGameIds.length} jeu(x)`);
       Notify.success(`Stand ${name} créé avec succès.`);
       close();
-      StandsModule.render(document.getElementById('mainContent'));
+      const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (!document.getElementById('standsTableContainer') && targetContainer) {
+        await StandsModule.render(targetContainer);
+      } else {
+        await StandsModule.loadData();
+      }
+      if (window.LiveSync) {
+        LiveSync.broadcastLocalEvent('stand_created');
+        LiveSync.triggerRefresh('stand_created');
+      }
     };
   },
 
@@ -662,7 +671,16 @@ const StandsModule = {
 
       Notify.success(`Demande de matériaux pour ${standName} transmise avec succès au Pôle Logistique !`);
       close();
-      StandsModule.render(document.getElementById('mainContent'));
+      const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (!document.getElementById('standsTableContainer') && targetContainer) {
+        await StandsModule.render(targetContainer);
+      } else {
+        await StandsModule.loadData();
+      }
+      if (window.LiveSync) {
+        LiveSync.broadcastLocalEvent('stand_request_created');
+        LiveSync.triggerRefresh('stand_request_created');
+      }
     };
   },
 
@@ -804,7 +822,16 @@ const StandsModule = {
 
       Notify.success(`Stand ${name} mis à jour.`);
       close();
-      StandsModule.render(document.getElementById('mainContent'));
+      const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+      if (!document.getElementById('standsTableContainer') && targetContainer) {
+        await StandsModule.render(targetContainer);
+      } else {
+        await StandsModule.loadData();
+      }
+      if (window.LiveSync) {
+        LiveSync.broadcastLocalEvent('stand_updated');
+        LiveSync.triggerRefresh('stand_updated');
+      }
     };
   },
 
@@ -956,7 +983,16 @@ const StandsModule = {
           }
           AuditLogger.log('SUPPRESSION_STAND', 'stand', id, `Suppression du stand ${name}`);
           Notify.success(`Stand ${name} supprimé.`);
-          StandsModule.render(document.getElementById('mainContent'));
+          const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+          if (!document.getElementById('standsTableContainer') && targetContainer) {
+            await StandsModule.render(targetContainer);
+          } else {
+            await StandsModule.loadData();
+          }
+          if (window.LiveSync) {
+            LiveSync.broadcastLocalEvent('stand_deleted');
+            LiveSync.triggerRefresh('stand_deleted');
+          }
         }
       },
       'Supprimer',

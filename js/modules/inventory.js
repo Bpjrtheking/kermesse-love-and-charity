@@ -249,7 +249,12 @@ const InventoryModule = {
         AuditLogger.log('CREATION_INVENTAIRE', 'inventory', inv.id, `Inventaire ${title} (${phase}) enregistré avec ${itemsToInsert.length} articles.`);
         Notify.success(`Inventaire ${title} enregistré avec succès.`);
         close();
-        InventoryModule.render(document.getElementById('mainContent'));
+        const targetContainer = document.getElementById('poleContainer') || document.getElementById('mainContent');
+        if (targetContainer) InventoryModule.render(targetContainer);
+        if (window.LiveSync) {
+          LiveSync.broadcastLocalEvent('inventory_created');
+          LiveSync.triggerRefresh('inventory_created');
+        }
       }
     };
   },
