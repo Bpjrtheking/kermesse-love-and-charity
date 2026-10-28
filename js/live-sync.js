@@ -11,12 +11,13 @@
  */
 
 const LiveSync = {
-  POLL_INTERVAL_MS: 2000, // Auto-actualisation toutes les 2 secondes (recommandation utilisateur)
+  POLL_INTERVAL_MS: 1500, // Auto-actualisation automatique toutes les 1.5 secondes (bouton invisible universel)
   channel: null,
   pollTimer: null,
   isRefreshing: false,
   lastRefreshTime: 0,
   lastRefreshStartTime: 0,
+  spinAngle: 0,
   permissionSyncCounter: 0,
 
   init() {
@@ -244,6 +245,14 @@ const LiveSync = {
     this.isRefreshing = true;
     this.lastRefreshStartTime = now;
 
+    // Animation discrète de rotation de l'icône actualiser
+    const spin = document.getElementById('liveSyncSpinIcon');
+    if (spin) {
+      this.spinAngle = (this.spinAngle || 0) + 180;
+      spin.style.transition = 'transform 0.4s ease';
+      spin.style.transform = `rotate(${this.spinAngle}deg)`;
+    }
+
     try {
       // 1. Pages gérées par PoleApp (pôles 1 à 9 et supervision)
       if (typeof PoleApp !== 'undefined' && PoleApp.tabs && PoleApp.currentTab) {
@@ -460,7 +469,8 @@ const LiveSync = {
   },
 
   /**
-   * Injecte un badge discret "En direct 🟢" dans l'en-tête pour rassurer les utilisateurs.
+   * Injecte le bouton d'actualisation interactif "En direct 🟢 🔄" dans l'en-tête de chaque page.
+   * Sert à la fois de témoin visuel du minuteur automatique 1.5s et de bouton manuel cliquable.
    */
   injectLiveBadge() {
     if (document.getElementById('liveSyncBadgeContainer')) return;
@@ -468,13 +478,19 @@ const LiveSync = {
     const navRight = document.querySelector('.pole-nav-right') || document.querySelector('.portal-user-actions');
     if (!navRight) return;
 
-    const badge = document.createElement('div');
+    const badge = document.createElement('button');
     badge.id = 'liveSyncBadgeContainer';
-    badge.className = 'live-sync-indicator';
-    badge.title = 'Mise à jour en direct (Temps réel Supabase + Auto-actualisation 2s)';
+    badge.className = 'live-sync-indicator live-sync-btn';
+    badge.type = 'button';
+    badge.title = 'Actualisation automatique active toutes les 1.5s (Cliquez pour forcer l\'actualisation immédiate)';
+    badge.onclick = (e) => {
+      e.preventDefault();
+      LiveSync.triggerRefresh('user_manual_click');
+    };
     badge.innerHTML = `
       <span class="live-sync-dot" id="liveSyncStatusDot"></span>
       <span class="live-sync-text" id="liveSyncStatusText">En direct</span>
+      <span class="live-sync-spin" id="liveSyncSpinIcon" style="margin-left: 5px; font-size: 0.85rem; display: inline-block;">🔄</span>
     `;
 
     // Insérer juste avant les badges utilisateurs

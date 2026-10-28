@@ -68,22 +68,56 @@ const StandsModule = {
           if (rData) this.materialRequests = rData;
         } catch (e) {}
 
-        // Chargement des stands
-        const { data: stands, error } = await client
-          .from('stands')
-          .select(`
-            id, number, color_name, color_hex, name, description, is_closed, materials_needed,
-            manager:members!stands_manager_id_fkey(id, first_name, last_name, phone),
-            location:locations(id, name),
-            staff:stand_staff(id, role_in_stand, gender, member:members(first_name, last_name)),
-            games(id, name, ticket_price_f, materials_needed)
-          `)
-          .order('number', { ascending: true });
+        // Chargement des stands (avec 3 niveaux de résilience garantis)
+        let loadedStands = null;
 
-        if (error) throw error;
-        this.stands = stands || [];
-        this.renderTable(this.stands);
-        return;
+        // Niveau 1 : Avec toutes les jointures relationnelles
+        try {
+          const { data: stands, error } = await client
+            .from('stands')
+            .select(`
+              id, number, color_name, color_hex, name, description, is_closed, materials_needed,
+              manager:members!stands_manager_id_fkey(id, first_name, last_name, phone),
+              location:locations(id, name),
+              staff:stand_staff(id, role_in_stand, gender, member:members(first_name, last_name)),
+              games(id, name, ticket_price_f, materials_needed)
+            `)
+            .order('number', { ascending: true });
+
+          if (!error && stands) loadedStands = stands;
+        } catch (e) {}
+
+        // Niveau 2 : Sans la contrainte de clé étrangère manager_id_fkey
+        if (!loadedStands) {
+          try {
+            const { data: simpleStands } = await client
+              .from('stands')
+              .select(`
+                id, number, color_name, color_hex, name, description, is_closed, materials_needed,
+                location:locations(id, name),
+                games(id, name, ticket_price_f, materials_needed)
+              `)
+              .order('number', { ascending: true });
+            if (simpleStands) loadedStands = simpleStands;
+          } catch (e) {}
+        }
+
+        // Niveau 3 : Requête brute SELECT * infaillible
+        if (!loadedStands) {
+          try {
+            const { data: rawStands } = await client
+              .from('stands')
+              .select('*')
+              .order('number', { ascending: true });
+            if (rawStands) loadedStands = rawStands;
+          } catch (e) {}
+        }
+
+        if (loadedStands) {
+          this.stands = loadedStands;
+          this.renderTable(this.stands);
+          return;
+        }
       }
     } catch (e) {
       console.warn('[StandsModule Error]', e);

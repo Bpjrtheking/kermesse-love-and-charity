@@ -74,10 +74,10 @@ const GamesModule = {
           .order('number');
         if (sData) this.stands = sData;
 
-        // Chargement des jeux avec stand associé et image
+        // Chargement des jeux avec stand associé et image (4 niveaux de résilience garantis)
         let gData = null;
-        let gError = null;
 
+        // Niveau 1 : Requête complète avec jointure stand, materials_needed et image_url
         try {
           const res = await client
             .from('games')
@@ -86,23 +86,49 @@ const GamesModule = {
               stand:stands(id, name, number, color_name, color_hex)
             `)
             .order('name', { ascending: true });
-          gData = res.data;
-          gError = res.error;
-        } catch (e) {
-          gError = e;
-        }
+          if (!res.error && res.data && res.data.length >= 0) gData = res.data;
+        } catch (e) {}
 
-        if (gError) {
-          // Si image_url n'est pas encore créée en DB, fallback sans cette colonne
+        // Niveau 2 : Si la colonne optionnelle image_url ou materials_needed n'existe pas encore en DB
+        if (!gData) {
           try {
-            const fallback = await client
+            const res2 = await client
               .from('games')
               .select(`
-                id, name, ticket_price_f, rules_summary, prizes_description, materials_needed, is_active,
+                id, name, ticket_price_f, rules_summary, prizes_description, is_active,
                 stand:stands(id, name, number, color_name, color_hex)
               `)
               .order('name', { ascending: true });
-            if (!fallback.error && fallback.data) gData = fallback.data;
+            if (!res2.error && res2.data) gData = res2.data;
+          } catch (e) {}
+        }
+
+        // Niveau 3 : Sans la jointure automatique Supabase (si relation non mise en cache par PostgREST)
+        if (!gData) {
+          try {
+            const res3 = await client
+              .from('games')
+              .select('id, name, ticket_price_f, rules_summary, prizes_description, is_active, stand_id')
+              .order('name', { ascending: true });
+            if (!res3.error && res3.data) {
+              gData = res3.data.map(g => ({
+                ...g,
+                stand: (g.stand_id && this.stands) ? this.stands.find(s => s.id === g.stand_id) : null
+              }));
+            }
+          } catch (e) {}
+        }
+
+        // Niveau 4 : Requête brute universelle (Infaillible)
+        if (!gData) {
+          try {
+            const res4 = await client.from('games').select('*');
+            if (!res4.error && res4.data) {
+              gData = res4.data.map(g => ({
+                ...g,
+                stand: (g.stand_id && this.stands) ? this.stands.find(s => s.id === g.stand_id) : null
+              }));
+            }
           } catch (e) {}
         }
 
@@ -496,6 +522,11 @@ const GamesModule = {
             let retry = await client.from('games').insert([insertPayload]).select();
             if (retry.error) {
               delete insertPayload.image_url;
+              retry = await client.from('games').insert([insertPayload]).select();
+            }
+            // Si la base exige stand_id NOT NULL et que standId était vide, rattacher au premier stand disponible
+            if (retry.error && (!insertPayload.stand_id) && stands && stands.length > 0) {
+              insertPayload.stand_id = stands[0].id;
               retry = await client.from('games').insert([insertPayload]).select();
             }
             if (retry.error) throw retry.error;
